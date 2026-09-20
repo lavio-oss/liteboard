@@ -1,0 +1,39 @@
+import { getRequestHeader, getRequestURL, proxyRequest } from 'h3'
+
+export default defineEventHandler((event) => {
+  const requestUrl = getRequestURL(event)
+  const proxiedApiPaths = new Set([
+    '/api/me',
+    '/api/me/password',
+    '/api/login',
+    '/api/logout',
+    '/api/logout-all'
+  ])
+  const isSanctumCsrfRequest = requestUrl.pathname === '/sanctum/csrf-cookie'
+  const isTenantApiRequest = requestUrl.pathname === '/api/tenants'
+    || requestUrl.pathname.startsWith('/api/tenants/')
+
+  if (!proxiedApiPaths.has(requestUrl.pathname) && !isSanctumCsrfRequest && !isTenantApiRequest) {
+    return
+  }
+
+  const config = useRuntimeConfig(event)
+  const target = new URL(requestUrl.pathname + requestUrl.search, config.laravelApiBase)
+  const forwardedHeaders: Record<string, string> = {
+    Accept: 'application/json'
+  }
+
+  for (const headerName of ['cookie', 'x-xsrf-token', 'origin', 'referer']) {
+    const headerValue = getRequestHeader(event, headerName)
+
+    if (headerValue !== undefined) {
+      forwardedHeaders[headerName] = headerValue
+    }
+  }
+
+  return proxyRequest(event, target.toString(), {
+    fetchOptions: {
+      headers: forwardedHeaders
+    }
+  })
+})

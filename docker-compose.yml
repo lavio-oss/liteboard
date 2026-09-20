@@ -1,0 +1,114 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-liteboard}
+      POSTGRES_USER: ${POSTGRES_USER:-liteboard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-liteboard}
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - liteboard-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-liteboard} -d ${POSTGRES_DB:-liteboard}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    volumes:
+      - liteboard-redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - '${MQTT_PORT:-1883}:1883'
+      - '${MQTT_WS_PORT:-9001}:9001'
+    volumes:
+      - ./infrastructure/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - liteboard-mosquitto-data:/mosquitto/data
+      - liteboard-mosquitto-log:/mosquitto/log
+    healthcheck:
+      test: ['CMD-SHELL', 'mosquitto_pub -h 127.0.0.1 -t healthcheck -n']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      APP_NAME: LiteBoard
+      APP_ENV: local
+      APP_KEY: ${APP_KEY:-base64:ZmFrZS1saXRlYm9hcmQta2V5LWZvci1sb2NhbC1kZXY=}
+      APP_DEBUG: '${APP_DEBUG:-true}'
+      APP_URL: http://localhost:8000
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: ${POSTGRES_DB:-liteboard}
+      DB_USERNAME: ${POSTGRES_USER:-liteboard}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-liteboard}
+      SESSION_DRIVER: database
+      CACHE_STORE: file
+      QUEUE_CONNECTION: sync
+      SANCTUM_STATEFUL_DOMAINS: localhost:3000
+      CORS_ALLOWED_ORIGINS: http://localhost:3000
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - '${BACKEND_PORT:-8000}:8000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  telemetry-service:
+    build:
+      context: telemetry-service
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+    ports:
+      - '${TELEMETRY_PORT:-8100}:8100'
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: frontend
+    environment:
+      NUXT_LARAVEL_API_BASE: http://backend:8000
+    ports:
+      - '${FRONTEND_PORT:-3000}:3000'
+    depends_on:
+      - backend
+
+  simulator:
+    build:
+      context: simulator
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+      DEVICE_UID: ${SIMULATOR_DEVICE_UID:-simulator-01}
+    profiles: ['tools']
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+
+volumes:
+  liteboard-postgres:
+  liteboard-redis:
+  liteboard-mosquitto-data:
+  liteboard-mosquitto-log:

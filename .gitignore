@@ -1,0 +1,8 @@
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+telemetry-service/.venv/
+simulator/.venv/
+vuestic-admin
