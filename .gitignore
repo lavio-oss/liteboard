@@ -6,3 +6,4 @@ __pycache__/
 telemetry-service/.venv/
 simulator/.venv/
 vuestic-admin
+.pnpm-store/
