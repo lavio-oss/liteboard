@@ -35,6 +35,7 @@ const pagination = ref({
 })
 const formOpen = ref(false)
 const formLoading = ref(false)
+const formErrors = ref<Record<string, string[]>>({})
 const editingTenant = ref<Tenant | null>(null)
 const deleteOpen = ref(false)
 const deleteLoading = ref(false)
@@ -78,24 +79,30 @@ const filteredTenants = computed(() => {
   })
 })
 
-const canCreate = computed(() => user.value !== null
-  && user.value.tenants.some(tenant => tenant.role === 'owner' || tenant.role === 'admin'))
+const canCreate = computed(() => user.value !== null && (
+  user.value.system_role === 'platform_admin'
+  || user.value.tenants.some(tenant => tenant.role === 'owner' || tenant.role === 'admin')
+))
 
 function canUpdate(tenant: Tenant): boolean {
-  return tenant.role === 'owner' || tenant.role === 'admin'
+  return user.value?.system_role === 'platform_admin'
+    || tenant.role === 'owner'
+    || tenant.role === 'admin'
 }
 
 function canDelete(tenant: Tenant): boolean {
-  return tenant.role === 'owner'
+  return user.value?.system_role === 'platform_admin' || tenant.role === 'owner'
 }
 
 function openCreate(): void {
   editingTenant.value = null
+  formErrors.value = {}
   formOpen.value = true
 }
 
 function openEdit(tenant: Tenant): void {
   editingTenant.value = tenant
+  formErrors.value = {}
   formOpen.value = true
 }
 
@@ -122,6 +129,7 @@ async function saveTenant(payload: TenantPayload): Promise<void> {
 
     await Promise.all([refresh(), load(true)])
     formOpen.value = false
+    formErrors.value = {}
     toast.add({
       title: editingTenant.value === null ? 'Tenant created' : 'Tenant updated',
       description: 'The tenant has been saved.',
@@ -132,6 +140,7 @@ async function saveTenant(payload: TenantPayload): Promise<void> {
       throw error
     }
 
+    formErrors.value = error.errors
     toast.add({
       title: 'Unable to save tenant',
       description: error.message,
@@ -183,9 +192,9 @@ function getColumnKey(column: TableColumn<Tenant>): string {
 
 const columns: TableColumn<Tenant>[] = [
   {
-    id: 'id',
-    accessorKey: 'id',
-    header: 'ID'
+    id: 'sequence',
+    header: 'STT',
+    cell: ({ row }) => row.index + 1
   },
   {
     id: 'name',
@@ -216,15 +225,25 @@ const columns: TableColumn<Tenant>[] = [
     id: 'role',
     accessorKey: 'role',
     header: 'Your role',
-    cell: ({ row }) => h(
-      UBadge,
-      {
-        class: 'capitalize',
-        color: row.original.role === 'owner' ? 'primary' : 'neutral',
-        variant: 'subtle'
-      },
-      () => row.original.role
-    )
+    cell: ({ row }) => {
+      const role = row.original.role
+
+      if (role === null) {
+        return user.value?.system_role === 'platform_admin'
+          ? h(UBadge, { color: 'warning', variant: 'subtle' }, () => 'Platform admin')
+          : h('span', { class: 'text-muted' }, '—')
+      }
+
+      return h(
+        UBadge,
+        {
+          class: 'capitalize',
+          color: role === 'owner' ? 'primary' : 'neutral',
+          variant: 'subtle'
+        },
+        () => role
+      )
+    }
   },
   {
     id: 'actions',
@@ -392,13 +411,14 @@ const errorMessage = computed(() => {
     v-model:open="formOpen"
     :tenant="editingTenant"
     :loading="formLoading"
+    :errors="formErrors"
     @submit="saveTenant"
   />
 
   <ConfirmDeleteModal
     v-model:open="deleteOpen"
     :title="`Delete ${deletingTenant?.name ?? 'tenant'}`"
-    description="This action cannot be undone and will delete its projects, factories and production lines."
+    description="This action cannot be undone and will delete its projects and assets."
     :loading="deleteLoading"
     @confirm="deleteTenant"
   />

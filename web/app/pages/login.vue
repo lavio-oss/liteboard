@@ -91,13 +91,36 @@ async function onSubmit(event: FormSubmitEvent<Schema>): Promise<void> {
       <UAuthForm
         :schema="schema"
         :fields="fields"
-        :providers="providers"
         :loading="isSubmitting"
-        title="Login"
-        description="Enter your credentials to access your account."
-        icon="i-lucide-user"
         @submit="onSubmit"
-      />
+      >
+        <template #header>
+          <div class="flex items-center justify-center gap-2">
+            <img
+              src="/favicon.svg"
+              alt=""
+              class="size-8"
+            />
+            <h1 class="text-xl font-semibold text-highlighted">LiteBoard</h1>
+          </div>
+          <p class="mt-2 text-center text-sm text-muted">
+            Enter your credentials to access your account.
+          </p>
+        </template>
+        <template #footer>
+          <div class="mt-4 space-y-3">
+            <USeparator label="or" />
+            <UButton
+              v-for="(provider, index) in providers"
+              :key="index"
+              block
+              color="neutral"
+              variant="subtle"
+              v-bind="provider"
+            />
+          </div>
+        </template>
+      </UAuthForm>
     </UPageCard>
   </div>
 </template>

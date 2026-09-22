@@ -1,6 +1,8 @@
 import { z } from 'zod'
+import { tenantRoleSchema } from '~/types/auth'
 
 export const masterdataStatusSchema = z.enum(['active', 'inactive'])
+export const assetTypeSchema = z.enum(['site', 'factory', 'area', 'production_line', 'station'])
 
 const resourceBaseSchema = z.object({
   id: z.number().int().positive(),
@@ -15,15 +17,28 @@ export const projectSchema = resourceBaseSchema.extend({
   description: z.string().nullable()
 })
 
-export const factorySchema = resourceBaseSchema.extend({
+export const assetSchema = resourceBaseSchema.extend({
   project_id: z.number().int().positive(),
+  parent_asset_id: z.number().int().positive().nullable(),
+  asset_type: assetTypeSchema,
   code: z.string(),
   location: z.string().nullable()
 })
 
-export const productionLineSchema = resourceBaseSchema.extend({
-  factory_id: z.number().int().positive(),
-  code: z.string()
+export const projectRoleSchema = z.enum(['admin', 'engineer', 'operator', 'viewer'])
+
+export const projectUserSchema = z.object({
+  id: z.number().int().positive(),
+  name: z.string(),
+  email: z.string().email(),
+  role: projectRoleSchema
+})
+
+export const availableProjectUserSchema = z.object({
+  id: z.number().int().positive(),
+  name: z.string(),
+  email: z.string().email(),
+  tenant_role: tenantRoleSchema
 })
 
 export const projectsResponseSchema = z.object({
@@ -34,26 +49,33 @@ export const projectResponseSchema = z.object({
   data: projectSchema
 })
 
-export const factoriesResponseSchema = z.object({
-  data: z.array(factorySchema)
+export const assetsResponseSchema = z.object({
+  data: z.array(assetSchema)
 }).passthrough()
 
-export const factoryResponseSchema = z.object({
-  data: factorySchema
+export const assetResponseSchema = z.object({
+  data: assetSchema
 })
 
-export const productionLinesResponseSchema = z.object({
-  data: z.array(productionLineSchema)
+export const projectUsersResponseSchema = z.object({
+  data: z.array(projectUserSchema)
 }).passthrough()
 
-export const productionLineResponseSchema = z.object({
-  data: productionLineSchema
+export const availableProjectUsersResponseSchema = z.object({
+  data: z.array(availableProjectUserSchema)
+}).passthrough()
+
+export const projectUserResponseSchema = z.object({
+  data: projectUserSchema
 })
 
 export type MasterdataStatus = z.infer<typeof masterdataStatusSchema>
+export type AssetType = z.infer<typeof assetTypeSchema>
 export type Project = z.infer<typeof projectSchema>
-export type Factory = z.infer<typeof factorySchema>
-export type ProductionLine = z.infer<typeof productionLineSchema>
+export type Asset = z.infer<typeof assetSchema>
+export type ProjectRole = z.infer<typeof projectRoleSchema>
+export type ProjectUser = z.infer<typeof projectUserSchema>
+export type AvailableProjectUser = z.infer<typeof availableProjectUserSchema>
 
 export interface ProjectInput {
   name: string
@@ -61,33 +83,46 @@ export interface ProjectInput {
   status: MasterdataStatus
 }
 
-export interface FactoryInput {
+export interface ProjectFormInput extends ProjectInput {
+  tenant_id: number
+}
+
+export interface AssetInput {
   name: string
   code: string
+  asset_type: AssetType
+  parent_asset_id: number | null
   location: string
   status: MasterdataStatus
 }
 
-export interface ProductionLineInput {
+export interface ProjectUserInput {
+  user_id: number
+  role: ProjectRole
+}
+
+export interface ProjectUserAccountInput {
   name: string
-  code: string
-  status: MasterdataStatus
+  email: string
+  password: string
+  password_confirmation: string
+  role: ProjectRole
 }
 
 export interface TenantHierarchy {
   projects: Project[]
-  factories: Factory[]
-  productionLines: ProductionLine[]
+  assets: Asset[]
 }
 
 export interface MasterdataRow {
   id: number
   name: string
   status: MasterdataStatus
+  asset_type?: AssetType
   code?: string
   tenant_id?: number
   project_id?: number
-  factory_id?: number
+  parent_asset_id?: number | null
   description?: string | null
   location?: string | null
   created_at?: string

@@ -33,6 +33,7 @@ final class UserResource extends JsonResource
             'id' => (int) $user->getKey(),
             'name' => (string) $user->name,
             'email' => (string) $user->email,
+            'system_role' => $user->getAttribute('system_role'),
             'email_verified_at' => $emailVerifiedAt instanceof CarbonInterface
                 ? $emailVerifiedAt->toISOString()
                 : null,

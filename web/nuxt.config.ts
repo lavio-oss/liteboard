@@ -15,7 +15,7 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
 
   runtimeConfig: {
-    laravelApiBase: 'http://localhost:8000'
+    laravelApiBase: 'http://localhost:8081'
   },
 
   compatibilityDate: '2026-06-30',

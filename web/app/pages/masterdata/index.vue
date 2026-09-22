@@ -1,3 +1,7 @@
 <script setup lang="ts">
-await navigateTo('/masterdata/projects', { replace: true })
+definePageMeta({
+  middleware: 'auth'
+})
+
+await navigateTo('/masterdata/users', { replace: true })
 </script>

@@ -7,9 +7,11 @@ const props = withDefaults(defineProps<{
   open: boolean
   tenant?: Tenant | null
   loading?: boolean
+  errors?: Record<string, string[]>
 }>(), {
   tenant: null,
-  loading: false
+  loading: false,
+  errors: () => ({})
 })
 
 const emit = defineEmits<{
@@ -52,6 +54,7 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
   <UModal
     :open="props.open"
     :title="title"
+    :description="props.tenant === null ? 'Create a new tenant organization.' : 'Update tenant organization details.'"
     @update:open="emit('update:open', $event)"
   >
     <template #body>
@@ -62,15 +65,30 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
         class="space-y-4"
         @submit="onSubmit"
       >
-        <UFormField name="name" label="Name" required>
+        <UFormField
+          name="name"
+          label="Name"
+          required
+          :error="props.errors.name?.[0]"
+        >
           <UInput v-model="state.name" class="w-full" />
         </UFormField>
 
-        <UFormField name="code" label="Code" required>
+        <UFormField
+          name="code"
+          label="Code"
+          required
+          :error="props.errors.code?.[0]"
+        >
           <UInput v-model="state.code" class="w-full" />
         </UFormField>
 
-        <UFormField name="status" label="Status" required>
+        <UFormField
+          name="status"
+          label="Status"
+          required
+          :error="props.errors.status?.[0]"
+        >
           <USelect
             v-model="state.status"
             :items="[

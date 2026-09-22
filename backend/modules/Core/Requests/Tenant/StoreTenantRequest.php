@@ -14,7 +14,7 @@ final class StoreTenantRequest extends FormRequest
     {
         $user = $this->user();
 
-        return $user instanceof User && Gate::allows('create', Tenant::class);
+        return $user instanceof User && Gate::forUser($user)->allows('create', Tenant::class);
     }
 
     /** @return array<string, array<int, mixed>> */
@@ -27,7 +27,6 @@ final class StoreTenantRequest extends FormRequest
             'parent_id' => ['prohibited'],
             'tenant_id' => ['prohibited'],
             'project_id' => ['prohibited'],
-            'factory_id' => ['prohibited'],
         ];
     }
 }

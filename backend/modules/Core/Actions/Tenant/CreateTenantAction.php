@@ -16,9 +16,14 @@ final class CreateTenantAction
     {
         return DB::transaction(function () use ($user, $attributes): Tenant {
             $tenant = Tenant::query()->create($attributes);
-            $tenant->users()->attach($user->getKey(), ['role' => TenantRole::Owner->value]);
 
-            return $user->tenants()->whereKey($tenant->getKey())->firstOrFail();
+            if (! $user->isPlatformAdmin()) {
+                $tenant->users()->attach($user->getKey(), ['role' => TenantRole::Owner->value]);
+            }
+
+            return $user->isPlatformAdmin()
+                ? $tenant
+                : $user->tenants()->whereKey($tenant->getKey())->firstOrFail();
         });
     }
 }

@@ -29,7 +29,6 @@ final class UpdateProjectRequest extends FormRequest
             'status' => ['sometimes', 'string', Rule::in(['active', 'inactive'])],
             'tenant_id' => ['prohibited'],
             'project_id' => ['prohibited'],
-            'factory_id' => ['prohibited'],
         ];
     }
 }

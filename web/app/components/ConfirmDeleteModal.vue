@@ -1,6 +1,5 @@
 <script setup lang="ts">
 const props = withDefaults(defineProps<{
-  open: boolean
   title: string
   description: string
   loading?: boolean
@@ -8,18 +7,18 @@ const props = withDefaults(defineProps<{
   loading: false
 })
 
+const open = defineModel<boolean>('open', { required: true })
+
 const emit = defineEmits<{
-  'update:open': [value: boolean]
-  'confirm': []
+  confirm: []
 }>()
 </script>
 
 <template>
   <UModal
-    :open="props.open"
+    v-model:open="open"
     :title="props.title"
     :description="props.description"
-    @update:open="emit('update:open', $event)"
   >
     <template #body>
       <div class="flex justify-end gap-2">
@@ -28,7 +27,7 @@ const emit = defineEmits<{
           color="neutral"
           variant="subtle"
           :disabled="props.loading"
-          @click="emit('update:open', false)"
+          @click="open = false"
         />
         <UButton
           label="Delete"

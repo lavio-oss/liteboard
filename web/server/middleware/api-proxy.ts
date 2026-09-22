@@ -20,10 +20,11 @@ export default defineEventHandler((event) => {
   const config = useRuntimeConfig(event)
   const target = new URL(requestUrl.pathname + requestUrl.search, config.laravelApiBase)
   const forwardedHeaders: Record<string, string> = {
-    Accept: 'application/json'
+    Accept: 'application/json',
+    origin: getRequestHeader(event, 'origin') ?? requestUrl.origin
   }
 
-  for (const headerName of ['cookie', 'x-xsrf-token', 'origin', 'referer']) {
+  for (const headerName of ['cookie', 'x-xsrf-token', 'referer']) {
     const headerValue = getRequestHeader(event, headerName)
 
     if (headerValue !== undefined) {

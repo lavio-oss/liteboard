@@ -20,8 +20,10 @@ final class TenantResource extends JsonResource
     {
         $pivot = $this->resource->getRelationValue('pivot');
 
-        if (! $pivot instanceof Pivot || ! is_string($pivot->getAttribute('role'))) {
-            throw new LogicException('The tenant membership pivot must include a string role.');
+        $role = $pivot instanceof Pivot ? $pivot->getAttribute('role') : null;
+
+        if ($role !== null && ! is_string($role)) {
+            throw new LogicException('The tenant membership pivot role must be a string when present.');
         }
 
         return [
@@ -29,7 +31,7 @@ final class TenantResource extends JsonResource
             'name' => (string) $this->name,
             'code' => (string) $this->code,
             'status' => (string) $this->status,
-            'role' => $pivot->getAttribute('role'),
+            'role' => $role,
         ];
     }
 }

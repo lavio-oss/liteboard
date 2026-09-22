@@ -83,7 +83,7 @@ docker compose up -d --build
 
 #### Service Endpoints & Health Checks:
 - **Web Dashboard**: [http://localhost:3000](http://localhost:3000)
-- **Backend API**: [http://localhost:8000/api/health](http://localhost:8000/api/health)
+- **Backend API**: [http://localhost:8081/api/health](http://localhost:8081/api/health)
 - **Telemetry Service**: [http://localhost:8100/health](http://localhost:8100/health)
 - **MQTT Broker**: `mqtt://localhost:1883` (WebSocket: `ws://localhost:9001`)
 
@@ -103,9 +103,9 @@ For active development, run the backend and web frontend in separate terminals:
 cd backend
 composer install
 php artisan migrate
-php artisan serve --port=8000
+php artisan serve --port=8081
 ```
-API runs at `http://localhost:8000`.
+API runs at `http://localhost:8081`.
 
 #### Frontend (Nuxt 4)
 ```powershell

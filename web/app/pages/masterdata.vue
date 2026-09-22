@@ -6,42 +6,48 @@ definePageMeta({
 })
 
 const links = [[{
+  label: 'Users',
+  icon: 'i-lucide-users',
+  to: '/masterdata/users',
+  exact: true
+}, {
   label: 'Projects',
   icon: 'i-lucide-folder-kanban',
   to: '/masterdata/projects'
 }, {
-  label: 'Factories',
-  icon: 'i-lucide-building-2',
-  to: '/masterdata/factories'
-}, {
-  label: 'Production Lines',
-  icon: 'i-lucide-git-branch',
-  to: '/masterdata/production-lines'
+  label: 'Assets',
+  icon: 'i-lucide-network',
+  to: '/masterdata/assets'
 }]] satisfies NavigationMenuItem[][]
 
 const route = useRoute()
-const { user } = useAuth()
+const { canManageActiveTenant, isPlatformAdmin, loadTenants, tenants } = useTenantContext()
+await loadTenants()
 const addRequested = useState('masterdata:add-requested', () => false)
 
-const canManage = computed(() => {
-  const tenant = user.value?.tenants[0]
-
-  return tenant !== undefined && (tenant.role === 'owner' || tenant.role === 'admin')
-})
+const canManageAnyTenant = computed(() => isPlatformAdmin.value
+  || tenants.value.some(tenant => tenant.role === 'owner' || tenant.role === 'admin'))
+const canManage = computed(() => route.path.endsWith('/users')
+  ? canManageActiveTenant.value
+  : canManageAnyTenant.value)
 
 const addLabel = computed(() => {
-  if (route.path.endsWith('/factories')) {
-    return 'Add factory'
+  if (route.path.endsWith('/users')) {
+    return 'Add user'
   }
 
-  if (route.path.endsWith('/production-lines')) {
-    return 'Add production line'
+  if (route.path.endsWith('/assets')) {
+    return 'Add asset'
   }
 
   return 'Add project'
 })
 
-const showAdd = computed(() => route.path !== '/masterdata' && canManage.value)
+const showAdd = computed(() => [
+  '/masterdata/users',
+  '/masterdata/projects',
+  '/masterdata/assets'
+].includes(route.path) && canManage.value)
 
 function requestAdd(): void {
   addRequested.value = true

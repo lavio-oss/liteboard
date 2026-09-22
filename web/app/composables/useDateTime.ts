@@ -2,28 +2,89 @@ export interface TimezoneOption {
   label: string
   value: string
   offset: string
+  cities?: string
 }
 
 export const MAJOR_TIMEZONES: TimezoneOption[] = [
-  { label: 'UTC (Coordinated Universal Time, GMT+0)', value: 'UTC', offset: '+00:00' },
-  { label: 'Asia/Ho_Chi_Minh (Hanoi, Ho Chi Minh, GMT+7)', value: 'Asia/Ho_Chi_Minh', offset: '+07:00' },
-  { label: 'Asia/Bangkok (Bangkok, Jakarta, GMT+7)', value: 'Asia/Bangkok', offset: '+07:00' },
-  { label: 'Asia/Singapore (Singapore, GMT+8)', value: 'Asia/Singapore', offset: '+08:00' },
-  { label: 'Asia/Tokyo (Tokyo, Seoul, GMT+9)', value: 'Asia/Tokyo', offset: '+09:00' },
-  { label: 'Asia/Shanghai (Beijing, Shanghai, GMT+8)', value: 'Asia/Shanghai', offset: '+08:00' },
-  { label: 'Asia/Hong_Kong (Hong Kong, GMT+8)', value: 'Asia/Hong_Kong', offset: '+08:00' },
-  { label: 'Asia/Dubai (Dubai, Abu Dhabi, GMT+4)', value: 'Asia/Dubai', offset: '+04:00' },
-  { label: 'Asia/Kolkata (India Standard Time, GMT+5:30)', value: 'Asia/Kolkata', offset: '+05:30' },
-  { label: 'Europe/London (London, GMT+0 / BST)', value: 'Europe/London', offset: '+00:00' },
-  { label: 'Europe/Paris (Paris, Rome, GMT+1 / CEST)', value: 'Europe/Paris', offset: '+01:00' },
-  { label: 'Europe/Berlin (Berlin, Frankfurt, GMT+1 / CEST)', value: 'Europe/Berlin', offset: '+01:00' },
-  { label: 'America/New_York (Eastern Time, GMT-5 / EDT)', value: 'America/New_York', offset: '-05:00' },
-  { label: 'America/Chicago (Central Time, GMT-6 / CDT)', value: 'America/Chicago', offset: '-06:00' },
-  { label: 'America/Denver (Mountain Time, GMT-7 / MDT)', value: 'America/Denver', offset: '-07:00' },
-  { label: 'America/Los_Angeles (Pacific Time, GMT-8 / PDT)', value: 'America/Los_Angeles', offset: '-08:00' },
-  { label: 'Australia/Sydney (Sydney, Melbourne, GMT+10 / AEST)', value: 'Australia/Sydney', offset: '+10:00' },
-  { label: 'Pacific/Auckland (Auckland, Wellington, GMT+12 / NZST)', value: 'Pacific/Auckland', offset: '+12:00' }
+  { label: 'Pacific/Midway', value: 'Pacific/Midway', offset: '-11:00', cities: 'Midway, Samoa' },
+  { label: 'Pacific/Honolulu', value: 'Pacific/Honolulu', offset: '-10:00', cities: 'Honolulu, Hawaii' },
+  { label: 'America/Anchorage', value: 'America/Anchorage', offset: '-09:00', cities: 'Anchorage, Alaska' },
+  { label: 'America/Los_Angeles', value: 'America/Los_Angeles', offset: '-08:00', cities: 'Los Angeles, San Francisco, Vancouver' },
+  { label: 'America/Denver', value: 'America/Denver', offset: '-07:00', cities: 'Denver, Phoenix, Salt Lake City' },
+  { label: 'America/Chicago', value: 'America/Chicago', offset: '-06:00', cities: 'Chicago, Dallas, Mexico City' },
+  { label: 'America/New_York', value: 'America/New_York', offset: '-05:00', cities: 'New York, Toronto, Miami, Atlanta' },
+  { label: 'America/Santiago', value: 'America/Santiago', offset: '-04:00', cities: 'Santiago, Caracas, Halifax' },
+  { label: 'America/Sao_Paulo', value: 'America/Sao_Paulo', offset: '-03:00', cities: 'São Paulo, Buenos Aires' },
+  { label: 'Atlantic/South_Georgia', value: 'Atlantic/South_Georgia', offset: '-02:00', cities: 'South Georgia' },
+  { label: 'Atlantic/Azores', value: 'Atlantic/Azores', offset: '-01:00', cities: 'Azores, Cape Verde' },
+  { label: 'UTC', value: 'UTC', offset: '+00:00', cities: 'Coordinated Universal Time' },
+  { label: 'Europe/London', value: 'Europe/London', offset: '+00:00', cities: 'London, Dublin, Lisbon, Casablanca' },
+  { label: 'Europe/Paris', value: 'Europe/Paris', offset: '+01:00', cities: 'Paris, Berlin, Rome, Madrid, Amsterdam' },
+  { label: 'Europe/Athens', value: 'Europe/Athens', offset: '+02:00', cities: 'Athens, Cairo, Helsinki, Istanbul, Kyiv' },
+  { label: 'Europe/Moscow', value: 'Europe/Moscow', offset: '+03:00', cities: 'Moscow, Riyadh, Baghdad, Nairobi' },
+  { label: 'Asia/Tehran', value: 'Asia/Tehran', offset: '+03:30', cities: 'Tehran' },
+  { label: 'Asia/Dubai', value: 'Asia/Dubai', offset: '+04:00', cities: 'Dubai, Abu Dhabi, Baku, Muscat' },
+  { label: 'Asia/Kabul', value: 'Asia/Kabul', offset: '+04:30', cities: 'Kabul' },
+  { label: 'Asia/Karachi', value: 'Asia/Karachi', offset: '+05:00', cities: 'Karachi, Tashkent, Islamabad' },
+  { label: 'Asia/Kolkata', value: 'Asia/Kolkata', offset: '+05:30', cities: 'New Delhi, Mumbai, Kolkata, Bengaluru' },
+  { label: 'Asia/Kathmandu', value: 'Asia/Kathmandu', offset: '+05:45', cities: 'Kathmandu' },
+  { label: 'Asia/Dhaka', value: 'Asia/Dhaka', offset: '+06:00', cities: 'Dhaka, Almaty' },
+  { label: 'Asia/Yangon', value: 'Asia/Yangon', offset: '+06:30', cities: 'Yangon, Cocos' },
+  { label: 'Asia/Bangkok', value: 'Asia/Bangkok', offset: '+07:00', cities: 'Bangkok, Jakarta' },
+  { label: 'Asia/Ho_Chi_Minh', value: 'Asia/Ho_Chi_Minh', offset: '+07:00', cities: 'Hanoi, Ho Chi Minh, Da Nang' },
+  { label: 'Asia/Singapore', value: 'Asia/Singapore', offset: '+08:00', cities: 'Singapore, Kuala Lumpur' },
+  { label: 'Asia/Shanghai', value: 'Asia/Shanghai', offset: '+08:00', cities: 'Beijing, Shanghai, Taipei' },
+  { label: 'Asia/Hong_Kong', value: 'Asia/Hong_Kong', offset: '+08:00', cities: 'Hong Kong' },
+  { label: 'Asia/Tokyo', value: 'Asia/Tokyo', offset: '+09:00', cities: 'Tokyo, Seoul, Osaka' },
+  { label: 'Australia/Adelaide', value: 'Australia/Adelaide', offset: '+09:30', cities: 'Adelaide, Darwin' },
+  { label: 'Australia/Sydney', value: 'Australia/Sydney', offset: '+10:00', cities: 'Sydney, Melbourne, Brisbane' },
+  { label: 'Pacific/Guadalcanal', value: 'Pacific/Guadalcanal', offset: '+11:00', cities: 'Solomon Islands, Noumea' },
+  { label: 'Pacific/Auckland', value: 'Pacific/Auckland', offset: '+12:00', cities: 'Auckland, Wellington, Fiji' },
+  { label: 'Pacific/Tongatapu', value: 'Pacific/Tongatapu', offset: '+13:00', cities: 'Nukuʻalofa, Samoa' },
+  { label: 'Pacific/Kiritimati', value: 'Pacific/Kiritimati', offset: '+14:00', cities: 'Kiritimati, Line Islands' }
 ]
+
+export function formatUtcOffset(timeZone: string, predefinedOffset?: string): string {
+  if (predefinedOffset && /^[+-]\d{2}:\d{2}$/.test(predefinedOffset)) {
+    const sign = predefinedOffset[0]
+    const hours = parseInt(predefinedOffset.slice(1, 3), 10)
+    const mins = predefinedOffset.slice(4, 6)
+    if (hours === 0 && mins === '00') {
+      return 'UTC +0'
+    }
+    return mins === '00' ? `UTC ${sign}${hours}` : `UTC ${sign}${hours}:${mins}`
+  }
+
+  const found = MAJOR_TIMEZONES.find(t => t.value === timeZone)
+  if (found?.offset) {
+    return formatUtcOffset(timeZone, found.offset)
+  }
+
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      timeZoneName: 'shortOffset'
+    })
+    const parts = formatter.formatToParts(new Date())
+    const tzPart = parts.find(p => p.type === 'timeZoneName')?.value
+    if (tzPart) {
+      if (tzPart === 'GMT' || tzPart === 'UTC') {
+        return 'UTC +0'
+      }
+      const match = tzPart.match(/GMT([+-])(\d+)(?::(\d+))?/)
+      if (match && match[1] && match[2]) {
+        const sign = match[1]
+        const hours = parseInt(match[2], 10)
+        const mins = match[3] ? `:${match[3]}` : ''
+        return `UTC ${sign}${hours}${mins}`
+      }
+    }
+  } catch {
+    // fallback
+  }
+
+  return 'UTC +0'
+}
 
 export function formatDateTime(
   dateValue: string | Date | null | undefined,
@@ -111,11 +172,14 @@ export function useDateTime() {
     return options
   })
 
+  const utcLabel = computed(() => formatUtcOffset(timezone.value))
+
   return {
     detectBrowserTimezone,
     formatDateTime,
     setTimezone,
     timezone,
-    timezoneOptions
+    timezoneOptions,
+    utcLabel
   }
 }

@@ -7,8 +7,8 @@ use Illuminate\Database\Seeder;
 use Modules\Core\Enums\Tenant\TenantRole;
 use Modules\Core\Models\Tenant\Tenant;
 use Modules\Core\Models\User\User;
-use Modules\Masterdata\Models\Factory\Factory as FactoryModel;
-use Modules\Masterdata\Models\ProductionLine\ProductionLine;
+use Modules\Masterdata\Enums\Asset\AssetType;
+use Modules\Masterdata\Models\Asset\Asset;
 use Modules\Masterdata\Models\Project\Project;
 
 class DatabaseSeeder extends Seeder
@@ -25,8 +25,10 @@ class DatabaseSeeder extends Seeder
             [
                 'name' => 'Test User',
                 'password' => 'password',
+                'system_role' => 'platform_admin',
             ],
         );
+        $user->forceFill(['system_role' => 'platform_admin'])->save();
 
         $tenant = Tenant::query()->firstOrCreate(
             ['code' => 'demo'],
@@ -36,9 +38,13 @@ class DatabaseSeeder extends Seeder
             ],
         );
 
-        $tenant->users()->syncWithoutDetaching([
-            $user->getKey() => ['role' => TenantRole::Owner->value],
-        ]);
+        if ($user->isPlatformAdmin()) {
+            $tenant->users()->detach($user->getKey());
+        } else {
+            $tenant->users()->syncWithoutDetaching([
+                $user->getKey() => ['role' => TenantRole::Owner->value],
+            ]);
+        }
 
         $projects = [
             [
@@ -65,7 +71,7 @@ class DatabaseSeeder extends Seeder
                 ],
             );
 
-            $factories = [
+            $factorySeeds = [
                 [
                     'code' => $projectSeed['code'].'-plant-a',
                     'name' => $projectSeed['name'].' Plant A',
@@ -78,28 +84,32 @@ class DatabaseSeeder extends Seeder
                 ],
             ];
 
-            foreach ($factories as $factorySeed) {
-                $factory = FactoryModel::query()->updateOrCreate(
+            foreach ($factorySeeds as $factorySeed) {
+                $factory = Asset::query()->updateOrCreate(
                     [
                         'project_id' => $project->getKey(),
+                        'asset_type' => AssetType::Factory->value,
                         'code' => $factorySeed['code'],
                     ],
                     [
                         'name' => $factorySeed['name'],
                         'location' => $factorySeed['location'],
                         'status' => 'active',
+                        'parent_asset_id' => null,
                     ],
                 );
 
                 foreach ([1, 2] as $lineNumber) {
-                    ProductionLine::query()->updateOrCreate(
+                    Asset::query()->updateOrCreate(
                         [
-                            'factory_id' => $factory->getKey(),
+                            'project_id' => $project->getKey(),
+                            'asset_type' => AssetType::ProductionLine->value,
                             'code' => $factorySeed['code'].'-line-'.$lineNumber,
                         ],
                         [
                             'name' => $factorySeed['name'].' Line '.$lineNumber,
                             'status' => 'active',
+                            'parent_asset_id' => $factory->getKey(),
                         ],
                     );
                 }

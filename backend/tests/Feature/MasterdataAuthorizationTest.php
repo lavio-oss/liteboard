@@ -3,241 +3,330 @@
 use Illuminate\Support\Facades\DB;
 use Modules\Core\Models\Tenant\Tenant;
 use Modules\Core\Models\User\User;
-use Modules\Masterdata\Models\Factory\Factory as FactoryModel;
-use Modules\Masterdata\Models\ProductionLine\ProductionLine;
+use Modules\Masterdata\Enums\Asset\AssetType;
+use Modules\Masterdata\Models\Asset\Asset;
 use Modules\Masterdata\Models\Project\Project;
 
-it('rejects unauthenticated project access', function (): void {
-    $this->getJson('/api/tenants/1/projects')
+it('rejects unauthenticated asset access', function (): void {
+    $this->getJson('/api/tenants/1/projects/1/assets')
         ->assertUnauthorized();
 });
 
-it('creates the hierarchy and returns tenant-scoped resources', function (): void {
+it('creates a tenant-scoped multi-level asset hierarchy', function (): void {
     $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
     $tenant->users()->attach($owner, ['role' => 'owner']);
+    $project = Project::factory()->for($tenant)->create();
 
-    $projectResponse = $this->actingAs($owner)->postJson('/api/tenants/'.$tenant->id.'/projects', [
-        'name' => 'Project A',
-        'description' => 'Main project',
-        'status' => 'active',
-    ]);
+    $siteResponse = $this->actingAs($owner)->postJson(
+        '/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets',
+        [
+            'name' => 'Site Hanoi',
+            'code' => 'site-hanoi',
+            'asset_type' => AssetType::Site->value,
+            'location' => 'Hanoi',
+        ],
+    );
 
-    $projectResponse
+    $siteResponse
         ->assertCreated()
-        ->assertJsonPath('data.name', 'Project A')
-        ->assertJsonPath('data.tenant_id', $tenant->id);
+        ->assertJsonPath('data.project_id', $project->id)
+        ->assertJsonPath('data.parent_asset_id', null)
+        ->assertJsonPath('data.asset_type', AssetType::Site->value);
 
-    $project = Project::query()->where('name', 'Project A')->firstOrFail();
+    $site = Asset::query()->where('code', 'site-hanoi')->firstOrFail();
 
     $factoryResponse = $this->actingAs($owner)->postJson(
-        '/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/factories',
+        '/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets',
         [
             'name' => 'Factory Hanoi',
             'code' => 'factory-hanoi',
-            'location' => 'Hanoi',
+            'asset_type' => AssetType::Factory->value,
+            'parent_asset_id' => $site->getKey(),
         ],
     );
 
     $factoryResponse
         ->assertCreated()
-        ->assertJsonPath('data.project_id', $project->id)
-        ->assertJsonPath('data.code', 'factory-hanoi');
+        ->assertJsonPath('data.parent_asset_id', $site->getKey())
+        ->assertJsonPath('data.asset_type', AssetType::Factory->value);
 
-    $factory = FactoryModel::query()->where('code', 'factory-hanoi')->firstOrFail();
+    $factory = Asset::query()->where('code', 'factory-hanoi')->firstOrFail();
 
-    $lineResponse = $this->actingAs($owner)->postJson(
-        '/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/factories/'.$factory->id.'/production-lines',
-        [
-            'name' => 'Line 1',
-            'code' => 'line-1',
-        ],
-    );
+    foreach ([AssetType::Area, AssetType::ProductionLine, AssetType::Station] as $assetType) {
+        $this->actingAs($owner)
+            ->postJson(
+                '/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets',
+                [
+                    'name' => $assetType->name,
+                    'code' => strtolower($assetType->name).'-1',
+                    'asset_type' => $assetType->value,
+                    'parent_asset_id' => $factory->getKey(),
+                ],
+            )
+            ->assertCreated()
+            ->assertJsonPath('data.asset_type', $assetType->value)
+            ->assertJsonPath('data.parent_asset_id', $factory->getKey());
+    }
 
-    $lineResponse
-        ->assertCreated()
-        ->assertJsonPath('data.factory_id', $factory->id)
-        ->assertJsonPath('data.code', 'line-1');
+    expect(Asset::query()->where('project_id', $project->getKey())->count())->toBe(5);
 });
 
-it('allows members to read but not mutate masterdata', function (): void {
+it('allows members to read but not mutate assets', function (): void {
     $member = User::factory()->create();
     $tenant = Tenant::factory()->create();
     $project = Project::factory()->for($tenant)->create();
+    $asset = Asset::factory()->for($project)->create();
     $tenant->users()->attach($member, ['role' => 'member']);
+    $project->users()->attach($member, ['role' => 'viewer']);
 
     $this->actingAs($member)
-        ->getJson('/api/tenants/'.$tenant->id.'/projects')
+        ->getJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets')
         ->assertOk()
-        ->assertJsonPath('data.0.id', $project->id);
+        ->assertJsonPath('data.0.id', $asset->getKey());
 
     $this->actingAs($member)
-        ->postJson('/api/tenants/'.$tenant->id.'/projects', [
-            'name' => 'Forbidden Project',
+        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets', [
+            'name' => 'Forbidden Asset',
+            'code' => 'forbidden-asset',
+            'asset_type' => AssetType::Area->value,
         ])
         ->assertForbidden();
 
     $this->actingAs($member)
-        ->patchJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id, [
+        ->patchJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$asset->id, [
             'name' => 'Forbidden Update',
         ])
         ->assertForbidden();
 
     $this->actingAs($member)
-        ->deleteJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id)
+        ->deleteJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$asset->id)
         ->assertForbidden();
 });
 
-it('allows admins to create and update masterdata', function (): void {
+it('allows project admins to create, update and delete assets', function (): void {
     $admin = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($admin, ['role' => 'admin']);
+    $project = Project::factory()->for($tenant)->create();
+    $tenant->users()->attach($admin, ['role' => 'member']);
+    $project->users()->attach($admin, ['role' => 'admin']);
 
-    $createResponse = $this->actingAs($admin)->postJson('/api/tenants/'.$tenant->id.'/projects', [
-        'name' => 'Admin Project',
-    ]);
+    $createResponse = $this->actingAs($admin)->postJson(
+        '/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets',
+        [
+            'name' => 'Admin Asset',
+            'code' => 'admin-asset',
+            'asset_type' => AssetType::Area->value,
+        ],
+    );
+
+    $asset = Asset::query()->where('code', 'admin-asset')->firstOrFail();
 
     $createResponse->assertCreated();
-    $project = Project::query()->where('name', 'Admin Project')->firstOrFail();
 
     $this->actingAs($admin)
-        ->patchJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id, [
-            'name' => 'Updated Admin Project',
+        ->patchJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$asset->id, [
+            'name' => 'Updated Admin Asset',
         ])
         ->assertOk()
-        ->assertJsonPath('data.name', 'Updated Admin Project');
+        ->assertJsonPath('data.name', 'Updated Admin Asset');
 
     $this->actingAs($admin)
-        ->deleteJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id)
+        ->deleteJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$asset->id)
         ->assertNoContent();
+
+    $this->assertDatabaseMissing('assets', ['id' => $asset->id]);
 });
 
-it('hides resources from another tenant and rejects mismatched parent bindings', function (): void {
+it('hides assets from another tenant and rejects cross-project parents', function (): void {
     $user = User::factory()->create();
     $tenant = Tenant::factory()->create();
     $otherTenant = Tenant::factory()->create();
     $project = Project::factory()->for($tenant)->create();
     $otherProject = Project::factory()->for($otherTenant)->create();
-    $factory = FactoryModel::factory()->for($project)->create();
-    $otherFactory = FactoryModel::factory()->for($otherProject)->create();
-    $line = ProductionLine::factory()->for($factory, 'productionFactory')->create();
-    $otherLine = ProductionLine::factory()->for($otherFactory, 'productionFactory')->create();
+    $asset = Asset::factory()->for($project)->create();
+    $otherAsset = Asset::factory()->for($otherProject)->create();
     $tenant->users()->attach($user, ['role' => 'member']);
+    $project->users()->attach($user, ['role' => 'engineer']);
 
     $this->actingAs($user)
         ->getJson('/api/tenants/'.$otherTenant->id.'/projects')
         ->assertNotFound();
 
     $this->actingAs($user)
-        ->getJson('/api/tenants/'.$tenant->id.'/projects/'.$otherProject->id)
+        ->getJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$otherAsset->id)
         ->assertNotFound();
 
     $this->actingAs($user)
-        ->getJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/factories/'.$otherFactory->id)
-        ->assertNotFound();
+        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets', [
+            'name' => 'Cross Project Child',
+            'code' => 'cross-project-child',
+            'asset_type' => AssetType::Area->value,
+            'parent_asset_id' => $otherAsset->id,
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['parent_asset_id']);
 
-    $this->actingAs($user)
-        ->getJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/factories/'.$factory->id.'/production-lines/'.$otherLine->id)
-        ->assertNotFound();
-
-    expect($line->factory_id)->toBe($factory->id);
+    expect($asset->project_id)->toBe($project->id);
 });
 
-it('rejects client supplied parent ids and duplicate child codes', function (): void {
+it('rejects invalid asset input and duplicate codes within a type', function (): void {
     $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
     $tenant->users()->attach($owner, ['role' => 'owner']);
     $project = Project::factory()->for($tenant)->create();
-    $factory = FactoryModel::factory()->for($project)->create(['code' => 'factory-1']);
-    ProductionLine::factory()->for($factory, 'productionFactory')->create(['code' => 'line-1']);
+    Asset::factory()->for($project)->create([
+        'asset_type' => AssetType::Factory->value,
+        'code' => 'duplicate-code',
+    ]);
 
     $this->actingAs($owner)
-        ->postJson('/api/tenants/'.$tenant->id.'/projects', [
-            'name' => 'Invalid Parent',
+        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets', [
+            'name' => 'Invalid Asset',
+            'code' => 'invalid-asset',
+            'asset_type' => 'unknown',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['asset_type']);
+
+    $this->actingAs($owner)
+        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets', [
+            'name' => 'Duplicate Asset',
+            'code' => 'duplicate-code',
+            'asset_type' => AssetType::Factory->value,
             'tenant_id' => $tenant->id,
+            'project_id' => $project->id,
         ])
         ->assertUnprocessable()
-        ->assertJsonValidationErrors(['tenant_id']);
-
-    $this->actingAs($owner)
-        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/factories', [
-            'name' => 'Duplicate Factory',
-            'code' => 'factory-1',
-        ])
-        ->assertUnprocessable()
-        ->assertJsonValidationErrors(['code']);
-
-    $this->actingAs($owner)
-        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/factories/'.$factory->id.'/production-lines', [
-            'name' => 'Duplicate Line',
-            'code' => 'line-1',
-        ])
-        ->assertUnprocessable()
-        ->assertJsonValidationErrors(['code']);
+        ->assertJsonValidationErrors(['code', 'tenant_id', 'project_id']);
 });
 
-it('supports search and pagination within the authorized parent scope', function (): void {
+it('supports asset search, type filtering, parent filtering and roots', function (): void {
     $member = User::factory()->create();
     $tenant = Tenant::factory()->create();
+    $project = Project::factory()->for($tenant)->create();
     $tenant->users()->attach($member, ['role' => 'member']);
-    Project::factory()->for($tenant)->create(['name' => 'Alpha Project']);
-    Project::factory()->for($tenant)->create(['name' => 'Beta Project']);
+    $project->users()->attach($member, ['role' => 'viewer']);
+    $root = Asset::factory()->for($project)->create([
+        'name' => 'Alpha Factory',
+        'code' => 'alpha-factory',
+        'asset_type' => AssetType::Factory->value,
+    ]);
+    Asset::factory()->for($project)->create([
+        'name' => 'Alpha Line',
+        'code' => 'alpha-line',
+        'asset_type' => AssetType::ProductionLine->value,
+        'parent_asset_id' => $root->id,
+    ]);
+    Asset::factory()->for($project)->create([
+        'name' => 'Beta Area',
+        'code' => 'beta-area',
+        'asset_type' => AssetType::Area->value,
+    ]);
 
     $this->actingAs($member)
-        ->getJson('/api/tenants/'.$tenant->id.'/projects?search=Alpha&per_page=1')
+        ->getJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets?search=Alpha&asset_type=factory&root_only=true&per_page=1')
         ->assertOk()
         ->assertJsonCount(1, 'data')
-        ->assertJsonPath('data.0.name', 'Alpha Project')
+        ->assertJsonPath('data.0.name', 'Alpha Factory')
         ->assertJsonPath('meta.per_page', 1);
+
+    $this->actingAs($member)
+        ->getJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets?parent_asset_id='.$root->id)
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.name', 'Alpha Line');
+
+    $this->actingAs($member)
+        ->getJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets?parent_asset_id='.$root->id.'&root_only=true')
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['root_only']);
 });
 
-it('cascades deletes from tenant through the complete hierarchy', function (): void {
+it('rejects self-parenting and hierarchy cycles', function (): void {
+    $owner = User::factory()->create();
+    $tenant = Tenant::factory()->create();
+    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $project = Project::factory()->for($tenant)->create();
+    $parent = Asset::factory()->for($project)->create([
+        'asset_type' => AssetType::Factory->value,
+    ]);
+    $child = Asset::factory()->for($project)->create([
+        'asset_type' => AssetType::Area->value,
+        'parent_asset_id' => $parent->id,
+    ]);
+
+    $this->actingAs($owner)
+        ->patchJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$parent->id, [
+            'parent_asset_id' => $parent->id,
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['parent_asset_id']);
+
+    $this->actingAs($owner)
+        ->patchJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$parent->id, [
+            'parent_asset_id' => $child->id,
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['parent_asset_id']);
+});
+
+it('keeps child assets when a parent asset is deleted', function (): void {
     $tenant = Tenant::factory()->create();
     $project = Project::factory()->for($tenant)->create();
-    $factory = FactoryModel::factory()->for($project)->create();
-    $line = ProductionLine::factory()->for($factory, 'productionFactory')->create();
+    $parent = Asset::factory()->for($project)->create();
+    $child = Asset::factory()->for($project)->create([
+        'parent_asset_id' => $parent->id,
+    ]);
+
+    $parent->delete();
+
+    $this->assertDatabaseHas('assets', [
+        'id' => $child->id,
+        'parent_asset_id' => null,
+    ]);
+});
+
+it('cascades project and tenant deletion through assets', function (): void {
+    $tenant = Tenant::factory()->create();
+    $project = Project::factory()->for($tenant)->create();
+    $asset = Asset::factory()->for($project)->create();
 
     $tenant->delete();
 
     $this->assertDatabaseMissing('projects', ['id' => $project->id]);
-    $this->assertDatabaseMissing('factories', ['id' => $factory->id]);
-    $this->assertDatabaseMissing('production_lines', ['id' => $line->id]);
+    $this->assertDatabaseMissing('assets', ['id' => $asset->id]);
 });
 
-it('cascades deletes from project and factory', function (): void {
+it('does not expose the removed factory and production line endpoints', function (): void {
+    $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
+    $tenant->users()->attach($owner, ['role' => 'owner']);
     $project = Project::factory()->for($tenant)->create();
-    $factory = FactoryModel::factory()->for($project)->create();
-    $line = ProductionLine::factory()->for($factory, 'productionFactory')->create();
 
-    $project->delete();
+    $this->actingAs($owner)
+        ->getJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/factories')
+        ->assertNotFound();
 
-    $this->assertDatabaseMissing('factories', ['id' => $factory->id]);
-    $this->assertDatabaseMissing('production_lines', ['id' => $line->id]);
-
-    $secondProject = Project::factory()->for($tenant)->create();
-    $secondFactory = FactoryModel::factory()->for($secondProject)->create();
-    $secondLine = ProductionLine::factory()->for($secondFactory, 'productionFactory')->create();
-
-    $secondFactory->delete();
-
-    $this->assertDatabaseMissing('production_lines', ['id' => $secondLine->id]);
+    $this->actingAs($owner)
+        ->getJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/production-lines')
+        ->assertNotFound();
 });
 
-it('cascades parent key updates through the hierarchy', function (): void {
+it('cascades parent key updates through the asset hierarchy', function (): void {
     $tenant = Tenant::factory()->create();
     $project = Project::factory()->for($tenant)->create();
-    $factory = FactoryModel::factory()->for($project)->create();
-    $line = ProductionLine::factory()->for($factory, 'productionFactory')->create();
+    $parent = Asset::factory()->for($project)->create();
+    $child = Asset::factory()->for($project)->create(['parent_asset_id' => $parent->id]);
     $newTenantId = $tenant->id + 10000;
     $newProjectId = $project->id + 10000;
-    $newFactoryId = $factory->id + 10000;
+    $newParentId = $parent->id + 10000;
 
     DB::table('tenants')->where('id', $tenant->id)->update(['id' => $newTenantId]);
     DB::table('projects')->where('id', $project->id)->update(['id' => $newProjectId]);
-    DB::table('factories')->where('id', $factory->id)->update(['id' => $newFactoryId]);
+    DB::table('assets')->where('id', $parent->id)->update(['id' => $newParentId]);
 
     $this->assertDatabaseHas('projects', ['id' => $newProjectId, 'tenant_id' => $newTenantId]);
-    $this->assertDatabaseHas('factories', ['id' => $newFactoryId, 'project_id' => $newProjectId]);
-    $this->assertDatabaseHas('production_lines', ['id' => $line->id, 'factory_id' => $newFactoryId]);
+    $this->assertDatabaseHas('assets', ['id' => $newParentId, 'project_id' => $newProjectId]);
+    $this->assertDatabaseHas('assets', ['id' => $child->id, 'parent_asset_id' => $newParentId]);
 });

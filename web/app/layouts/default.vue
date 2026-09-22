@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import type { NavigationMenuItem } from '@nuxt/ui'
 
-const route = useRoute()
-
 const open = ref(false)
 
 const links = [[{
@@ -21,13 +19,6 @@ const links = [[{
     open.value = false
   }
 }, {
-  label: 'Customers',
-  icon: 'i-lucide-users',
-  to: '/customers',
-  onSelect: () => {
-    open.value = false
-  }
-}, {
   label: 'Tenants',
   icon: 'i-lucide-building-2',
   to: '/tenants',
@@ -40,20 +31,20 @@ const links = [[{
   defaultOpen: true,
   type: 'trigger',
   children: [{
+    label: 'Users',
+    to: '/masterdata/users',
+    onSelect: () => {
+      open.value = false
+    }
+  }, {
     label: 'Projects',
     to: '/masterdata/projects',
     onSelect: () => {
       open.value = false
     }
   }, {
-    label: 'Factories',
-    to: '/masterdata/factories',
-    onSelect: () => {
-      open.value = false
-    }
-  }, {
-    label: 'Production Lines',
-    to: '/masterdata/production-lines',
+    label: 'Assets',
+    to: '/masterdata/assets',
     onSelect: () => {
       open.value = false
     }
@@ -91,7 +82,7 @@ const groups = computed(() => [{
     id: 'source',
     label: 'View page source',
     icon: 'i-simple-icons-github',
-    to: `https://github.com/nuxt-ui-templates/dashboard/blob/main/app/pages${route.path === '/' ? '/index' : route.path}.vue`,
+    to: 'https://github.com/LavioDev/LiteBoard',
     target: '_blank'
   }]
 }])

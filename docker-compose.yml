@@ -51,7 +51,7 @@ services:
       APP_ENV: local
       APP_KEY: ${APP_KEY:-base64:ZmFrZS1saXRlYm9hcmQta2V5LWZvci1sb2NhbC1kZXY=}
       APP_DEBUG: '${APP_DEBUG:-true}'
-      APP_URL: http://localhost:8000
+      APP_URL: http://localhost:8081
       DB_CONNECTION: pgsql
       DB_HOST: postgres
       DB_PORT: 5432
@@ -66,7 +66,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
     ports:
-      - '${BACKEND_PORT:-8000}:8000'
+      - '${BACKEND_PORT:-8081}:8081'
     depends_on:
       postgres:
         condition: service_healthy
@@ -89,7 +89,7 @@ services:
     build:
       context: frontend
     environment:
-      NUXT_LARAVEL_API_BASE: http://backend:8000
+      NUXT_LARAVEL_API_BASE: http://backend:8081
     ports:
       - '${FRONTEND_PORT:-3000}:3000'
     depends_on:

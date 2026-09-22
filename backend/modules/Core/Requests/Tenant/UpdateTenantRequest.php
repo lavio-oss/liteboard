@@ -37,7 +37,6 @@ final class UpdateTenantRequest extends FormRequest
             'parent_id' => ['prohibited'],
             'tenant_id' => ['prohibited'],
             'project_id' => ['prohibited'],
-            'factory_id' => ['prohibited'],
         ];
     }
 }

@@ -1,0 +1,12 @@
+<?php
+
+namespace Modules\Masterdata\Enums\Asset;
+
+enum AssetType: string
+{
+    case Site = 'site';
+    case Factory = 'factory';
+    case Area = 'area';
+    case ProductionLine = 'production_line';
+    case Station = 'station';
+}

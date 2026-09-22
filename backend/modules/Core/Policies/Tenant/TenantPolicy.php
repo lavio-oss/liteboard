@@ -10,28 +10,37 @@ final class TenantPolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->tenants()->exists();
+        return $user->isPlatformAdmin() || $user->tenants()->exists();
     }
 
     public function view(User $user, Tenant $tenant): bool
     {
-        return $tenant->hasMember($user);
+        return $user->isPlatformAdmin() || $tenant->hasMember($user);
     }
 
     public function create(User $user): bool
     {
-        return $user->tenants()
-            ->wherePivotIn('role', [TenantRole::Owner->value, TenantRole::Admin->value])
-            ->exists();
+        return $user->isPlatformAdmin()
+            || $user->tenants()->wherePivotIn('role', [
+                TenantRole::Owner->value,
+                TenantRole::Admin->value,
+            ])->exists();
     }
 
     public function update(User $user, Tenant $tenant): bool
     {
-        return $tenant->hasRole($user, TenantRole::Owner, TenantRole::Admin);
+        return $user->isPlatformAdmin()
+            || $tenant->hasRole($user, TenantRole::Owner, TenantRole::Admin);
     }
 
     public function delete(User $user, Tenant $tenant): bool
     {
-        return $tenant->hasRole($user, TenantRole::Owner);
+        return $user->isPlatformAdmin() || $tenant->hasRole($user, TenantRole::Owner);
+    }
+
+    public function manageUsers(User $user, Tenant $tenant): bool
+    {
+        return $user->isPlatformAdmin()
+            || $tenant->hasRole($user, TenantRole::Owner, TenantRole::Admin);
     }
 }

@@ -3,8 +3,6 @@ export default defineNuxtRouteMiddleware(async () => {
   await load()
 
   if (user.value) {
-    const tenant = user.value.tenants[0]
-
-    return navigateTo(tenant ? '/tenants/' + tenant.id : '/')
+    return navigateTo('/')
   }
 })

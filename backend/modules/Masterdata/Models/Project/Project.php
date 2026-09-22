@@ -8,9 +8,12 @@ use Illuminate\Database\Eloquent\Factories\Factory as EloquentFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Modules\Core\Models\Tenant\Tenant;
-use Modules\Masterdata\Models\Factory\Factory as FactoryModel;
+use Modules\Core\Models\User\User;
+use Modules\Masterdata\Enums\Project\ProjectRole;
+use Modules\Masterdata\Models\Asset\Asset;
 
 #[Fillable(['name', 'description', 'status'])]
 final class Project extends Model
@@ -30,9 +33,40 @@ final class Project extends Model
         return $this->belongsTo(Tenant::class);
     }
 
-    /** @return HasMany<FactoryModel, $this> */
-    public function factories(): HasMany
+    /** @return HasMany<Asset, $this> */
+    public function assets(): HasMany
     {
-        return $this->hasMany(FactoryModel::class);
+        return $this->hasMany(Asset::class);
+    }
+
+    /**
+     * @return BelongsToMany<User, $this>
+     */
+    public function users(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class)
+            ->withPivot('role')
+            ->withTimestamps();
+    }
+
+    public function hasMember(User $user): bool
+    {
+        return $user->isPlatformAdmin()
+            || $this->users()->whereKey($user->getKey())->exists();
+    }
+
+    public function hasRole(User $user, ProjectRole ...$roles): bool
+    {
+        if ($user->isPlatformAdmin()) {
+            return true;
+        }
+
+        return $this->users()
+            ->whereKey($user->getKey())
+            ->wherePivotIn('role', array_map(
+                static fn (ProjectRole $role): string => $role->value,
+                $roles,
+            ))
+            ->exists();
     }
 }

@@ -2,7 +2,8 @@
 import type { TableColumn } from '@nuxt/ui'
 import { ApiError } from '~/composables/useApi'
 import { useMasterdata } from '~/composables/useMasterdata'
-import type { MasterdataRow, Project, ProjectInput } from '~/types/masterdata'
+import { useTenantContext } from '~/composables/useTenantContext'
+import type { MasterdataRow, Project, ProjectFormInput } from '~/types/masterdata'
 
 definePageMeta({
   middleware: 'auth'
@@ -11,35 +12,40 @@ definePageMeta({
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
 const toast = useToast()
-const { user } = useAuth()
-const tenantId = user.value?.tenants[0]?.id ?? null
-const canManage = computed(() => {
-  const tenant = user.value?.tenants[0]
-
-  return tenant !== undefined && (tenant.role === 'owner' || tenant.role === 'admin')
-})
+const { isPlatformAdmin, loadTenants, tenants } = useTenantContext()
+await loadTenants()
+const tenantIds = computed(() => tenants.value.map(tenant => tenant.id))
+const manageableTenants = computed(() => tenants.value.filter(
+  tenant => isPlatformAdmin.value || tenant.role === 'owner' || tenant.role === 'admin'
+))
+const tenantOptions = computed(() => manageableTenants.value.map(tenant => ({
+  label: `${tenant.name} (${tenant.code})`,
+  value: tenant.id
+})))
+const manageableTenantIds = computed(() => new Set(manageableTenants.value.map(tenant => tenant.id)))
 const addRequested = useState('masterdata:add-requested', () => false)
 const { createProject, deleteProject, loadProjects, updateProject } = useMasterdata()
 const formOpen = ref(false)
 const formLoading = ref(false)
+const selectedTenantId = ref<number | null>(null)
 const editingProject = ref<Project | null>(null)
 const deleteOpen = ref(false)
 const deleteLoading = ref(false)
 const deletingProject = ref<Project | null>(null)
+const managingProject = ref<Project | null>(null)
+const projectUsersOpen = ref(false)
 
 const { data: response, status, error, refresh } = await useAsyncData('masterdata-projects', () => {
-  if (tenantId === null) {
-    return Promise.resolve([] as Project[])
-  }
-
-  return loadProjects(tenantId)
-})
+  return Promise.all(tenants.value.map(tenant => loadProjects(tenant.id)))
+    .then(projectResponses => projectResponses.flat())
+}, { watch: [tenantIds] })
 
 const projects = computed(() => response.value ?? [])
 const rows = computed<MasterdataRow[]>(() => projects.value)
 
 function openCreate(): void {
   editingProject.value = null
+  selectedTenantId.value = null
   formOpen.value = true
 }
 
@@ -51,6 +57,7 @@ function openEdit(projectId: number): void {
   }
 
   editingProject.value = project
+  selectedTenantId.value = project.tenant_id
   formOpen.value = true
 }
 
@@ -65,18 +72,27 @@ function openDelete(projectId: number): void {
   deleteOpen.value = true
 }
 
-async function saveProject(payload: ProjectInput): Promise<void> {
-  if (tenantId === null) {
-    throw new Error('A tenant is required before saving a project.')
+function openProjectUsers(projectId: number): void {
+  const project = projects.value.find(item => item.id === projectId)
+
+  if (project === undefined) {
+    throw new Error('The selected project is not available.')
   }
+
+  managingProject.value = project
+  projectUsersOpen.value = true
+}
+
+async function saveProject(payload: ProjectFormInput): Promise<void> {
+  const { tenant_id: projectTenantId, ...attributes } = payload
 
   formLoading.value = true
 
   try {
     if (editingProject.value === null) {
-      await createProject(tenantId, payload)
+      await createProject(projectTenantId, attributes)
     } else {
-      await updateProject(tenantId, editingProject.value.id, payload)
+      await updateProject(editingProject.value.tenant_id, editingProject.value.id, attributes)
     }
 
     await refresh()
@@ -102,14 +118,14 @@ async function saveProject(payload: ProjectInput): Promise<void> {
 }
 
 async function deleteSelectedProject(): Promise<void> {
-  if (tenantId === null || deletingProject.value === null) {
+  if (deletingProject.value === null) {
     throw new Error('A project is required before deletion.')
   }
 
   deleteLoading.value = true
 
   try {
-    await deleteProject(tenantId, deletingProject.value.id)
+    await deleteProject(deletingProject.value.tenant_id, deletingProject.value.id)
     await refresh()
     deleteOpen.value = false
     toast.add({
@@ -141,15 +157,35 @@ watch(addRequested, (requested) => {
 
 const columns: TableColumn<MasterdataRow>[] = [
   {
-    id: 'id',
-    accessorKey: 'id',
-    header: 'ID'
+    id: 'sequence',
+    header: 'STT',
+    cell: ({ row }) => row.index + 1
   },
   {
     id: 'name',
     accessorKey: 'name',
     header: 'Name',
     cell: ({ row }) => h('span', { class: 'font-medium text-highlighted' }, row.original.name)
+  },
+  {
+    id: 'tenant_id',
+    accessorKey: 'tenant_id',
+    header: 'Tenant',
+    cell: ({ row }) => {
+      const tenantId = row.original.tenant_id
+
+      if (tenantId === undefined) {
+        throw new Error('The project tenant is missing.')
+      }
+
+      const tenant = tenants.value.find(item => item.id === tenantId)
+
+      if (tenant === undefined) {
+        throw new Error('The project tenant is not available.')
+      }
+
+      return tenant.name
+    }
   },
   {
     id: 'description',
@@ -180,8 +216,16 @@ const columns: TableColumn<MasterdataRow>[] = [
   {
     id: 'actions',
     header: '',
-    cell: ({ row }) => canManage.value
+    cell: ({ row }) => row.original.tenant_id !== undefined
+      && manageableTenantIds.value.has(row.original.tenant_id)
       ? h('div', { class: 'flex justify-end gap-1' }, [
+          h(UButton, {
+            'icon': 'i-lucide-users',
+            'color': 'neutral',
+            'variant': 'ghost',
+            'aria-label': `Manage users for ${row.original.name}`,
+            'onClick': () => openProjectUsers(row.original.id)
+          }),
           h(UButton, {
             'icon': 'i-lucide-pencil',
             'color': 'neutral',
@@ -230,8 +274,10 @@ const errorMessage = computed(() => {
 
   <MasterdataFormModal
     v-model:open="formOpen"
+    v-model:tenant-id="selectedTenantId"
     resource-type="project"
     :resource="editingProject"
+    :tenant-options="tenantOptions"
     :loading="formLoading"
     @submit-project="saveProject"
   />
@@ -239,8 +285,16 @@ const errorMessage = computed(() => {
   <ConfirmDeleteModal
     v-model:open="deleteOpen"
     :title="`Delete ${deletingProject?.name ?? 'project'}`"
-    description="This action cannot be undone and will delete its factories and production lines."
+    description="This action cannot be undone and will delete its assets."
     :loading="deleteLoading"
     @confirm="deleteSelectedProject"
+  />
+
+  <MasterdataProjectUsersModal
+    v-if="projectUsersOpen"
+    v-model:open="projectUsersOpen"
+    :tenant-id="managingProject?.tenant_id ?? null"
+    :project="managingProject"
+    :can-delete-account="isPlatformAdmin"
   />
 </template>

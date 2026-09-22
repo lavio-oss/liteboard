@@ -12,9 +12,11 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Laravel\Sanctum\PersonalAccessToken;
+use Modules\Core\Enums\System\SystemRole;
 use Modules\Core\Models\Tenant\Tenant;
+use Modules\Masterdata\Models\Project\Project;
 
-#[Fillable(['name', 'email', 'password'])]
+#[Fillable(['name', 'email', 'password', 'system_role'])]
 #[Hidden(['password', 'remember_token'])]
 final class User extends Authenticatable
 {
@@ -38,6 +40,21 @@ final class User extends Authenticatable
         return $this->belongsToMany(Tenant::class)
             ->withPivot('role')
             ->withTimestamps();
+    }
+
+    /**
+     * @return BelongsToMany<Project, $this>
+     */
+    public function projects(): BelongsToMany
+    {
+        return $this->belongsToMany(Project::class)
+            ->withPivot('role')
+            ->withTimestamps();
+    }
+
+    public function isPlatformAdmin(): bool
+    {
+        return $this->getAttribute('system_role') === SystemRole::PlatformAdmin->value;
     }
 
     /**

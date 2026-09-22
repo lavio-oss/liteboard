@@ -13,6 +13,7 @@ const props = defineProps<{
 
 const table = useTemplateRef('table')
 const columnVisibility = ref()
+const columnPinning = ref({ right: ['actions'] })
 const pagination = ref({
   pageIndex: 0,
   pageSize: 10
@@ -67,6 +68,8 @@ watch(filteredData, () => {
     />
 
     <div class="flex flex-wrap items-center gap-1.5">
+      <slot name="filters" />
+
       <USelect
         v-model="statusFilter"
         :items="[
@@ -96,6 +99,7 @@ watch(filteredData, () => {
   <UTable
     ref="table"
     v-model:column-visibility="columnVisibility"
+    v-model:column-pinning="columnPinning"
     v-model:pagination="pagination"
     :pagination-options="{
       getPaginationRowModel: getPaginationRowModel()
@@ -105,11 +109,11 @@ watch(filteredData, () => {
     :columns="columns"
     :loading="loading"
     :ui="{
-      base: 'table-fixed border-separate border-spacing-0',
+      base: 'table-auto border-separate border-spacing-0',
       thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
       tbody: '[&>tr]:last:[&>td]:border-b-0',
-      th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
-      td: 'border-b border-default',
+      th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r data-[pinned=right]:w-px data-[pinned=right]:whitespace-nowrap data-[pinned=right]:bg-elevated',
+      td: 'border-b border-default data-[pinned=right]:w-px data-[pinned=right]:whitespace-nowrap data-[pinned=right]:bg-default',
       separator: 'h-0'
     }"
   />

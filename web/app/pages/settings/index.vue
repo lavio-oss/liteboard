@@ -8,12 +8,14 @@ definePageMeta({
   middleware: 'auth'
 })
 
+const colorMode = useColorMode()
 const { user } = useAuth()
-const { timezone, timezoneOptions, detectBrowserTimezone } = useDateTime()
+const { timezone, utcLabel, detectBrowserTimezone } = useDateTime()
 const api = useApi()
 const toast = useToast()
 const profileForm = ref<{ setErrors: (errors: FormError[]) => void }>()
 const isSubmitting = ref(false)
+const timezoneModalOpen = ref(false)
 
 function onAutoDetectTimezone(): void {
   const detected = detectBrowserTimezone()
@@ -169,37 +171,80 @@ async function onSubmit(event: FormSubmitEvent<ProfileSchema>): Promise<void> {
     </UPageCard>
   </UForm>
 
-  <UPageCard
-    title="Timezone & Localization"
-    description="Configure your display timezone. Server and database remain strictly UTC+0."
-    variant="subtle"
-    class="mt-6"
-  >
-    <UFormField
-      label="Display Timezone"
-      description="Select your preferred timezone or automatically detect it from your browser."
-      class="flex max-sm:flex-col justify-between items-start gap-4"
-    >
-      <div class="flex items-center gap-2 w-full sm:max-w-xs">
-        <USelect
-          v-model="timezone"
-          :items="timezoneOptions"
-          class="flex-1 min-w-0"
-          :ui="{
-            base: 'w-full min-w-0 justify-between',
-            value: 'truncate min-w-0'
-          }"
+  <UPageCard variant="subtle" class="mt-6">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div>
+        <div class="font-medium text-highlighted">
+          Timezone
+        </div>
+        <div class="text-sm text-muted">
+          Configure your display timezone.
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 shrink-0">
+        <UButton
+          :label="`${utcLabel} (${timezone})`"
+          icon="i-lucide-globe"
+          color="neutral"
+          variant="outline"
+          size="sm"
+          class="min-w-0"
+          @click="timezoneModalOpen = true"
         />
         <UButton
           icon="i-lucide-locate"
           color="neutral"
           variant="outline"
+          size="sm"
           title="Auto-detect from browser"
           aria-label="Auto-detect from browser"
           class="shrink-0"
           @click="onAutoDetectTimezone"
         />
       </div>
-    </UFormField>
+    </div>
   </UPageCard>
+
+  <UPageCard variant="subtle" class="mt-6">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div>
+        <div class="font-medium text-highlighted">
+          Theme
+        </div>
+        <div class="text-sm text-muted">
+          Choose your preferred color theme.
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 shrink-0">
+        <UButton
+          label="Light"
+          icon="i-lucide-sun"
+          :color="colorMode.preference === 'light' ? 'primary' : 'neutral'"
+          :variant="colorMode.preference === 'light' ? 'solid' : 'outline'"
+          size="sm"
+          @click="colorMode.preference = 'light'"
+        />
+        <UButton
+          label="Dark"
+          icon="i-lucide-moon"
+          :color="colorMode.preference === 'dark' ? 'primary' : 'neutral'"
+          :variant="colorMode.preference === 'dark' ? 'solid' : 'outline'"
+          size="sm"
+          @click="colorMode.preference = 'dark'"
+        />
+        <UButton
+          label="System"
+          icon="i-lucide-monitor"
+          :color="colorMode.preference === 'system' ? 'primary' : 'neutral'"
+          :variant="colorMode.preference === 'system' ? 'solid' : 'outline'"
+          size="sm"
+          @click="colorMode.preference = 'system'"
+        />
+      </div>
+    </div>
+  </UPageCard>
+
+  <TimezoneModal v-model:open="timezoneModalOpen" />
 </template>

@@ -1,22 +1,27 @@
 import { z } from 'zod'
 import { useApi } from '~/composables/useApi'
 import {
-  factoryResponseSchema,
-  factoriesResponseSchema,
-  productionLineResponseSchema,
-  productionLinesResponseSchema,
+  assetResponseSchema,
+  assetsResponseSchema,
+  availableProjectUsersResponseSchema,
   projectResponseSchema,
-  projectsResponseSchema
+  projectsResponseSchema,
+  projectUserResponseSchema,
+  projectUsersResponseSchema
 } from '~/types/masterdata'
+import { tenantUserResponseSchema, tenantUsersResponseSchema } from '~/types/auth'
 import type {
-  Factory,
-  FactoryInput,
-  ProductionLine,
-  ProductionLineInput,
+  Asset,
+  AssetInput,
+  AvailableProjectUser,
   Project,
   ProjectInput,
+  ProjectUser,
+  ProjectUserAccountInput,
+  ProjectUserInput,
   TenantHierarchy
 } from '~/types/masterdata'
+import type { TenantUser, TenantUserCreateInput, TenantUserUpdateInput } from '~/types/auth'
 
 export function useMasterdata() {
   const api = useApi()
@@ -30,41 +35,23 @@ export function useMasterdata() {
     return response.data
   }
 
-  async function loadFactories(tenantId: number): Promise<Factory[]> {
-    const projects = await loadProjects(tenantId)
-    const responses = await Promise.all(projects.map(project => api.request(
-      `/api/tenants/${tenantId}/projects/${project.id}/factories?per_page=100`,
-      factoriesResponseSchema
-    )))
+  async function loadAssets(tenantId: number, projectId: number): Promise<Asset[]> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/assets?per_page=100`,
+      assetsResponseSchema
+    )
 
-    return responses.flatMap(response => response.data)
-  }
-
-  async function loadProductionLines(tenantId: number): Promise<ProductionLine[]> {
-    const factories = await loadFactories(tenantId)
-    const responses = await Promise.all(factories.map(factory => api.request(
-      `/api/tenants/${tenantId}/projects/${factory.project_id}/factories/${factory.id}/production-lines?per_page=100`,
-      productionLinesResponseSchema
-    )))
-
-    return responses.flatMap(response => response.data)
+    return response.data
   }
 
   async function loadTenantHierarchy(tenantId: number): Promise<TenantHierarchy> {
     const projects = await loadProjects(tenantId)
-    const factoryResponses = await Promise.all(projects.map(project => api.request(
-      `/api/tenants/${tenantId}/projects/${project.id}/factories?per_page=100`,
-      factoriesResponseSchema
-    )))
-    const factories = factoryResponses.flatMap(response => response.data)
-    const productionLineResponses = await Promise.all(factories.map(factory => api.request(
-      `/api/tenants/${tenantId}/projects/${factory.project_id}/factories/${factory.id}/production-lines?per_page=100`,
-      productionLinesResponseSchema
-    )))
+    const assetResponses = await Promise.all(
+      projects.map(project => loadAssets(tenantId, project.id))
+    )
 
     return {
-      factories,
-      productionLines: productionLineResponses.flatMap(response => response.data),
+      assets: assetResponses.flatMap(response => response),
       projects
     }
   }
@@ -97,96 +84,166 @@ export function useMasterdata() {
     )
   }
 
-  async function createFactory(tenantId: number, projectId: number, payload: FactoryInput): Promise<Factory> {
+  async function createAsset(tenantId: number, projectId: number, payload: AssetInput): Promise<Asset> {
     const response = await api.request(
-      `/api/tenants/${tenantId}/projects/${projectId}/factories`,
-      factoryResponseSchema,
+      `/api/tenants/${tenantId}/projects/${projectId}/assets`,
+      assetResponseSchema,
       { body: payload, method: 'POST' }
     )
 
     return response.data
   }
 
-  async function updateFactory(
+  async function updateAsset(
     tenantId: number,
     projectId: number,
-    factoryId: number,
-    payload: Partial<FactoryInput>
-  ): Promise<Factory> {
+    assetId: number,
+    payload: Partial<AssetInput>
+  ): Promise<Asset> {
     const response = await api.request(
-      `/api/tenants/${tenantId}/projects/${projectId}/factories/${factoryId}`,
-      factoryResponseSchema,
+      `/api/tenants/${tenantId}/projects/${projectId}/assets/${assetId}`,
+      assetResponseSchema,
       { body: payload, method: 'PATCH' }
     )
 
     return response.data
   }
 
-  async function deleteFactory(tenantId: number, projectId: number, factoryId: number): Promise<void> {
+  async function deleteAsset(tenantId: number, projectId: number, assetId: number): Promise<void> {
     await api.request(
-      `/api/tenants/${tenantId}/projects/${projectId}/factories/${factoryId}`,
+      `/api/tenants/${tenantId}/projects/${projectId}/assets/${assetId}`,
       z.unknown(),
       { method: 'DELETE' }
     )
   }
 
-  async function createProductionLine(
-    tenantId: number,
-    projectId: number,
-    factoryId: number,
-    payload: ProductionLineInput
-  ): Promise<ProductionLine> {
+  async function loadProjectUsers(tenantId: number, projectId: number): Promise<ProjectUser[]> {
     const response = await api.request(
-      `/api/tenants/${tenantId}/projects/${projectId}/factories/${factoryId}/production-lines`,
-      productionLineResponseSchema,
+      `/api/tenants/${tenantId}/projects/${projectId}/users?per_page=100`,
+      projectUsersResponseSchema
+    )
+
+    return response.data
+  }
+
+  async function loadTenantUsers(tenantId: number): Promise<TenantUser[]> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/users?per_page=100`,
+      tenantUsersResponseSchema
+    )
+
+    return response.data
+  }
+
+  async function createTenantUser(tenantId: number, payload: TenantUserCreateInput): Promise<TenantUser> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/users`,
+      tenantUserResponseSchema,
       { body: payload, method: 'POST' }
     )
 
     return response.data
   }
 
-  async function updateProductionLine(
-    tenantId: number,
-    projectId: number,
-    factoryId: number,
-    productionLineId: number,
-    payload: Partial<ProductionLineInput>
-  ): Promise<ProductionLine> {
+  async function loadAvailableProjectUsers(tenantId: number, projectId: number): Promise<AvailableProjectUser[]> {
     const response = await api.request(
-      `/api/tenants/${tenantId}/projects/${projectId}/factories/${factoryId}/production-lines/${productionLineId}`,
-      productionLineResponseSchema,
-      { body: payload, method: 'PATCH' }
+      `/api/tenants/${tenantId}/projects/${projectId}/available-users?per_page=100`,
+      availableProjectUsersResponseSchema
     )
 
     return response.data
   }
 
-  async function deleteProductionLine(
+  async function attachProjectUser(
     tenantId: number,
     projectId: number,
-    factoryId: number,
-    productionLineId: number
+    payload: ProjectUserInput
+  ): Promise<ProjectUser> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/users`,
+      projectUserResponseSchema,
+      { body: payload, method: 'POST' }
+    )
+
+    return response.data
+  }
+
+  async function createProjectUserAccount(
+    tenantId: number,
+    projectId: number,
+    payload: ProjectUserAccountInput
+  ): Promise<ProjectUser> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/user-accounts`,
+      projectUserResponseSchema,
+      { body: payload, method: 'POST' }
+    )
+
+    return response.data
+  }
+
+  async function updateProjectUser(
+    tenantId: number,
+    projectId: number,
+    userId: number,
+    role: ProjectUserInput['role']
+  ): Promise<ProjectUser> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/users/${userId}`,
+      projectUserResponseSchema,
+      { body: { role }, method: 'PATCH' }
+    )
+
+    return response.data
+  }
+
+  async function removeProjectUser(tenantId: number, projectId: number, userId: number): Promise<void> {
+    await api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/users/${userId}`,
+      z.unknown(),
+      { method: 'DELETE' }
+    )
+  }
+
+  async function updateTenantUser(
+    tenantId: number,
+    userId: number,
+    payload: TenantUserUpdateInput
   ): Promise<void> {
     await api.request(
-      `/api/tenants/${tenantId}/projects/${projectId}/factories/${factoryId}/production-lines/${productionLineId}`,
+      `/api/tenants/${tenantId}/users/${userId}`,
+      tenantUserResponseSchema,
+      { body: payload, method: 'PATCH' }
+    )
+  }
+
+  async function deleteTenantUser(tenantId: number, userId: number): Promise<void> {
+    await api.request(
+      `/api/tenants/${tenantId}/users/${userId}`,
       z.unknown(),
       { method: 'DELETE' }
     )
   }
 
   return {
-    createFactory,
-    createProductionLine,
+    attachProjectUser,
+    createAsset,
     createProject,
-    deleteFactory,
-    deleteProductionLine,
+    createProjectUserAccount,
+    createTenantUser,
+    deleteAsset,
     deleteProject,
-    loadFactories,
-    loadProductionLines,
+    deleteTenantUser,
+    loadAssets,
+    loadAvailableProjectUsers,
+    loadProjectUsers,
     loadProjects,
     loadTenantHierarchy,
-    updateFactory,
-    updateProductionLine,
-    updateProject
+    loadTenantUsers,
+    removeProjectUser,
+    updateAsset,
+    updateProject,
+    updateProjectUser,
+    updateTenantUser
   }
 }

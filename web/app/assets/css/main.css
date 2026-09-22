@@ -3,8 +3,13 @@
 @import "@vue-flow/core/dist/style.css";
 @import "@vue-flow/core/dist/theme-default.css";
 
+html,
+body {
+  font-family: 'Bahnschrift', 'Segoe UI', sans-serif;
+}
+
 @theme static {
-  --font-sans: 'Public Sans', sans-serif;
+  --font-sans: 'Bahnschrift', 'Segoe UI', sans-serif;
 
   --color-green-50: #EFFDF5;
   --color-green-100: #D9FBE8;

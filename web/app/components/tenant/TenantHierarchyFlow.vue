@@ -6,27 +6,31 @@ import type { Edge, Node } from '@vue-flow/core'
 import { ApiError } from '~/composables/useApi'
 import { useMasterdata } from '~/composables/useMasterdata'
 import type { Tenant } from '~/types/auth'
-import type { Factory, ProductionLine, Project, TenantHierarchy } from '~/types/masterdata'
+import type { Asset, AssetInput, AssetType, Project, TenantHierarchy } from '~/types/masterdata'
 
 const props = defineProps<{
   tenants: Tenant[]
 }>()
 
+type FlowKind = 'tenant' | 'project' | AssetType
+type FlowItem = Tenant | Project | Asset
+
 type FlowNodeData = {
   label: string
-  kind: 'tenant' | 'project' | 'factory' | 'production-line'
-  code?: string | null
-  sublabel?: string | null
-  rawItem: Tenant | Project | Factory | ProductionLine
+  kind: FlowKind
+  code: string | null
+  sublabel: string | null
+  isLeaf: boolean
+  rawItem: FlowItem
 }
 
 type TreeNode = {
   id: string
   label: string
-  kind: FlowNodeData['kind']
-  code?: string | null
-  sublabel?: string | null
-  rawItem: Tenant | Project | Factory | ProductionLine
+  kind: FlowKind
+  code: string | null
+  sublabel: string | null
+  rawItem: FlowItem
   children: TreeNode[]
   x: number
   y: number
@@ -34,38 +38,73 @@ type TreeNode = {
 }
 
 const kindConfig = {
-  'tenant': {
+  tenant: {
     label: 'Tenant',
     icon: 'i-lucide-building-2',
     iconClass: 'text-emerald-500',
     badgeColor: 'success' as const
   },
-  'project': {
+  project: {
     label: 'Project',
     icon: 'i-lucide-folder-kanban',
     iconClass: 'text-blue-500',
     badgeColor: 'primary' as const
   },
-  'factory': {
-    label: 'Factory',
-    icon: 'i-lucide-building',
-    iconClass: 'text-purple-500',
+  site: {
+    label: 'Asset',
+    icon: 'i-lucide-box',
+    iconClass: 'text-indigo-500',
     badgeColor: 'secondary' as const
   },
-  'production-line': {
-    label: 'Production Line',
-    icon: 'i-lucide-git-branch',
-    iconClass: 'text-amber-500',
-    badgeColor: 'warning' as const
+  factory: {
+    label: 'Asset',
+    icon: 'i-lucide-box',
+    iconClass: 'text-indigo-500',
+    badgeColor: 'secondary' as const
+  },
+  area: {
+    label: 'Asset',
+    icon: 'i-lucide-box',
+    iconClass: 'text-indigo-500',
+    badgeColor: 'secondary' as const
+  },
+  production_line: {
+    label: 'Asset',
+    icon: 'i-lucide-box',
+    iconClass: 'text-indigo-500',
+    badgeColor: 'secondary' as const
+  },
+  station: {
+    label: 'Asset',
+    icon: 'i-lucide-box',
+    iconClass: 'text-indigo-500',
+    badgeColor: 'secondary' as const
   }
+} satisfies Record<FlowKind, {
+  label: string
+  icon: string
+  iconClass: string
+  badgeColor: 'success' | 'neutral' | 'primary' | 'secondary' | 'warning'
+}>
+
+const assetTypeLabels: Record<AssetType, string> = {
+  site: 'Site',
+  factory: 'Factory',
+  area: 'Area',
+  production_line: 'Production Line',
+  station: 'Station'
 }
 
-function getKindConfig(kind: unknown) {
-  if (kind === 'tenant' || kind === 'project' || kind === 'factory' || kind === 'production-line') {
-    return kindConfig[kind]
+function getKindConfig(kind: FlowKind) {
+  return kindConfig[kind]
+}
+
+function getKindLabel(kind: FlowKind): string {
+  if (kind === 'tenant' || kind === 'project') {
+    return getKindConfig(kind).label
   }
 
-  return kindConfig.tenant
+  return `Asset - ${assetTypeLabels[kind]}`
 }
 
 const selectedTenantId = ref<number | null>(props.tenants[0]?.id ?? null)
@@ -74,7 +113,13 @@ const loading = ref(false)
 const error = ref<ApiError | null>(null)
 const detailsOpen = ref(false)
 const selectedNode = ref<FlowNodeData | null>(null)
-const { loadTenantHierarchy } = useMasterdata()
+const assetFormOpen = ref(false)
+const assetFormLoading = ref(false)
+const selectedProjectId = ref<number | null>(null)
+const selectedParentId = ref<number | null>(null)
+const toast = useToast()
+const { user } = useAuth()
+const { createAsset, loadTenantHierarchy } = useMasterdata()
 
 const tenantOptions = computed(() => props.tenants.map(tenant => ({
   label: `${tenant.name} (${tenant.code})`,
@@ -82,6 +127,25 @@ const tenantOptions = computed(() => props.tenants.map(tenant => ({
 })))
 
 const selectedTenant = computed(() => props.tenants.find(tenant => tenant.id === selectedTenantId.value))
+const canManageSelectedTenant = computed(() => {
+  const tenant = selectedTenant.value
+
+  return user.value?.system_role === 'platform_admin'
+    || tenant?.role === 'owner'
+    || tenant?.role === 'admin'
+})
+
+const projectOptions = computed(() => (hierarchy.value?.projects ?? []).map(project => ({
+  label: project.name,
+  value: project.id
+})))
+
+const parentOptions = computed(() => [
+  { label: 'Root asset', value: null },
+  ...(hierarchy.value?.assets ?? [])
+    .filter(asset => asset.project_id === selectedProjectId.value)
+    .map(asset => ({ label: `${asset.name} (${asset.code})`, value: asset.id }))
+])
 
 async function loadHierarchy(): Promise<void> {
   if (selectedTenantId.value === null) {
@@ -123,62 +187,123 @@ function openDetails(data: FlowNodeData): void {
   detailsOpen.value = true
 }
 
+function isTenantItem(item: FlowItem): item is Tenant {
+  return 'role' in item
+}
+
+function isProjectItem(item: FlowItem): item is Project {
+  return 'description' in item
+}
+
+function isAssetItem(item: FlowItem): item is Asset {
+  return 'asset_type' in item
+}
+
+function openAddAsset(node: FlowNodeData): void {
+  if (!canManageSelectedTenant.value) {
+    return
+  }
+
+  if (isProjectItem(node.rawItem)) {
+    selectedProjectId.value = node.rawItem.id
+    selectedParentId.value = null
+  } else if (isAssetItem(node.rawItem)) {
+    selectedProjectId.value = node.rawItem.project_id
+    selectedParentId.value = node.rawItem.id
+  } else {
+    return
+  }
+
+  assetFormOpen.value = true
+}
+
+async function saveAsset(payload: AssetInput): Promise<void> {
+  if (selectedTenantId.value === null || selectedProjectId.value === null) {
+    throw new Error('A tenant and project are required before creating an asset.')
+  }
+
+  assetFormLoading.value = true
+
+  try {
+    await createAsset(selectedTenantId.value, selectedProjectId.value, payload)
+    await loadHierarchy()
+    assetFormOpen.value = false
+    toast.add({
+      title: 'Asset created',
+      description: 'The asset has been added to the hierarchy.',
+      color: 'success'
+    })
+  } catch (requestError: unknown) {
+    if (!(requestError instanceof ApiError)) {
+      throw requestError
+    }
+
+    toast.add({
+      title: 'Unable to create asset',
+      description: requestError.message,
+      color: 'error'
+    })
+  } finally {
+    assetFormLoading.value = false
+  }
+}
+
 type DetailField = {
   label: string
-  value: string | number | null | undefined
+  value: string | number | null
   isBadge?: boolean
   badgeColor?: 'success' | 'neutral' | 'primary' | 'secondary' | 'warning'
 }
 
 const detailFields = computed<DetailField[]>(() => {
-  if (selectedNode.value === null) {
+  const node = selectedNode.value
+
+  if (node === null) {
     return []
   }
 
-  const item = selectedNode.value.rawItem as Record<string, unknown>
-  const kind = selectedNode.value.kind
-
   const fields: DetailField[] = [
-    { label: 'ID', value: item.id as number },
-    { label: 'Name', value: item.name as string }
+    { label: 'Name', value: node.rawItem.name },
+    {
+      label: 'Status',
+      value: node.rawItem.status,
+      isBadge: true,
+      badgeColor: node.rawItem.status === 'active' ? 'success' : 'neutral'
+    }
   ]
 
-  if (typeof item.code === 'string' && item.code !== '') {
-    fields.push({ label: 'Code', value: item.code })
+  if (isTenantItem(node.rawItem)) {
+    fields.push({ label: 'Code', value: node.rawItem.code })
+
+    if (node.rawItem.role !== null) {
+      fields.push({
+        label: 'Your role',
+        value: node.rawItem.role,
+        isBadge: true,
+        badgeColor: node.rawItem.role === 'owner' ? 'primary' : 'neutral'
+      })
+    }
   }
 
-  if (typeof item.status === 'string') {
-    fields.push({
-      label: 'Status',
-      value: item.status,
-      isBadge: true,
-      badgeColor: item.status === 'active' ? 'success' : 'neutral'
-    })
+  if (isProjectItem(node.rawItem)) {
+    if (node.rawItem.description !== null) {
+      fields.push({ label: 'Description', value: node.rawItem.description })
+    }
   }
 
-  if (kind === 'tenant' && typeof item.role === 'string') {
-    fields.push({
-      label: 'Your role',
-      value: item.role,
-      isBadge: true,
-      badgeColor: item.role === 'owner' ? 'primary' : 'neutral'
-    })
+  if (isAssetItem(node.rawItem)) {
+    fields.push({ label: 'Code', value: node.rawItem.code })
+
+    if (node.rawItem.location !== null) {
+      fields.push({ label: 'Location', value: node.rawItem.location })
+    }
   }
 
-  if (kind === 'factory' && typeof item.location === 'string' && item.location !== '') {
-    fields.push({ label: 'Location', value: item.location })
-  }
-
-  if (kind === 'project' && typeof item.description === 'string' && item.description !== '') {
-    fields.push({ label: 'Description', value: item.description })
-  }
-
-  if (typeof item.created_at === 'string') {
-    fields.push({ label: 'Created at', value: formatDateTime(item.created_at) })
-  }
-
-  if (typeof item.updated_at === 'string') {
-    fields.push({ label: 'Updated at', value: formatDateTime(item.updated_at) })
+  if ('created_at' in node.rawItem && 'updated_at' in node.rawItem) {
+    fields.push(
+      { label: 'Created at', value: formatDateTime(node.rawItem.created_at) },
+      { label: 'Updated at', value: formatDateTime(node.rawItem.updated_at) }
+    )
   }
 
   return fields
@@ -195,64 +320,55 @@ const nodes = computed<Node<FlowNodeData>[]>(() => {
     return []
   }
 
-  // 1. Build tree structure and calculate subtree widths bottom-up
-  function buildProjectTree(project: Project): TreeNode {
-    const factoryChildren = currentHierarchy!.factories
-      .filter(f => f.project_id === project.id)
-      .map((factory) => {
-        const lineChildren: TreeNode[] = currentHierarchy!.productionLines
-          .filter(l => l.factory_id === factory.id)
-          .map(line => ({
-            id: `production-line-${line.id}`,
-            label: line.name,
-            kind: 'production-line' as const,
-            code: line.code,
-            rawItem: line,
-            children: [],
-            x: 0,
-            y: 460,
-            subtreeWidth: CARD_WIDTH
-          }))
+  const assets = currentHierarchy.assets
 
-        const linesTotalWidth = lineChildren.length > 0
-          ? lineChildren.reduce((sum, c) => sum + c.subtreeWidth, 0) + (lineChildren.length - 1) * CARD_GAP
+  function buildAssetChildren(projectId: number, parentAssetId: number | null, y: number): TreeNode[] {
+    return assets
+      .filter(asset => asset.project_id === projectId && asset.parent_asset_id === parentAssetId)
+      .map((asset) => {
+        const children = buildAssetChildren(projectId, asset.id, y + 140)
+        const childrenTotalWidth = children.length > 0
+          ? children.reduce((sum, child) => sum + child.subtreeWidth, 0) + (children.length - 1) * CARD_GAP
           : CARD_WIDTH
 
         return {
-          id: `factory-${factory.id}`,
-          label: factory.name,
-          kind: 'factory' as const,
-          code: factory.code,
-          sublabel: factory.location,
-          rawItem: factory,
-          children: lineChildren,
+          id: `asset-${asset.id}`,
+          label: asset.name,
+          kind: asset.asset_type,
+          code: asset.code,
+          sublabel: asset.location,
+          rawItem: asset,
+          children,
           x: 0,
-          y: 320,
-          subtreeWidth: Math.max(CARD_WIDTH, linesTotalWidth)
+          y,
+          subtreeWidth: Math.max(CARD_WIDTH, childrenTotalWidth)
         }
       })
+  }
 
-    const factoriesTotalWidth = factoryChildren.length > 0
-      ? factoryChildren.reduce((sum, c) => sum + c.subtreeWidth, 0) + (factoryChildren.length - 1) * CARD_GAP
+  function buildProjectTree(project: Project): TreeNode {
+    const assetChildren = buildAssetChildren(project.id, null, 320)
+    const assetsTotalWidth = assetChildren.length > 0
+      ? assetChildren.reduce((sum, child) => sum + child.subtreeWidth, 0) + (assetChildren.length - 1) * CARD_GAP
       : CARD_WIDTH
 
     return {
       id: `project-${project.id}`,
       label: project.name,
-      kind: 'project' as const,
+      kind: 'project',
+      code: null,
       sublabel: project.description,
       rawItem: project,
-      children: factoryChildren,
+      children: assetChildren,
       x: 0,
       y: 180,
-      subtreeWidth: Math.max(CARD_WIDTH, factoriesTotalWidth)
+      subtreeWidth: Math.max(CARD_WIDTH, assetsTotalWidth)
     }
   }
 
   const projectNodes = currentHierarchy.projects.map(buildProjectTree)
-
   const projectsTotalWidth = projectNodes.length > 0
-    ? projectNodes.reduce((sum, c) => sum + c.subtreeWidth, 0) + (projectNodes.length - 1) * CARD_GAP
+    ? projectNodes.reduce((sum, child) => sum + child.subtreeWidth, 0) + (projectNodes.length - 1) * CARD_GAP
     : CARD_WIDTH
 
   const tenantNode: TreeNode = {
@@ -260,6 +376,7 @@ const nodes = computed<Node<FlowNodeData>[]>(() => {
     label: currentTenant.name,
     kind: 'tenant',
     code: currentTenant.code,
+    sublabel: null,
     rawItem: currentTenant,
     children: projectNodes,
     x: 0,
@@ -267,7 +384,6 @@ const nodes = computed<Node<FlowNodeData>[]>(() => {
     subtreeWidth: Math.max(CARD_WIDTH, projectsTotalWidth)
   }
 
-  // 2. Center each parent horizontally directly above its children
   function layoutSubtree(node: TreeNode, leftX: number): void {
     if (node.children.length === 0) {
       node.x = leftX + (node.subtreeWidth - CARD_WIDTH) / 2
@@ -275,9 +391,8 @@ const nodes = computed<Node<FlowNodeData>[]>(() => {
       return
     }
 
-    const childrenWidth = node.children.reduce((sum, c) => sum + c.subtreeWidth, 0)
+    const childrenWidth = node.children.reduce((sum, child) => sum + child.subtreeWidth, 0)
       + (node.children.length - 1) * CARD_GAP
-
     let currentChildLeftX = leftX + (node.subtreeWidth - childrenWidth) / 2
 
     for (const child of node.children) {
@@ -291,16 +406,13 @@ const nodes = computed<Node<FlowNodeData>[]>(() => {
     if (firstChild !== undefined && lastChild !== undefined) {
       const firstChildCenter = firstChild.x + CARD_WIDTH / 2
       const lastChildCenter = lastChild.x + CARD_WIDTH / 2
-      const childrenCenter = (firstChildCenter + lastChildCenter) / 2
-
-      node.x = childrenCenter - CARD_WIDTH / 2
+      node.x = (firstChildCenter + lastChildCenter) / 2 - CARD_WIDTH / 2
     }
   }
 
   const startLeftX = Math.max(80, 600 - tenantNode.subtreeWidth / 2)
   layoutSubtree(tenantNode, startLeftX)
 
-  // 3. Flatten tree into Vue Flow nodes
   const flowNodes: Node<FlowNodeData>[] = []
 
   function collectNodes(node: TreeNode): void {
@@ -313,6 +425,7 @@ const nodes = computed<Node<FlowNodeData>[]>(() => {
         label: node.label,
         code: node.code,
         sublabel: node.sublabel,
+        isLeaf: node.children.length === 0,
         rawItem: node.rawItem
       }
     })
@@ -346,32 +459,21 @@ const edges = computed<Edge[]>(() => {
       animated: true,
       style: { stroke: 'var(--ui-border-accented, #94a3b8)', strokeWidth: 1.5 }
     })
+  })
 
-    currentHierarchy.factories
-      .filter(factory => factory.project_id === project.id)
-      .forEach((factory) => {
-        result.push({
-          id: `project-${project.id}-factory-${factory.id}`,
-          source: `project-${project.id}`,
-          target: `factory-${factory.id}`,
-          type: 'smoothstep',
-          animated: true,
-          style: { stroke: 'var(--ui-border-accented, #94a3b8)', strokeWidth: 1.5 }
-        })
+  currentHierarchy.assets.forEach((asset) => {
+    const source = asset.parent_asset_id === null
+      ? `project-${asset.project_id}`
+      : `asset-${asset.parent_asset_id}`
 
-        currentHierarchy.productionLines
-          .filter(productionLine => productionLine.factory_id === factory.id)
-          .forEach((productionLine) => {
-            result.push({
-              id: `factory-${factory.id}-line-${productionLine.id}`,
-              source: `factory-${factory.id}`,
-              target: `production-line-${productionLine.id}`,
-              type: 'smoothstep',
-              animated: true,
-              style: { stroke: 'var(--ui-border-accented, #94a3b8)', strokeWidth: 1.5 }
-            })
-          })
-      })
+    result.push({
+      id: `${source}-asset-${asset.id}`,
+      source,
+      target: `asset-${asset.id}`,
+      type: 'smoothstep',
+      animated: true,
+      style: { stroke: 'var(--ui-border-accented, #94a3b8)', strokeWidth: 1.5 }
+    })
   })
 
   return result
@@ -402,12 +504,8 @@ const edges = computed<Edge[]>(() => {
           Project
         </UBadge>
         <UBadge color="secondary" variant="subtle" class="gap-1">
-          <UIcon name="i-lucide-building" class="size-3" />
-          Factory
-        </UBadge>
-        <UBadge color="warning" variant="subtle" class="gap-1">
-          <UIcon name="i-lucide-git-branch" class="size-3" />
-          Production Line
+          <UIcon name="i-lucide-box" class="size-3" />
+          Asset
         </UBadge>
       </div>
     </div>
@@ -469,21 +567,35 @@ const edges = computed<Edge[]>(() => {
                     :class="getKindConfig(data.kind).iconClass"
                   />
                   <span class="text-[10px] font-bold tracking-wider uppercase text-muted truncate">
-                    {{ getKindConfig(data.kind).label }}
+                    {{ getKindLabel(data.kind) }}
                   </span>
                 </div>
 
-                <UButton
-                  icon="i-lucide-info"
-                  color="neutral"
-                  variant="ghost"
-                  size="xs"
-                  class="-mr-1.5 -my-1 text-muted hover:text-highlighted cursor-pointer"
-                  aria-label="View details"
-                  @click.stop="openDetails(data)"
-                  @pointerdown.stop
-                  @mousedown.stop
-                />
+                <div class="flex items-center gap-1">
+                  <UButton
+                    icon="i-lucide-info"
+                    color="neutral"
+                    variant="ghost"
+                    size="xs"
+                    class="-my-1 text-muted hover:text-highlighted cursor-pointer"
+                    aria-label="View details"
+                    @click.stop="openDetails(data)"
+                    @pointerdown.stop
+                    @mousedown.stop
+                  />
+                  <UButton
+                    v-if="canManageSelectedTenant && (data.kind === 'project' || isAssetItem(data.rawItem))"
+                    icon="i-lucide-plus"
+                    color="primary"
+                    variant="ghost"
+                    size="xs"
+                    class="-my-1 text-muted hover:text-primary cursor-pointer"
+                    :aria-label="`Add asset under ${data.label}`"
+                    @click.stop="openAddAsset(data)"
+                    @pointerdown.stop
+                    @mousedown.stop
+                  />
+                </div>
               </div>
 
               <div class="text-sm font-semibold text-highlighted truncate" :title="data.label">
@@ -491,23 +603,23 @@ const edges = computed<Edge[]>(() => {
               </div>
 
               <div
-                v-if="data.code || data.sublabel"
+                v-if="data.code !== null || data.sublabel !== null"
                 class="flex items-center gap-1.5 text-xs text-muted truncate mt-1.5"
               >
                 <span
-                  v-if="data.code"
-                  class="font-mono bg-elevated px-1 py-0.5 rounded text-[11px] border border-default"
+                  v-if="data.code !== null"
+                  class="bg-elevated py-0.5 text-[11px] font-medium"
                 >
                   {{ data.code }}
                 </span>
-                <span v-if="data.code && data.sublabel" class="text-muted/60">•</span>
-                <span v-if="data.sublabel" class="truncate text-[11px]">
+                <span v-if="data.code !== null && data.sublabel !== null" class="text-muted/60">•</span>
+                <span v-if="data.sublabel !== null" class="truncate text-[11px]">
                   {{ data.sublabel }}
                 </span>
               </div>
 
               <Handle
-                v-if="data.kind !== 'production-line'"
+                v-if="!data.isLeaf"
                 type="source"
                 :position="Position.Bottom"
                 class="!size-2 !border-2 !border-default !bg-muted"
@@ -527,7 +639,8 @@ const edges = computed<Edge[]>(() => {
 
   <UModal
     v-model:open="detailsOpen"
-    :title="selectedNode ? `${getKindConfig(selectedNode.kind).label} Details` : 'Details'"
+    :title="selectedNode ? `${getKindLabel(selectedNode.kind)} Details` : 'Details'"
+    :description="selectedNode ? `Detailed information for ${selectedNode.label}.` : undefined"
   >
     <template #body>
       <div v-if="selectedNode" class="space-y-4">
@@ -539,7 +652,7 @@ const edges = computed<Edge[]>(() => {
           />
           <div class="min-w-0 flex-1">
             <div class="text-xs uppercase font-bold tracking-wider text-muted">
-              {{ getKindConfig(selectedNode.kind).label }}
+              {{ getKindLabel(selectedNode.kind) }}
             </div>
             <div class="text-base font-semibold text-highlighted truncate">
               {{ selectedNode.label }}
@@ -565,7 +678,7 @@ const edges = computed<Edge[]>(() => {
               >
                 {{ field.value }}
               </UBadge>
-              <span v-else class="font-mono">{{ field.value || '—' }}</span>
+              <span v-else>{{ field.value ?? '—' }}</span>
             </dd>
           </div>
         </dl>
@@ -581,4 +694,15 @@ const edges = computed<Edge[]>(() => {
       </div>
     </template>
   </UModal>
+
+  <MasterdataFormModal
+    v-model:open="assetFormOpen"
+    v-model:project-id="selectedProjectId"
+    v-model:parent-id="selectedParentId"
+    resource-type="asset"
+    :project-options="projectOptions"
+    :parent-options="parentOptions"
+    :loading="assetFormLoading"
+    @submit-asset="saveAsset"
+  />
 </template>
