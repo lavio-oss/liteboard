@@ -3,9 +3,9 @@
 namespace Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
-use Modules\Masterdata\Enums\Asset\AssetType;
-use Modules\Masterdata\Models\Asset\Asset;
-use Modules\Masterdata\Models\EntityRelation\EntityRelation;
+use Modules\Admin\Enums\Asset\AssetType;
+use Modules\Admin\Models\Asset\Asset;
+use Modules\Admin\Models\EntityRelation\EntityRelation;
 
 /** @extends Factory<Asset> */
 final class AssetFactory extends Factory

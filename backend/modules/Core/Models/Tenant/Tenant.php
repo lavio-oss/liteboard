@@ -10,9 +10,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Modules\Admin\Models\Project\Project;
 use Modules\Core\Enums\Tenant\TenantRole;
 use Modules\Core\Models\User\User;
-use Modules\Masterdata\Models\Project\Project;
 
 #[Fillable(['parent_id', 'name', 'code', 'status'])]
 final class Tenant extends Model

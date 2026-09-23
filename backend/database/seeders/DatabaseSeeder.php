@@ -13,7 +13,7 @@ final class DatabaseSeeder extends Seeder
     {
         $this->call([
             CoreDatabaseSeeder::class,
-            MasterdataDatabaseSeeder::class,
+            AdminDatabaseSeeder::class,
         ]);
     }
 }

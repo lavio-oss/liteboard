@@ -2,75 +2,88 @@
 import type { NavigationMenuItem } from '@nuxt/ui'
 
 const open = ref(false)
+const { isAdminWorkspace } = useWorkspaceContext()
 
-const links = [[{
+const adminLinks = [{
   label: 'Home',
   icon: 'i-lucide-house',
-  to: '/',
-  onSelect: () => {
-    open.value = false
-  }
+  to: '/admin'
 }, {
   label: 'IIoT Tree',
   icon: 'i-lucide-network',
-  to: '/iiot-tree',
-  onSelect: () => {
-    open.value = false
-  }
+  to: '/admin/iiot-tree'
 }, {
   label: 'Tenants',
   icon: 'i-lucide-building-2',
-  to: '/tenants',
-  onSelect: () => {
-    open.value = false
-  }
+  to: '/admin/tenants'
 }, {
   label: 'Projects',
   icon: 'i-lucide-folder-kanban',
-  to: '/projects',
-  onSelect: () => {
-    open.value = false
-  }
+  to: '/admin/projects'
 }, {
   label: 'Assets',
   icon: 'i-lucide-boxes',
-  to: '/assets',
-  onSelect: () => {
-    open.value = false
-  }
+  to: '/admin/assets'
 }, {
   label: 'Users',
   icon: 'i-lucide-users',
-  to: '/users',
-  onSelect: () => {
-    open.value = false
-  }
+  to: '/admin/users'
 }, {
   label: 'Settings',
   to: '/settings',
   icon: 'i-lucide-settings',
   defaultOpen: true,
-  type: 'trigger',
+  type: 'trigger' as const,
   children: [{
     label: 'General',
     to: '/settings',
-    exact: true,
-    onSelect: () => {
-      open.value = false
-    }
+    exact: true
   }, {
     label: 'Security',
-    to: '/settings/security',
-    onSelect: () => {
-      open.value = false
-    }
+    to: '/settings/security'
   }]
-}]] satisfies NavigationMenuItem[][]
+}] satisfies NavigationMenuItem[]
+
+const liteboardLinks = [{
+  label: 'Dashboard',
+  icon: 'i-lucide-layout-dashboard',
+  to: '/'
+}, {
+  label: 'Assets',
+  icon: 'i-lucide-boxes',
+  to: '/assets'
+}, {
+  label: 'Devices',
+  icon: 'i-lucide-router',
+  to: '/devices'
+}, {
+  label: 'Settings',
+  to: '/settings',
+  icon: 'i-lucide-settings',
+  defaultOpen: true,
+  type: 'trigger' as const,
+  children: [{
+    label: 'General',
+    to: '/settings',
+    exact: true
+  }, {
+    label: 'Security',
+    to: '/settings/security'
+  }]
+}] satisfies NavigationMenuItem[]
+
+const links = computed<NavigationMenuItem[][]>(() => [
+  isAdminWorkspace.value ? adminLinks : liteboardLinks
+])
 
 const groups = computed(() => [{
   id: 'links',
   label: 'Go to',
-  items: links.flat()
+  items: links.value.flat().map(item => ({
+    label: item.label,
+    icon: item.icon,
+    to: item.to
+  }))
 }, {
   id: 'code',
   label: 'Code',

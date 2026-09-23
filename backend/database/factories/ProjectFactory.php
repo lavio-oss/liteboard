@@ -3,7 +3,7 @@
 namespace Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
-use Modules\Masterdata\Models\Project\Project;
+use Modules\Admin\Models\Project\Project;
 
 /** @extends Factory<Project> */
 final class ProjectFactory extends Factory

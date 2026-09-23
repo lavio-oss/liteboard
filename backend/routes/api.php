@@ -11,6 +11,6 @@ Route::get('/health', function (): array {
 
 require base_path('modules/Core/Routes/auth.php');
 require base_path('modules/Core/Routes/tenant-user.php');
-require base_path('modules/Masterdata/Routes/project.php');
-require base_path('modules/Masterdata/Routes/project-user.php');
-require base_path('modules/Masterdata/Routes/asset.php');
+require base_path('modules/Admin/Routes/project.php');
+require base_path('modules/Admin/Routes/project-user.php');
+require base_path('modules/Admin/Routes/asset.php');

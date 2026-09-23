@@ -1,11 +1,11 @@
 <?php
 
 use App\Providers\AppServiceProvider;
+use Modules\Admin\Providers\AdminServiceProvider;
 use Modules\Core\Providers\CoreServiceProvider;
-use Modules\Masterdata\Providers\MasterdataServiceProvider;
 
 return [
     AppServiceProvider::class,
     CoreServiceProvider::class,
-    MasterdataServiceProvider::class,
+    AdminServiceProvider::class,
 ];

@@ -12,9 +12,9 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Laravel\Sanctum\PersonalAccessToken;
+use Modules\Admin\Models\Project\Project;
 use Modules\Core\Enums\System\SystemRole;
 use Modules\Core\Models\Tenant\Tenant;
-use Modules\Masterdata\Models\Project\Project;
 
 #[Fillable(['name', 'email', 'password', 'system_role'])]
 #[Hidden(['password', 'remember_token'])]
