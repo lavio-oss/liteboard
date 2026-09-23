@@ -16,7 +16,7 @@ hiện đã có:
 - `TenantPolicy`;
 - `TenantResource`;
 - endpoint list/detail/create/update/delete tenant;
-- seed tenant `demo` với user `test@example.com` là owner;
+- seed tenant `demo` với user `Administrator <admin@gmail.com>` là platform admin;
 - feature tests cho membership isolation, role matrix và tenant CRUD.
 
 Tenant CRUD và tenant management UI đã có ở mức V1. UI hiển thị các tenant user
@@ -30,11 +30,17 @@ API hierarchy. Dữ liệu nghiệp vụ bên dưới tenant đã có backend mo
 ```text
 Tenant
 └── Project
-    └── Factory
-        └── Production Line
+    └── Asset graph (`contains`)
+        ├── Site
+        ├── Factory
+        ├── Area
+        ├── Production Line
+        ├── Station
+        └── Equipment
 ```
 
-Module này không di chuyển `Tenant` khỏi `Core` và chưa bao gồm Equipment.
+Module này không di chuyển `Tenant` khỏi `Core`. Equipment là một `AssetType`,
+không có bảng riêng; Device/MQTT là phase sau.
 
 ## 2. Data contract
 
@@ -78,25 +84,26 @@ Các bảng tenant-owned và khóa ngoại là:
 
 ```text
 projects.tenant_id               NOT NULL, ON UPDATE CASCADE, ON DELETE CASCADE
-factories.project_id             NOT NULL, ON UPDATE CASCADE, ON DELETE CASCADE
-production_lines.factory_id      NOT NULL, ON UPDATE CASCADE, ON DELETE CASCADE
+assets.project_id                NOT NULL, ON UPDATE CASCADE, ON DELETE CASCADE
+entity_relations.project_id      NOT NULL, ON UPDATE CASCADE, ON DELETE CASCADE
 ```
 
-Factory có `unique(project_id, code)` và Production Line có
-`unique(factory_id, code)`. Không thêm `tenant_id` vào Factory hoặc Production
-Line; tenant được suy ra qua parent chain.
+Asset có `unique(project_id, asset_type, code)`. `entity_relations` là nguồn sự
+thật cho quan hệ `asset contains asset` và giới hạn mỗi asset tối đa một parent.
+`parent_asset_id` chỉ là projection trong API/UI.
 
 CRUD API dùng nested scoped routes:
 
 ```text
 /api/tenants/{tenant}/projects
-/api/tenants/{tenant}/projects/{project}/factories
-/api/tenants/{tenant}/projects/{project}/factories/{factory}/production-lines
+/api/tenants/{tenant}/projects/{project}/assets
+/api/tenants/{tenant}/projects/{project}/assets/{asset}
 ```
 
-Member được list/read. Owner/admin được create/update/delete. Parent ID là
-immutable qua API và không được nhận trong request body. Xóa parent dùng DB
-cascade để xóa toàn bộ subtree.
+Member được list/read. Owner/admin được create/update/delete. Parent được gửi
+qua `parent_asset_id` nhưng được kiểm tra cùng Project, chống self-parenting và
+cycle. Xóa parent giữ lại child và xóa các relation liên quan để child thành
+root.
 
 ## 3. API hiện tại
 
@@ -119,7 +126,8 @@ không thuộc user trả `404`.
 `POST /api/tenants` tạo tenant và attach user hiện tại với role `owner` trong một
 transaction. `PATCH /api/tenants/{tenant}` chỉ nhận `name`, `code` và `status`;
 `code` phải unique. `DELETE /api/tenants/{tenant}` chỉ dành cho owner và là hard
-delete; Project, Factory và Production Line bên dưới tenant được DB cascade xóa.
+delete; Project và Asset bên dưới tenant được DB cascade xóa, cùng các
+`entity_relations` theo `project_id`.
 
 ## 4. Policy hiện tại
 
@@ -200,4 +208,4 @@ behavior với Projects, Equipment và telemetry retention.
 - Tenant list UI không sử dụng dữ liệu mock và dùng `GET /api/tenants`.
 - Tenant hiện tại được biểu diễn rõ bằng URL/context server-side.
 - API response và Zod schema frontend dùng cùng field names, không mapping alias.
-- Backend feature tests và PHPStan pass trước khi format: 42 tests, 159 assertions.
+- Backend feature tests và PHPStan pass trước khi format: 62 tests, 254 assertions.

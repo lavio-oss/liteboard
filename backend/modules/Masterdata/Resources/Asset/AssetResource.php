@@ -24,12 +24,16 @@ final class AssetResource extends JsonResource
             throw new \UnexpectedValueException('The asset_type attribute must be an AssetType.');
         }
 
+        $parentRelation = $asset->relationLoaded('incomingRelations')
+            ? $asset->incomingRelations->first()
+            : $asset->incomingRelations()->first();
+
         return [
             'id' => (int) $asset->getKey(),
             'project_id' => (int) $asset->getAttribute('project_id'),
-            'parent_asset_id' => $asset->getAttribute('parent_asset_id') === null
+            'parent_asset_id' => $parentRelation === null
                 ? null
-                : (int) $asset->getAttribute('parent_asset_id'),
+                : (int) $parentRelation->source_id,
             'asset_type' => $assetType->value,
             'name' => (string) $asset->name,
             'code' => (string) $asset->code,

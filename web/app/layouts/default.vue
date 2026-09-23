@@ -11,10 +11,9 @@ const links = [[{
     open.value = false
   }
 }, {
-  label: 'Inbox',
-  icon: 'i-lucide-inbox',
-  to: '/inbox',
-  badge: '4',
+  label: 'IIoT Tree',
+  icon: 'i-lucide-network',
+  to: '/iiot-tree',
   onSelect: () => {
     open.value = false
   }
@@ -26,29 +25,26 @@ const links = [[{
     open.value = false
   }
 }, {
-  label: 'Masterdata',
-  icon: 'i-lucide-database',
-  defaultOpen: true,
-  type: 'trigger',
-  children: [{
-    label: 'Users',
-    to: '/masterdata/users',
-    onSelect: () => {
-      open.value = false
-    }
-  }, {
-    label: 'Projects',
-    to: '/masterdata/projects',
-    onSelect: () => {
-      open.value = false
-    }
-  }, {
-    label: 'Assets',
-    to: '/masterdata/assets',
-    onSelect: () => {
-      open.value = false
-    }
-  }]
+  label: 'Projects',
+  icon: 'i-lucide-folder-kanban',
+  to: '/projects',
+  onSelect: () => {
+    open.value = false
+  }
+}, {
+  label: 'Assets',
+  icon: 'i-lucide-boxes',
+  to: '/assets',
+  onSelect: () => {
+    open.value = false
+  }
+}, {
+  label: 'Users',
+  icon: 'i-lucide-users',
+  to: '/users',
+  onSelect: () => {
+    open.value = false
+  }
 }, {
   label: 'Settings',
   to: '/settings',
@@ -122,7 +118,5 @@ const groups = computed(() => [{
     <UDashboardSearch :groups="groups" />
 
     <slot />
-
-    <NotificationsSlideover />
   </UDashboardGroup>
 </template>

@@ -10,6 +10,7 @@ import type { Asset, AssetInput, AssetType, Project, TenantHierarchy } from '~/t
 
 const props = defineProps<{
   tenants: Tenant[]
+  initialTenantId: number | null
 }>()
 
 type FlowKind = 'tenant' | 'project' | AssetType
@@ -35,6 +36,19 @@ type TreeNode = {
   x: number
   y: number
   subtreeWidth: number
+}
+
+type FilterTreeItem = {
+  id: string
+  label: string
+  searchText?: string
+  icon?: string
+  children?: FilterTreeItem[]
+  onSelect?: (event: FilterTreeSelectEvent) => void
+}
+
+type FilterTreeSelectEvent = {
+  preventDefault: () => void
 }
 
 const kindConfig = {
@@ -79,6 +93,12 @@ const kindConfig = {
     icon: 'i-lucide-box',
     iconClass: 'text-indigo-500',
     badgeColor: 'secondary' as const
+  },
+  equipment: {
+    label: 'Asset',
+    icon: 'i-lucide-cog',
+    iconClass: 'text-orange-500',
+    badgeColor: 'warning' as const
   }
 } satisfies Record<FlowKind, {
   label: string
@@ -92,7 +112,8 @@ const assetTypeLabels: Record<AssetType, string> = {
   factory: 'Factory',
   area: 'Area',
   production_line: 'Production Line',
-  station: 'Station'
+  station: 'Station',
+  equipment: 'Equipment'
 }
 
 function getKindConfig(kind: FlowKind) {
@@ -107,7 +128,7 @@ function getKindLabel(kind: FlowKind): string {
   return `Asset - ${assetTypeLabels[kind]}`
 }
 
-const selectedTenantId = ref<number | null>(props.tenants[0]?.id ?? null)
+const selectedTenantId = ref<number | null>(props.initialTenantId ?? props.tenants[0]?.id ?? null)
 const hierarchy = ref<TenantHierarchy | null>(null)
 const loading = ref(false)
 const error = ref<ApiError | null>(null)
@@ -117,14 +138,13 @@ const assetFormOpen = ref(false)
 const assetFormLoading = ref(false)
 const selectedProjectId = ref<number | null>(null)
 const selectedParentId = ref<number | null>(null)
+const filterOpen = ref(false)
+const filterQuery = ref('')
+const selectedFilterKeys = ref<string[]>([])
+const expandedFilterKeys = ref<string[]>([])
 const toast = useToast()
 const { user } = useAuth()
 const { createAsset, loadTenantHierarchy } = useMasterdata()
-
-const tenantOptions = computed(() => props.tenants.map(tenant => ({
-  label: `${tenant.name} (${tenant.code})`,
-  value: tenant.id
-})))
 
 const selectedTenant = computed(() => props.tenants.find(tenant => tenant.id === selectedTenantId.value))
 const canManageSelectedTenant = computed(() => {
@@ -147,7 +167,133 @@ const parentOptions = computed(() => [
     .map(asset => ({ label: `${asset.name} (${asset.code})`, value: asset.id }))
 ])
 
+function buildAssetFilterItems(projectId: number, parentAssetId: number | null): FilterTreeItem[] {
+  return (hierarchy.value?.assets ?? [])
+    .filter(asset => asset.project_id === projectId && asset.parent_asset_id === parentAssetId)
+    .map(asset => ({
+      id: `asset-${asset.id}`,
+      label: asset.name,
+      searchText: `${asset.name} ${asset.code} ${asset.location ?? ''} ${assetTypeLabels[asset.asset_type]}`,
+      icon: getKindConfig(asset.asset_type).icon,
+      children: buildAssetFilterItems(projectId, asset.id),
+      onSelect: preventFilterRowSelection
+    }))
+}
+
+function preventFilterRowSelection(event: FilterTreeSelectEvent): void {
+  event.preventDefault()
+}
+
+const filterTreeItems = computed<FilterTreeItem[]>(() => {
+  const currentTenant = selectedTenant.value
+  const currentHierarchy = hierarchy.value
+
+  if (currentTenant === undefined || currentHierarchy === null) {
+    return []
+  }
+
+  return [{
+    id: `tenant-${currentTenant.id}`,
+    label: currentTenant.name,
+    searchText: `${currentTenant.name} ${currentTenant.code}`,
+    icon: getKindConfig('tenant').icon,
+    onSelect: preventFilterRowSelection,
+    children: currentHierarchy.projects.map(project => ({
+      id: `project-${project.id}`,
+      label: project.name,
+      searchText: `${project.name} ${project.description ?? ''}`,
+      icon: getKindConfig('project').icon,
+      children: buildAssetFilterItems(project.id, null),
+      onSelect: preventFilterRowSelection
+    }))
+  }]
+})
+
+function filterTreeItemsByQuery(items: FilterTreeItem[], query: string): FilterTreeItem[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase()
+
+  if (normalizedQuery === '') {
+    return items
+  }
+
+  return items.flatMap((item) => {
+    const children = filterTreeItemsByQuery(item.children ?? [], normalizedQuery)
+    const searchText = (item.searchText ?? item.label).toLocaleLowerCase()
+
+    if (searchText.includes(normalizedQuery)) {
+      return [item]
+    }
+
+    if (children.length === 0) {
+      return []
+    }
+
+    return [{ ...item, children }]
+  })
+}
+
+const filteredFilterTreeItems = computed(() => filterTreeItemsByQuery(filterTreeItems.value, filterQuery.value))
+
+function flattenFilterTreeItems(items: FilterTreeItem[]): FilterTreeItem[] {
+  return items.flatMap(item => [item, ...flattenFilterTreeItems(item.children ?? [])])
+}
+
+const selectedFilterItems = computed(() => flattenFilterTreeItems(filterTreeItems.value)
+  .filter(item => selectedFilterKeys.value.includes(item.id)))
+const filterInputPlaceholder = computed(() => selectedFilterItems.value.length === 0
+  ? 'Search nodes by name or code...'
+  : selectedFilterItems.value.map(item => item.label).join(', '))
+
+function getSelectedFilterPathKeys(items: FilterTreeItem[]): string[] {
+  const selectedKeys = new Set(selectedFilterKeys.value)
+  const expandedKeys = new Set<string>()
+
+  function hasSelectedItem(item: FilterTreeItem, ancestorKeys: string[]): boolean {
+    const itemSelected = selectedKeys.has(item.id)
+    let childSelected = false
+
+    for (const child of item.children ?? []) {
+      if (hasSelectedItem(child, [...ancestorKeys, item.id])) {
+        childSelected = true
+      }
+    }
+
+    if (itemSelected || childSelected) {
+      ancestorKeys.forEach(key => expandedKeys.add(key))
+
+      if (itemSelected && item.children?.length) {
+        expandedKeys.add(item.id)
+      }
+    }
+
+    return itemSelected || childSelected
+  }
+
+  items.forEach(item => hasSelectedItem(item, []))
+
+  return [...expandedKeys]
+}
+
+function getExpandableFilterKeys(items: FilterTreeItem[]): string[] {
+  return items.flatMap(item => item.children?.length
+    ? [item.id, ...getExpandableFilterKeys(item.children)]
+    : [])
+}
+
+function updateFilterSelection(items: FilterTreeItem[]): void {
+  selectedFilterKeys.value = items.map(item => item.id)
+}
+
+function clearHierarchyFilter(): void {
+  selectedFilterKeys.value = []
+  filterQuery.value = ''
+  expandedFilterKeys.value = []
+}
+
 async function loadHierarchy(): Promise<void> {
+  clearHierarchyFilter()
+  filterOpen.value = false
+
   if (selectedTenantId.value === null) {
     hierarchy.value = null
 
@@ -171,6 +317,29 @@ async function loadHierarchy(): Promise<void> {
 }
 
 watch(selectedTenantId, loadHierarchy, { immediate: true })
+
+watch(filterOpen, (open) => {
+  if (!open) {
+    return
+  }
+
+  filterQuery.value = ''
+  expandedFilterKeys.value = getSelectedFilterPathKeys(filterTreeItems.value)
+})
+
+watch(filterQuery, (query) => {
+  if (!filterOpen.value) {
+    return
+  }
+
+  expandedFilterKeys.value = query === ''
+    ? getSelectedFilterPathKeys(filterTreeItems.value)
+    : getExpandableFilterKeys(filteredFilterTreeItems.value)
+})
+
+watch(() => props.initialTenantId, (tenantId) => {
+  selectedTenantId.value = tenantId ?? props.tenants[0]?.id ?? null
+})
 
 watch(
   () => props.tenants,
@@ -478,23 +647,165 @@ const edges = computed<Edge[]>(() => {
 
   return result
 })
+
+const visibleNodeIds = computed<Set<string> | null>(() => {
+  if (selectedFilterKeys.value.length === 0) {
+    return null
+  }
+
+  const parentByChildId = new Map(edges.value.map(edge => [edge.target, edge.source]))
+  const visibleIds = new Set<string>()
+
+  for (const selectedKey of selectedFilterKeys.value) {
+    let currentId: string | undefined = selectedKey
+    const visitedIds = new Set<string>()
+
+    while (currentId !== undefined && !visitedIds.has(currentId)) {
+      visibleIds.add(currentId)
+      visitedIds.add(currentId)
+      currentId = parentByChildId.get(currentId)
+    }
+  }
+
+  return visibleIds
+})
+
+const visibleNodes = computed(() => {
+  const ids = visibleNodeIds.value
+
+  return ids === null
+    ? nodes.value
+    : nodes.value.filter(node => ids.has(node.id))
+})
+
+const visibleEdges = computed<Edge[]>(() => {
+  const ids = visibleNodeIds.value
+
+  return edges.value
+    .filter(edge => ids === null || (ids.has(edge.source) && ids.has(edge.target)))
+    .map(edge => ids === null
+      ? edge
+      : {
+          ...edge,
+          class: 'iiot-highlight-edge',
+          animated: true,
+          style: {
+            stroke: 'var(--ui-primary, #2563eb)',
+            strokeWidth: 2.5
+          }
+        })
+})
+
+const flowKey = computed(() => `${selectedTenantId.value}-${selectedFilterKeys.value.join('|')}`)
 </script>
 
 <template>
   <div class="flex flex-col gap-4">
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <div class="flex items-center gap-3">
-        <span class="text-sm font-medium text-highlighted">Select tenant</span>
-        <USelect
-          :model-value="selectedTenantId ?? undefined"
-          :items="tenantOptions"
-          class="min-w-64"
-          placeholder="Select tenant"
-          @update:model-value="selectedTenantId = $event ?? null"
-        />
-      </div>
+    <div class="flex flex-wrap items-center gap-3">
+      <UPopover v-model:open="filterOpen">
+        <UInput
+          v-model="filterQuery"
+          icon="i-lucide-search"
+          class="min-w-80"
+          :placeholder="filterInputPlaceholder"
+          :title="selectedFilterItems.length > 0 ? filterInputPlaceholder : undefined"
+          aria-label="Filter hierarchy"
+          @keydown.escape="filterOpen = false"
+        >
+          <template #trailing>
+            <UBadge
+              v-if="selectedFilterKeys.length > 0"
+              color="primary"
+              variant="subtle"
+              class="mr-1"
+            >
+              {{ selectedFilterKeys.length }}
+            </UBadge>
+            <UIcon
+              name="i-lucide-chevron-down"
+              class="size-4 text-dimmed transition-transform"
+              :class="filterOpen ? 'rotate-180' : ''"
+            />
+          </template>
+        </UInput>
 
-      <div class="flex flex-wrap items-center gap-2 text-xs text-muted">
+        <template #content>
+          <div class="w-[min(32rem,calc(100vw-2rem))] p-3">
+            <div class="flex items-center justify-between gap-2">
+              <p class="text-xs text-muted">
+                {{ selectedFilterKeys.length > 0 ? `${selectedFilterKeys.length} selected` : 'Select hierarchy nodes' }}
+              </p>
+              <UButton
+                label="Clear"
+                color="neutral"
+                variant="ghost"
+                size="sm"
+                :disabled="selectedFilterKeys.length === 0 && filterQuery === ''"
+                @click="clearHierarchyFilter"
+              />
+            </div>
+
+            <div class="mt-3 max-h-80 overflow-y-auto">
+              <UTree
+                v-model:expanded="expandedFilterKeys"
+                :items="filteredFilterTreeItems"
+                :model-value="selectedFilterItems"
+                :get-key="item => item.id"
+                multiple
+                selection-behavior="toggle"
+                size="sm"
+                :ui="{ link: 'p-0 hover:before:bg-transparent' }"
+                @update:model-value="updateFilterSelection"
+              >
+                <template #item="{ selected, indeterminate, expanded, item, handleSelect, handleToggle }">
+                  <div
+                    class="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors hover:bg-elevated/50"
+                    @click.stop="handleToggle"
+                  >
+                    <span
+                      role="checkbox"
+                      tabindex="0"
+                      class="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-sm"
+                      :aria-checked="indeterminate ? 'mixed' : selected"
+                      @click.stop="handleSelect"
+                      @keydown.enter.stop.prevent="handleSelect"
+                      @keydown.space.stop.prevent="handleSelect"
+                    >
+                      <UIcon
+                        :name="indeterminate ? 'i-lucide-square-minus' : selected ? 'i-lucide-square-check' : 'i-lucide-square'"
+                        class="size-4"
+                        :class="selected || indeterminate ? 'text-primary' : 'text-muted'"
+                      />
+                    </span>
+                    <UIcon
+                      :name="item.icon ?? 'i-lucide-box'"
+                      class="size-4 shrink-0 text-muted"
+                    />
+                    <span class="min-w-0 flex-1 truncate text-left">
+                      {{ item.label }}
+                    </span>
+                    <UIcon
+                      v-if="item.children?.length"
+                      name="i-lucide-chevron-down"
+                      class="size-4 shrink-0 text-dimmed transition-transform"
+                      :class="expanded ? 'rotate-180' : ''"
+                    />
+                  </div>
+                </template>
+              </UTree>
+
+              <p
+                v-if="filteredFilterTreeItems.length === 0"
+                class="px-2 py-3 text-center text-sm text-muted"
+              >
+                No matching hierarchy item.
+              </p>
+            </div>
+          </div>
+        </template>
+      </UPopover>
+
+      <div class="ms-auto flex flex-wrap items-center gap-2 text-xs text-muted">
         <UBadge color="success" variant="subtle" class="gap-1">
           <UIcon name="i-lucide-building-2" class="size-3" />
           Tenant
@@ -535,8 +846,9 @@ const edges = computed<Edge[]>(() => {
     <ClientOnly v-else>
       <div class="h-[620px] overflow-hidden rounded-xl border border-default bg-elevated/20">
         <VueFlow
-          :nodes="nodes"
-          :edges="edges"
+          :key="flowKey"
+          :nodes="visibleNodes"
+          :edges="visibleEdges"
           :fit-view-on-init="true"
           :nodes-draggable="false"
           :elements-selectable="false"
@@ -547,9 +859,10 @@ const edges = computed<Edge[]>(() => {
           <Background pattern-color="#64748b" :gap="24" />
           <Controls position="bottom-left" />
 
-          <template #node-hierarchy="{ data }">
+          <template #node-hierarchy="{ id, data }">
             <div
-              class="relative flex flex-col justify-between w-60 rounded-md border border-default bg-elevated/95 p-3 shadow-xs transition-all hover:border-primary/60 hover:shadow-md cursor-pointer"
+              class="relative flex w-60 cursor-pointer flex-col justify-between rounded-md border border-default bg-elevated/95 p-3 shadow-xs transition-all hover:border-primary/60 hover:shadow-md"
+              :class="selectedFilterKeys.includes(id) ? 'border-primary ring-2 ring-primary/40 shadow-md' : ''"
               @click="openDetails(data)"
             >
               <Handle
@@ -706,3 +1019,9 @@ const edges = computed<Edge[]>(() => {
     @submit-asset="saveAsset"
   />
 </template>
+
+<style scoped>
+:deep(.iiot-highlight-edge .vue-flow__edge-path) {
+  filter: drop-shadow(0 0 4px rgb(59 130 246 / 0.7));
+}
+</style>

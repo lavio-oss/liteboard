@@ -242,99 +242,120 @@ watch(addRequested, (requested) => {
 </script>
 
 <template>
-  <div class="flex flex-col gap-4">
-    <UAlert
-      v-if="!canManage"
-      color="warning"
-      variant="subtle"
-      title="User management is restricted"
-      description="Only tenant owners, tenant admins, and platform admins can manage users."
-    />
+  <UDashboardPanel id="users" :ui="{ body: 'lg:pt-4 lg:pb-12' }">
+    <template #header>
+      <UDashboardNavbar title="Users">
+        <template #leading>
+          <UDashboardSidebarCollapse />
+        </template>
 
-    <template v-else>
-      <div class="flex flex-wrap items-center justify-between gap-1.5">
-        <UInput
-          v-model="search"
-          class="max-w-sm"
-          icon="i-lucide-search"
-          placeholder="Filter users..."
+        <template #right>
+          <UButton
+            v-if="canManage"
+            label="Add user"
+            icon="i-lucide-plus"
+            @click="openCreate"
+          />
+        </template>
+      </UDashboardNavbar>
+    </template>
+
+    <template #body>
+      <div class="flex flex-col gap-4">
+        <UAlert
+          v-if="!canManage"
+          color="warning"
+          variant="subtle"
+          title="User management is restricted"
+          description="Only tenant owners, tenant admins, and platform admins can manage users."
         />
-        <div class="flex flex-wrap items-center gap-1.5">
-          <USelect v-model="roleFilter" :items="roleOptions" class="min-w-32" />
-          <UDropdownMenu
-            :items="[
-              table?.tableApi
-                ?.getAllColumns()
-                .filter(column => column.getCanHide())
-                .map(column => ({
-                  label: upperFirst(column.id),
-                  type: 'checkbox' as const,
-                  checked: column.getIsVisible(),
-                  onUpdateChecked(checked: boolean) {
-                    table?.tableApi?.getColumn(column.id)?.toggleVisibility(checked)
-                  },
-                  onSelect(event?: Event) {
-                    event?.preventDefault()
-                  }
-                })) ?? []
-            ]"
-            :content="{ align: 'end' }"
-          >
-            <UButton
-              label="Display"
-              color="neutral"
-              variant="outline"
-              trailing-icon="i-lucide-settings-2"
+
+        <template v-else>
+          <div class="flex flex-wrap items-center justify-between gap-1.5">
+            <UInput
+              v-model="search"
+              class="max-w-sm"
+              icon="i-lucide-search"
+              placeholder="Filter users..."
             />
-          </UDropdownMenu>
-        </div>
+            <div class="flex flex-wrap items-center gap-1.5">
+              <USelect v-model="roleFilter" :items="roleOptions" class="min-w-32" />
+              <UDropdownMenu
+                :items="[
+                  table?.tableApi
+                    ?.getAllColumns()
+                    .filter(column => column.getCanHide())
+                    .map(column => ({
+                      label: upperFirst(column.id),
+                      type: 'checkbox' as const,
+                      checked: column.getIsVisible(),
+                      onUpdateChecked(checked: boolean) {
+                        table?.tableApi?.getColumn(column.id)?.toggleVisibility(checked)
+                      },
+                      onSelect(event?: Event) {
+                        event?.preventDefault()
+                      }
+                    })) ?? []
+                ]"
+                :content="{ align: 'end' }"
+              >
+                <UButton
+                  label="Display"
+                  color="neutral"
+                  variant="outline"
+                  trailing-icon="i-lucide-settings-2"
+                />
+              </UDropdownMenu>
+            </div>
+          </div>
+
+          <UTable
+            ref="table"
+            v-model:column-visibility="columnVisibility"
+            v-model:pagination="pagination"
+            :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
+            class="shrink-0"
+            :data="filteredUsers"
+            :columns="columns"
+            :ui="{
+              base: 'table-fixed border-separate border-spacing-0',
+              thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
+              tbody: '[&>tr]:last:[&>td]:border-b-0',
+              th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
+              td: 'border-b border-default',
+              separator: 'h-0'
+            }"
+          />
+
+          <div class="flex items-center justify-between gap-3 border-t border-default pt-4 mt-auto">
+            <div class="text-sm text-muted">
+              {{ filteredUsers.length }} row(s).
+            </div>
+            <UPagination
+              :default-page="pagination.pageIndex + 1"
+              :items-per-page="pagination.pageSize"
+              :total="filteredUsers.length"
+              @update:page="(page: number) => table?.tableApi?.setPageIndex(page - 1)"
+            />
+          </div>
+        </template>
       </div>
 
-      <UTable
-        ref="table"
-        v-model:column-visibility="columnVisibility"
-        v-model:pagination="pagination"
-        :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
-        class="shrink-0"
-        :data="filteredUsers"
-        :columns="columns"
-        :ui="{
-          base: 'table-fixed border-separate border-spacing-0',
-          thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
-          tbody: '[&>tr]:last:[&>td]:border-b-0',
-          th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
-          td: 'border-b border-default',
-          separator: 'h-0'
-        }"
+      <MasterdataTenantUserFormModal
+        v-model:open="editOpen"
+        :user="editingUser"
+        :loading="editLoading"
+        @create="createUser"
+        @update="saveUser"
       />
 
-      <div class="flex items-center justify-between gap-3 border-t border-default pt-4 mt-auto">
-        <div class="text-sm text-muted">
-          {{ filteredUsers.length }} row(s).
-        </div>
-        <UPagination
-          :default-page="pagination.pageIndex + 1"
-          :items-per-page="pagination.pageSize"
-          :total="filteredUsers.length"
-          @update:page="(page: number) => table?.tableApi?.setPageIndex(page - 1)"
-        />
-      </div>
+      <ConfirmDeleteModal
+        v-model:open="deleteOpen"
+        :title="`Delete ${deletingUsers.length} user${deletingUsers.length === 1 ? '' : 's'}`"
+        description="This permanently deletes the selected global account(s) and their memberships."
+        :loading="deleteLoading"
+        @confirm="confirmDelete"
+      />
     </template>
-  </div>
-
-  <MasterdataTenantUserFormModal
-    v-model:open="editOpen"
-    :user="editingUser"
-    :loading="editLoading"
-    @create="createUser"
-    @update="saveUser"
-  />
-
-  <ConfirmDeleteModal
-    v-model:open="deleteOpen"
-    :title="`Delete ${deletingUsers.length} user${deletingUsers.length === 1 ? '' : 's'}`"
-    description="This permanently deletes the selected global account(s) and their memberships."
-    :loading="deleteLoading"
-    @confirm="confirmDelete"
-  />
+  </UDashboardPanel>
 </template>

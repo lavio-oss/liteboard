@@ -33,8 +33,8 @@ Schema được quản lý bằng migration:
 - `users` và `sessions`;
 - `personal_access_tokens`;
 - `tenants` và `tenant_user`.
-- `projects`, `factories` và `production_lines` thuộc module Masterdata, với
-  tenant boundary được suy ra qua chuỗi parent.
+- `projects`, `assets` và `entity_relations` thuộc module Masterdata, với
+  tenant boundary được suy ra từ Project.
 
 Session local mặc định dùng database, thời hạn 120 phút. Cookie session local có
 tên `liteboard-session`; production phải giữ cookie HttpOnly, HTTPS và cấu hình
@@ -127,8 +127,8 @@ Proxy phải giữ các header stateful nói trên; nếu chỉ chuyển cookie 
 `origin`/`referer`, request SSR có thể bị Sanctum xem là non-stateful và trả
 `401`, khiến người dùng bị đưa về màn hình login dù session cookie còn tồn tại.
 
-Các API tenant-scoped, bao gồm Masterdata Project/Factory/Production Line, dùng
-cùng session authentication và không nhận tenant hoặc parent id từ request body.
+Các API tenant-scoped, bao gồm Masterdata Project/Asset, dùng cùng session
+authentication và không nhận tenant hoặc project id từ request body.
 
 ## 4. Personal access token đã triển khai
 

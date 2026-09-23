@@ -258,54 +258,55 @@ LiteBoard is a Control Plane intermediary for IIoT resources. The industrial
 hierarchy is part of the core database model, even though this project does not
 implement a complete SCADA/MES platform.
 
-### 6.0 Backend implementation status — 2026-09-21
+### 6.0 Backend implementation status — 2026-09-23
 
-The tenant-owned hierarchy foundation is now implemented in the Laravel backend
-as the standalone `Masterdata` module. `Tenant` remains in `Core`; the current
-implemented subtree is:
+The tenant-owned master-data foundation is implemented in the Laravel backend
+as the standalone `Masterdata` module. `Tenant` remains in `Core`; `Project` is
+a workspace and the authorization boundary for resources below the tenant.
+The current implemented subtree is:
 
 ```text
 Tenant
-└── Project
-    └── Factory
-        └── Production Line
+└── Project workspace
+    └── Asset graph
+        ├── Site
+        ├── Factory
+        ├── Area
+        ├── Production Line
+        ├── Station
+        └── Equipment
 ```
 
-The `projects`, `factories` and `production_lines` tables use forward-only
-migrations, parent foreign keys with `ON UPDATE CASCADE` and `ON DELETE
-CASCADE`, scoped nested CRUD routes, request validation, resources, policies
-and feature tests. Equipment and all telemetry-domain resources remain
-planned, not implemented. There is no frontend scope in this slice.
+All six entries are values of `AssetType` and are stored in the `assets` table.
+`Equipment` is not a separate table. The asset hierarchy uses the single
+`contains` relation in `entity_relations`, with forward-only migrations,
+scoped nested CRUD routes, request validation, resources, policies and feature
+tests.
 
-In this plan, “device” may still refer to the physical edge endpoint or
-simulator at the protocol level. It is not a separate application entity:
-the persisted/API entity is `Equipment`, which owns the endpoint identity,
-credential and connection state.
+`Device`, MQTT identity, credentials, firmware, telemetry and commands are
+later phases. They are not part of this master-data implementation.
 
 ~~~text
 Tenant
- └── Project
-      └── Factory
-           └── Production Line
-                └── Equipment
-                     ├── Equipment
-                     ├── Telemetry Schema
-                     ├── Telemetry
-                     ├── Rules
-                     ├── Alerts
-                     └── Commands
+ └── Project workspace
+      └── Asset graph (contains)
+           ├── Site
+           ├── Factory
+           ├── Area
+           ├── Production Line
+           ├── Station
+           └── Equipment
 ~~~
 
 Core entities:
 
 - Tenant: isolation boundary for users, projects and all resources below it.
 - Project: logical workspace belonging to exactly one tenant.
-- Factory: industrial site or factory belonging to exactly one project.
-- Production Line: industrial line belonging to exactly one factory.
-- Equipment: physical or logical asset and MQTT device endpoint belonging to a
-  production line or kept as an unassigned root asset. Equipment may have a
-  parent equipment and multiple child equipment records.
-- Equipment Profile: type, attributes, telemetry schemas, commands and default rules.
+- Asset: a tenant-owned master-data node belonging to exactly one project.
+- AssetType: `site`, `factory`, `area`, `production_line`, `station` or
+  `equipment`.
+- Equipment: an `AssetType` value; it has no separate table or device identity
+  in this phase.
 - Telemetry Schema: field types, units, ranges, required state, descriptions and version.
 - Telemetry: normalized time-series data with message ID and processing status.
 - Rule: condition configuration evaluated against validated telemetry.
@@ -317,63 +318,56 @@ Suggested fields:
 ~~~text
 Tenant: id, name, code, status
 Project: id, tenant_id, name, description, status, timestamps
-Factory: id, project_id, name, code, location, status, timestamps
-ProductionLine: id, factory_id, name, code, status, timestamps
-Equipment: id, production_line_id nullable, parent_equipment_id nullable,
-           name, equipment_code, equipment_type, status,
-           equipment_uid, equipment_token_hash, equipment_profile_id,
-           firmware_version, last_seen_at, timestamps
+Asset: id, project_id, asset_type, name, code, location, status, timestamps
+EntityRelation: project_id, source_type, source_id, target_type, target_id,
+                relation_type, timestamps
 ~~~
 
-### 6.1 Hierarchy database contract
+### 6.1 Asset hierarchy database contract
 
-The database stores the immediate parent foreign key at every level. In this
-plan, “not cascade for equipment” means delete operations must preserve
-equipment; all hierarchy foreign keys still use `ON UPDATE CASCADE`.
+`assets.project_id` is required and asset codes are unique within
+`project_id + asset_type + code`. An asset may be a root or have one parent.
+The source of truth for hierarchy is `entity_relations`:
 
 ~~~text
-projects.tenant_id                  NOT NULL
-factories.project_id                NOT NULL
-production_lines.factory_id        NOT NULL
-equipments.production_line_id       NULLABLE
-equipments.parent_equipment_id      NULLABLE self-reference
+entity_relations
+  project_id    FK NOT NULL → projects.id
+  source_type   = asset
+  source_id     → parent asset identity
+  target_type   = asset
+  target_id     → child asset identity
+  relation_type = contains
 ~~~
 
-`projects.tenant_id`, `factories.project_id` and
-`production_lines.factory_id` must always point to an existing parent. Only
-equipment may be detached from its production line, so an equipment record can
-remain in the database with
-`production_line_id = NULL`.
+This phase accepts only `asset contains asset`. A unique constraint on
+`project_id + target_type + target_id + relation_type` allows at most one
+incoming `contains` relation per asset. Source, target and project indexes
+support hierarchy traversal and scoped list queries.
 
-The primary keys and foreign keys use the same type. Every foreign key uses
-`ON UPDATE CASCADE` so a parent key update propagates through the hierarchy.
-Delete behavior is intentionally different:
+`parent_asset_id` remains in the request and resource contract as a derived
+projection for the existing frontend UX. It is not a database column and is
+never a second source of truth.
 
-| Relationship | `ON UPDATE` | `ON DELETE` | Reason |
-|---|---|---|---|
-| `tenants → projects` | `CASCADE` | `CASCADE` | A project cannot exist without its tenant |
-| `projects → factories` | `CASCADE` | `CASCADE` | A factory cannot exist without its project |
-| `factories → production_lines` | `CASCADE` | `CASCADE` | A line cannot exist without its factory |
-| `production_lines → equipments` | `CASCADE` | `SET NULL` | Deleting a line must not delete equipment |
-| `equipments → equipments` parent link | `CASCADE` | `SET NULL` | Deleting a parent must not delete child equipment |
+The request/domain boundary rejects a parent from another project,
+self-parenting and cycles. Asset create, update and parent changes run in a
+transaction. Deleting an asset removes its relations, keeps its children and
+makes those children roots. Tenant and project scopes are resolved from route
+binding; request bodies do not provide `tenant_id` or `project_id`.
 
-The equipment child relation is derived from `parent_equipment_id`:
+The asset child relation is derived from the incoming `contains` relation:
 
 ~~~text
-equipment.parent_equipment_id = parent.id
-parent.children = all equipment rows with parent_equipment_id = parent.id
+parent contains child
+child.parent_asset_id = parent.id (API projection only)
 ~~~
 
-Do not add a single `child_equipment_id` column to `equipments`. One equipment
-can have many children, and storing both directions would create two sources of
-truth. If a future requirement needs multiple explicit relationship types,
-add an `equipment_relations` table with `parent_equipment_id` and
-`child_equipment_id`, protected by a unique pair and a check that both records
-belong to the same project.
+The relation table is the only hierarchy source of truth. `parent_asset_id` is
+an API/UI projection only; do not add it back as a storage column. This phase
+supports only the `contains` relation and requires the source and target to be
+assets in the same project.
 
-The application must also reject cycles, self-parenting and a parent from a
-different project. These checks belong in the request/domain boundary because
-ordinary foreign keys only verify that the referenced equipment exists.
+The application rejects cycles, self-parenting and a parent from a different
+project at the request/domain boundary.
 
 ### 6.2 Recommended relational shape
 
@@ -385,31 +379,32 @@ projects
   id PK
   tenant_id FK NOT NULL → tenants.id
 
-factories
+assets
   id PK
   project_id FK NOT NULL → projects.id
+  asset_type ENUM-like value: site | factory | area | production_line |
+              station | equipment
+  name, code, location, status, timestamps
 
-production_lines
+entity_relations
   id PK
-  factory_id FK NOT NULL → factories.id
-
-equipments
-  id PK
-  production_line_id FK NULL → production_lines.id
-  parent_equipment_id FK NULL → equipments.id
+  project_id FK NOT NULL → projects.id
+  source_type, source_id
+  target_type, target_id
+  relation_type = contains
 ~~~
 
 Minimum indexes:
 
 - `projects(tenant_id)`
-- `factories(project_id)`
-- `production_lines(factory_id)`
-- `equipments(production_line_id)`
-- `equipments(parent_equipment_id)`
+- `assets(project_id)`
+- `assets(project_id, asset_type, code)`
+- `entity_relations(project_id, source_type, source_id, relation_type)`
+- `entity_relations(project_id, target_type, target_id, relation_type)`
 
 All list queries must start from the authorized tenant/project scope. The
-database relationship is the integrity boundary; the Policy remains the
-authorization boundary.
+relation constraint is the hierarchy integrity boundary; the Policy remains
+the authorization boundary.
 
 ---
 
@@ -521,11 +516,12 @@ runs with docker compose up -d.
 ### Phase 1 — Identity, hierarchy and equipment
 
 - Login, logout, token refresh and current user.
-- Tenant management foundation plus the implemented Project → Factory →
-  Production Line Masterdata backend; equipment management remains pending.
-- Equipment profiles, sensor configuration and equipment CRUD.
-- Equipment enable/disable, metadata and last-seen state.
-- Equipment credentials using equipment_uid and token.
+- Tenant management foundation plus the implemented Project workspace and
+  Asset Masterdata backend.
+- Asset CRUD for Site, Factory, Area, Production Line, Station and Equipment.
+- One `contains` relation with derived `parent_asset_id` API projection.
+- Device, MQTT, credentials, firmware, telemetry and command management remain
+  future phases.
 - Roles: Admin, Engineer, Operator and Viewer.
 - Permissions for equipment, schema, rule, alert and command actions.
 
@@ -534,15 +530,8 @@ Example APIs:
 ~~~text
 GET|POST /api/tenants/{tenant}/projects
 GET|PATCH|DELETE /api/tenants/{tenant}/projects/{project}
-GET|POST /api/tenants/{tenant}/projects/{project}/factories
-GET|PATCH|DELETE /api/tenants/{tenant}/projects/{project}/factories/{factory}
-GET|POST /api/tenants/{tenant}/projects/{project}/factories/{factory}/production-lines
-GET|PATCH|DELETE /api/tenants/{tenant}/projects/{project}/factories/{factory}/production-lines/{production_line}
-POST   /api/equipments
-GET    /api/equipments
-GET    /api/equipments/{id}
-PATCH  /api/equipments/{id}
-DELETE /api/equipments/{id}
+GET|POST /api/tenants/{tenant}/projects/{project}/assets
+GET|PATCH|DELETE /api/tenants/{tenant}/projects/{project}/assets/{asset}
 ~~~
 
 ### Phase 2 — MQTT connectivity and ingestion

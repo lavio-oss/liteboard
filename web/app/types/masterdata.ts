@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { tenantRoleSchema } from '~/types/auth'
 
 export const masterdataStatusSchema = z.enum(['active', 'inactive'])
-export const assetTypeSchema = z.enum(['site', 'factory', 'area', 'production_line', 'station'])
+export const assetTypeSchema = z.enum(['site', 'factory', 'area', 'production_line', 'station', 'equipment'])
 
 const resourceBaseSchema = z.object({
   id: z.number().int().positive(),

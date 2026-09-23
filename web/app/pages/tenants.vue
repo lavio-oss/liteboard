@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { z } from 'zod'
-import type { NavigationMenuItem, TableColumn } from '@nuxt/ui'
+import type { TableColumn } from '@nuxt/ui'
 import { upperFirst } from 'scule'
 import { getPaginationRowModel } from '@tanstack/table-core'
 import { ApiError, useApi } from '~/composables/useApi'
@@ -40,27 +40,6 @@ const editingTenant = ref<Tenant | null>(null)
 const deleteOpen = ref(false)
 const deleteLoading = ref(false)
 const deletingTenant = ref<Tenant | null>(null)
-const activeTab = ref<'table' | 'tree'>('table')
-
-const links = computed(() => [[
-  {
-    label: 'Table',
-    icon: 'i-lucide-table',
-    active: activeTab.value === 'table',
-    onSelect: () => {
-      activeTab.value = 'table'
-    }
-  },
-  {
-    label: 'IIoT Tree',
-    icon: 'i-lucide-network',
-    active: activeTab.value === 'tree',
-    onSelect: () => {
-      activeTab.value = 'tree'
-    }
-  }
-]] satisfies NavigationMenuItem[][])
-
 const { data: response, status, error, refresh } = await useAsyncData('tenants', () =>
   api.request('/api/tenants', tenantCollectionResponseSchema)
 )
@@ -304,24 +283,17 @@ const errorMessage = computed(() => {
 
         <template #right>
           <UButton
-            v-if="canCreate && activeTab === 'table'"
+            v-if="canCreate"
             label="Add tenant"
             icon="i-lucide-plus"
             @click="openCreate"
           />
         </template>
       </UDashboardNavbar>
-
-      <UDashboardToolbar>
-        <UNavigationMenu :items="links" highlight class="-mx-1 flex-1" />
-      </UDashboardToolbar>
     </template>
 
     <template #body>
-      <div
-        v-if="activeTab === 'table'"
-        class="flex flex-col gap-4 sm:gap-6 lg:gap-8"
-      >
+      <div class="flex flex-col gap-4 sm:gap-6 lg:gap-8">
         <UAlert
           v-if="status === 'error'"
           color="error"
@@ -399,11 +371,6 @@ const errorMessage = computed(() => {
           />
         </div>
       </div>
-
-      <TenantHierarchyFlow
-        v-else
-        :tenants="tenants"
-      />
     </template>
   </UDashboardPanel>
 

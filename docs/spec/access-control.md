@@ -1,6 +1,6 @@
 # Đặc tả access control
 
-> Trạng thái đối chiếu: 2026-09-21. Các mục được đánh dấu “đã triển khai” chỉ
+> Trạng thái đối chiếu: 2026-09-23. Các mục được đánh dấu “đã triển khai” chỉ
 > mô tả behavior đã kiểm tra trong repository hiện tại.
 
 ## 1. Nguyên tắc
@@ -26,15 +26,14 @@
 
 ### Tenant-owned data đã triển khai một phần
 
-Module `Masterdata` đã triển khai backend foundation cho ba cấp dữ liệu
-tenant-owned:
+Module `Masterdata` đã triển khai backend foundation cho dữ liệu tenant-owned:
 
-- `projects` thuộc `tenants`;
-- `factories` thuộc `projects`;
-- `production_lines` thuộc `factories`.
+- `projects` thuộc `tenants` và là workspace;
+- `assets` thuộc `projects`;
+- `entity_relations` thuộc `projects`, hiện chỉ có `asset contains asset`.
 
 Các resource còn lại vẫn mới là contract trong `docs/plan.md`, chưa có model,
-migration, route hoặc Policy: equipments, telemetry schemas, rules, alerts,
+migration, route hoặc Policy: Device/MQTT, telemetry schemas, rules, alerts,
 commands và webhooks. Vì vậy tenant isolation chưa được claim là hoàn thiện cho
 toàn bộ hệ thống IoT.
 
@@ -99,10 +98,10 @@ delete:
 ```
 
 Ngoài `TenantPolicy`, `MasterdataServiceProvider` đã đăng ký
-`ProjectPolicy`, `FactoryPolicy` và `ProductionLinePolicy`. Ba Policy này đều
-đi theo parent chain để xác định tenant; member được đọc/list, còn owner/admin
-mới được create/update/delete. Chưa có `EquipmentPolicy`, `AlertPolicy` hoặc
-`CommandPolicy` trong code.
+`ProjectPolicy` và `AssetPolicy`. Asset policy xác định tenant qua Project;
+member được đọc/list, còn owner/admin hoặc project role phù hợp mới được
+create/update/delete. Chưa có Device/MQTT, `AlertPolicy` hoặc `CommandPolicy`
+trong code.
 
 ## 5. API authorization hiện tại
 
@@ -117,10 +116,8 @@ DELETE /api/tenants/{tenant}
 
 GET|POST /api/tenants/{tenant}/projects
 GET|PATCH|DELETE /api/tenants/{tenant}/projects/{project}
-GET|POST /api/tenants/{tenant}/projects/{project}/factories
-GET|PATCH|DELETE /api/tenants/{tenant}/projects/{project}/factories/{factory}
-GET|POST /api/tenants/{tenant}/projects/{project}/factories/{factory}/production-lines
-GET|PATCH|DELETE /api/tenants/{tenant}/projects/{project}/factories/{factory}/production-lines/{production_line}
+GET|POST /api/tenants/{tenant}/projects/{project}/assets
+GET|PATCH|DELETE /api/tenants/{tenant}/projects/{project}/assets/{asset}
 ```
 
 Các route đọc tenant yêu cầu `auth:sanctum` và `control-plane:read`; route
@@ -150,11 +147,10 @@ Header `X-Tenant-ID` không có vai trò quyết định context và không th�
 sang tenant khác.
 
 Tenant CRUD đã có với ability `control-plane:read/write` và Policy tương ứng.
-Membership management và các resource sau Production Line chưa tồn tại. Các
+Membership management và các resource Device/MQTT chưa tồn tại. Các
 route Masterdata dùng `auth:sanctum`, ability read/write,
 `tenant.context`, scoped binding và trả `404` khi parent-child không cùng cây
-hoặc khác tenant. Request body không nhận `tenant_id`, `project_id` hoặc
-`factory_id`.
+hoặc khác tenant. Request body không nhận `tenant_id` hoặc `project_id`.
 
 ## 6. Route binding và request boundary
 
@@ -195,12 +191,12 @@ Khi bắt đầu tenant/membership mutation:
 - duplicate tenant code bị từ chối.
 
 `MasterdataAuthorizationTest` kiểm tra thêm nested binding, role matrix cho
-Project/Factory/Production Line, cross-tenant isolation, parent mismatch,
-prohibited parent IDs, duplicate code, search/pagination và cascade delete/key
-update.
+Project/Asset, cross-tenant isolation, parent mismatch, self-parenting/cycle,
+duplicate code, search/pagination, relation migration và cascade
+delete/key-update.
 
-Lần kiểm tra hiện tại: backend pass 42 tests và 159 assertions, trong đó các
-test authorization và cascade của Masterdata pass.
+Lần kiểm tra hiện tại: backend pass 62 tests và 254 assertions, trong đó các
+test authorization, hierarchy relation và cascade của Masterdata pass.
 
 ## 9. Phần còn lại
 

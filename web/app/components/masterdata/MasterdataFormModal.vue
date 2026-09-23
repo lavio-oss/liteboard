@@ -68,7 +68,8 @@ const assetTypeOptions: Array<{ label: string, value: AssetType }> = [
   { label: 'Factory', value: 'factory' },
   { label: 'Area', value: 'area' },
   { label: 'Production Line', value: 'production_line' },
-  { label: 'Station', value: 'station' }
+  { label: 'Station', value: 'station' },
+  { label: 'Equipment', value: 'equipment' }
 ]
 
 const schema = computed(() => props.resourceType === 'project' ? projectSchema : assetSchema)

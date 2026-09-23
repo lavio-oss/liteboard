@@ -23,6 +23,7 @@ const tenantOptions = computed(() => manageableTenants.value.map(tenant => ({
   value: tenant.id
 })))
 const manageableTenantIds = computed(() => new Set(manageableTenants.value.map(tenant => tenant.id)))
+const canCreate = computed(() => isPlatformAdmin.value || manageableTenantIds.value.size > 0)
 const addRequested = useState('masterdata:add-requested', () => false)
 const { createProject, deleteProject, loadProjects, updateProject } = useMasterdata()
 const formOpen = ref(false)
@@ -255,46 +256,67 @@ const errorMessage = computed(() => {
 </script>
 
 <template>
-  <div class="flex flex-col gap-4">
-    <UAlert
-      v-if="status === 'error'"
-      color="error"
-      variant="subtle"
-      title="Unable to load projects"
-      :description="errorMessage"
-    />
+  <UDashboardPanel id="projects" :ui="{ body: 'lg:pt-4 lg:pb-12' }">
+    <template #header>
+      <UDashboardNavbar title="Projects">
+        <template #leading>
+          <UDashboardSidebarCollapse />
+        </template>
 
-    <MasterdataTable
-      :columns="columns"
-      :data="rows"
-      :loading="status === 'pending'"
-      search-placeholder="Search projects..."
-    />
-  </div>
+        <template #right>
+          <UButton
+            v-if="canCreate"
+            label="Add project"
+            icon="i-lucide-plus"
+            @click="openCreate"
+          />
+        </template>
+      </UDashboardNavbar>
+    </template>
 
-  <MasterdataFormModal
-    v-model:open="formOpen"
-    v-model:tenant-id="selectedTenantId"
-    resource-type="project"
-    :resource="editingProject"
-    :tenant-options="tenantOptions"
-    :loading="formLoading"
-    @submit-project="saveProject"
-  />
+    <template #body>
+      <div class="flex flex-col gap-4">
+        <UAlert
+          v-if="status === 'error'"
+          color="error"
+          variant="subtle"
+          title="Unable to load projects"
+          :description="errorMessage"
+        />
 
-  <ConfirmDeleteModal
-    v-model:open="deleteOpen"
-    :title="`Delete ${deletingProject?.name ?? 'project'}`"
-    description="This action cannot be undone and will delete its assets."
-    :loading="deleteLoading"
-    @confirm="deleteSelectedProject"
-  />
+        <MasterdataTable
+          :columns="columns"
+          :data="rows"
+          :loading="status === 'pending'"
+          search-placeholder="Search projects..."
+        />
+      </div>
 
-  <MasterdataProjectUsersModal
-    v-if="projectUsersOpen"
-    v-model:open="projectUsersOpen"
-    :tenant-id="managingProject?.tenant_id ?? null"
-    :project="managingProject"
-    :can-delete-account="isPlatformAdmin"
-  />
+      <MasterdataFormModal
+        v-model:open="formOpen"
+        v-model:tenant-id="selectedTenantId"
+        resource-type="project"
+        :resource="editingProject"
+        :tenant-options="tenantOptions"
+        :loading="formLoading"
+        @submit-project="saveProject"
+      />
+
+      <ConfirmDeleteModal
+        v-model:open="deleteOpen"
+        :title="`Delete ${deletingProject?.name ?? 'project'}`"
+        description="This action cannot be undone and will delete its assets."
+        :loading="deleteLoading"
+        @confirm="deleteSelectedProject"
+      />
+
+      <MasterdataProjectUsersModal
+        v-if="projectUsersOpen"
+        v-model:open="projectUsersOpen"
+        :tenant-id="managingProject?.tenant_id ?? null"
+        :project="managingProject"
+        :can-delete-account="isPlatformAdmin"
+      />
+    </template>
+  </UDashboardPanel>
 </template>

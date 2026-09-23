@@ -1,10 +1,12 @@
 <?php
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Modules\Core\Models\Tenant\Tenant;
 use Modules\Core\Models\User\User;
 use Modules\Masterdata\Enums\Asset\AssetType;
 use Modules\Masterdata\Models\Asset\Asset;
+use Modules\Masterdata\Models\EntityRelation\EntityRelation;
 use Modules\Masterdata\Models\Project\Project;
 
 it('rejects unauthenticated asset access', function (): void {
@@ -53,7 +55,7 @@ it('creates a tenant-scoped multi-level asset hierarchy', function (): void {
 
     $factory = Asset::query()->where('code', 'factory-hanoi')->firstOrFail();
 
-    foreach ([AssetType::Area, AssetType::ProductionLine, AssetType::Station] as $assetType) {
+    foreach ([AssetType::Area, AssetType::ProductionLine, AssetType::Station, AssetType::Equipment] as $assetType) {
         $this->actingAs($owner)
             ->postJson(
                 '/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets',
@@ -69,7 +71,12 @@ it('creates a tenant-scoped multi-level asset hierarchy', function (): void {
             ->assertJsonPath('data.parent_asset_id', $factory->getKey());
     }
 
-    expect(Asset::query()->where('project_id', $project->getKey())->count())->toBe(5);
+    expect(Asset::query()->where('project_id', $project->getKey())->count())->toBe(6);
+    expect(EntityRelation::query()
+        ->where('project_id', $project->getKey())
+        ->where('relation_type', EntityRelation::RELATION_TYPE_CONTAINS)
+        ->count())->toBe(5);
+    expect(Schema::hasColumn('assets', 'parent_asset_id'))->toBeFalse();
 });
 
 it('allows members to read but not mutate assets', function (): void {
@@ -212,11 +219,10 @@ it('supports asset search, type filtering, parent filtering and roots', function
         'code' => 'alpha-factory',
         'asset_type' => AssetType::Factory->value,
     ]);
-    Asset::factory()->for($project)->create([
+    Asset::factory()->for($project)->withParent($root)->create([
         'name' => 'Alpha Line',
         'code' => 'alpha-line',
         'asset_type' => AssetType::ProductionLine->value,
-        'parent_asset_id' => $root->id,
     ]);
     Asset::factory()->for($project)->create([
         'name' => 'Beta Area',
@@ -251,9 +257,8 @@ it('rejects self-parenting and hierarchy cycles', function (): void {
     $parent = Asset::factory()->for($project)->create([
         'asset_type' => AssetType::Factory->value,
     ]);
-    $child = Asset::factory()->for($project)->create([
+    $child = Asset::factory()->for($project)->withParent($parent)->create([
         'asset_type' => AssetType::Area->value,
-        'parent_asset_id' => $parent->id,
     ]);
 
     $this->actingAs($owner)
@@ -271,19 +276,61 @@ it('rejects self-parenting and hierarchy cycles', function (): void {
         ->assertJsonValidationErrors(['parent_asset_id']);
 });
 
-it('keeps child assets when a parent asset is deleted', function (): void {
+it('replaces and removes an asset parent through contains relations', function (): void {
+    $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
+    $tenant->users()->attach($owner, ['role' => 'owner']);
     $project = Project::factory()->for($tenant)->create();
-    $parent = Asset::factory()->for($project)->create();
-    $child = Asset::factory()->for($project)->create([
-        'parent_asset_id' => $parent->id,
+    $firstParent = Asset::factory()->for($project)->create();
+    $secondParent = Asset::factory()->for($project)->create();
+    $child = Asset::factory()->for($project)->withParent($firstParent)->create();
+    $endpoint = '/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$child->id;
+
+    $this->actingAs($owner)
+        ->patchJson($endpoint, ['parent_asset_id' => $secondParent->id])
+        ->assertOk()
+        ->assertJsonPath('data.parent_asset_id', $secondParent->id);
+
+    expect(EntityRelation::query()
+        ->where('project_id', $project->id)
+        ->where('target_id', $child->id)
+        ->where('relation_type', EntityRelation::RELATION_TYPE_CONTAINS)
+        ->count())->toBe(1);
+    $this->assertDatabaseHas('entity_relations', [
+        'source_id' => $secondParent->id,
+        'target_id' => $child->id,
+        'relation_type' => EntityRelation::RELATION_TYPE_CONTAINS,
     ]);
 
-    $parent->delete();
+    $this->actingAs($owner)
+        ->patchJson($endpoint, ['parent_asset_id' => null])
+        ->assertOk()
+        ->assertJsonPath('data.parent_asset_id', null);
+
+    $this->assertDatabaseMissing('entity_relations', [
+        'target_id' => $child->id,
+        'relation_type' => EntityRelation::RELATION_TYPE_CONTAINS,
+    ]);
+});
+
+it('keeps child assets when a parent asset is deleted', function (): void {
+    $owner = User::factory()->create();
+    $tenant = Tenant::factory()->create();
+    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $project = Project::factory()->for($tenant)->create();
+    $parent = Asset::factory()->for($project)->create();
+    $child = Asset::factory()->for($project)->withParent($parent)->create();
+
+    $this->actingAs($owner)
+        ->deleteJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$parent->id)
+        ->assertNoContent();
 
     $this->assertDatabaseHas('assets', [
         'id' => $child->id,
-        'parent_asset_id' => null,
+    ]);
+    $this->assertDatabaseMissing('entity_relations', [
+        'target_id' => $child->id,
+        'relation_type' => EntityRelation::RELATION_TYPE_CONTAINS,
     ]);
 });
 
@@ -313,20 +360,23 @@ it('does not expose the removed factory and production line endpoints', function
         ->assertNotFound();
 });
 
-it('cascades parent key updates through the asset hierarchy', function (): void {
+it('cascades project and tenant key updates through asset relations', function (): void {
     $tenant = Tenant::factory()->create();
     $project = Project::factory()->for($tenant)->create();
     $parent = Asset::factory()->for($project)->create();
-    $child = Asset::factory()->for($project)->create(['parent_asset_id' => $parent->id]);
+    $child = Asset::factory()->for($project)->withParent($parent)->create();
     $newTenantId = $tenant->id + 10000;
     $newProjectId = $project->id + 10000;
-    $newParentId = $parent->id + 10000;
 
     DB::table('tenants')->where('id', $tenant->id)->update(['id' => $newTenantId]);
     DB::table('projects')->where('id', $project->id)->update(['id' => $newProjectId]);
-    DB::table('assets')->where('id', $parent->id)->update(['id' => $newParentId]);
 
     $this->assertDatabaseHas('projects', ['id' => $newProjectId, 'tenant_id' => $newTenantId]);
-    $this->assertDatabaseHas('assets', ['id' => $newParentId, 'project_id' => $newProjectId]);
-    $this->assertDatabaseHas('assets', ['id' => $child->id, 'parent_asset_id' => $newParentId]);
+    $this->assertDatabaseHas('assets', ['id' => $parent->id, 'project_id' => $newProjectId]);
+    $this->assertDatabaseHas('entity_relations', [
+        'project_id' => $newProjectId,
+        'source_id' => $parent->id,
+        'target_id' => $child->id,
+        'relation_type' => EntityRelation::RELATION_TYPE_CONTAINS,
+    ]);
 });

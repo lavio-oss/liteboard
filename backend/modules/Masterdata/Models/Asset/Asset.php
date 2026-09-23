@@ -10,9 +10,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Modules\Masterdata\Enums\Asset\AssetType;
+use Modules\Masterdata\Models\EntityRelation\EntityRelation;
 use Modules\Masterdata\Models\Project\Project;
 
-#[Fillable(['parent_asset_id', 'asset_type', 'name', 'code', 'location', 'status'])]
+#[Fillable(['asset_type', 'name', 'code', 'location', 'status'])]
 final class Asset extends Model
 {
     /** @use HasFactory<AssetFactory> */
@@ -38,15 +39,21 @@ final class Asset extends Model
         return $this->belongsTo(Project::class);
     }
 
-    /** @return BelongsTo<Asset, $this> */
-    public function parentAsset(): BelongsTo
+    /** @return HasMany<EntityRelation, $this> */
+    public function incomingRelations(): HasMany
     {
-        return $this->belongsTo(self::class, 'parent_asset_id');
+        return $this->hasMany(EntityRelation::class, 'target_id')
+            ->where('source_type', EntityRelation::ENTITY_TYPE_ASSET)
+            ->where('target_type', EntityRelation::ENTITY_TYPE_ASSET)
+            ->where('relation_type', EntityRelation::RELATION_TYPE_CONTAINS);
     }
 
-    /** @return HasMany<Asset, $this> */
-    public function childAssets(): HasMany
+    /** @return HasMany<EntityRelation, $this> */
+    public function outgoingRelations(): HasMany
     {
-        return $this->hasMany(self::class, 'parent_asset_id');
+        return $this->hasMany(EntityRelation::class, 'source_id')
+            ->where('source_type', EntityRelation::ENTITY_TYPE_ASSET)
+            ->where('target_type', EntityRelation::ENTITY_TYPE_ASSET)
+            ->where('relation_type', EntityRelation::RELATION_TYPE_CONTAINS);
     }
 }

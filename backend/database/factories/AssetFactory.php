@@ -5,6 +5,7 @@ namespace Database\Factories;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Modules\Masterdata\Enums\Asset\AssetType;
 use Modules\Masterdata\Models\Asset\Asset;
+use Modules\Masterdata\Models\EntityRelation\EntityRelation;
 
 /** @extends Factory<Asset> */
 final class AssetFactory extends Factory
@@ -28,5 +29,19 @@ final class AssetFactory extends Factory
         return $this->state([
             'asset_type' => $assetType->value,
         ]);
+    }
+
+    public function withParent(Asset $parent): static
+    {
+        return $this->afterCreating(static function (Asset $asset) use ($parent): void {
+            EntityRelation::query()->create([
+                'project_id' => $asset->project_id,
+                'source_type' => EntityRelation::ENTITY_TYPE_ASSET,
+                'source_id' => $parent->getKey(),
+                'target_type' => EntityRelation::ENTITY_TYPE_ASSET,
+                'target_id' => $asset->getKey(),
+                'relation_type' => EntityRelation::RELATION_TYPE_CONTAINS,
+            ]);
+        });
     }
 }

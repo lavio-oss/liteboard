@@ -28,6 +28,7 @@ final class ShowAssetAction
         }
 
         Gate::forUser($user)->authorize('view', $asset);
+        $asset->load('incomingRelations');
 
         return $responder->resource(AssetResource::make($asset));
     }

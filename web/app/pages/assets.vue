@@ -21,6 +21,7 @@ const manageableTenantIds = computed(() => new Set(
     .filter(tenant => isPlatformAdmin.value || tenant.role === 'owner' || tenant.role === 'admin')
     .map(tenant => tenant.id)
 ))
+const canCreate = computed(() => isPlatformAdmin.value || manageableTenantIds.value.size > 0)
 const addRequested = useState('masterdata:add-requested', () => false)
 const { createAsset, deleteAsset, loadTenantHierarchy, updateAsset } = useMasterdata()
 const formOpen = ref(false)
@@ -40,15 +41,17 @@ const assetTypeLabels: Record<AssetType, string> = {
   factory: 'Factory',
   area: 'Area',
   production_line: 'Production Line',
-  station: 'Station'
+  station: 'Station',
+  equipment: 'Equipment'
 }
 
-const assetTypeColors: Record<AssetType, 'success' | 'secondary' | 'primary' | 'warning' | 'neutral'> = {
+const assetTypeColors: Record<AssetType, 'success' | 'secondary' | 'primary' | 'warning' | 'neutral' | 'error'> = {
   site: 'success',
   factory: 'secondary',
   area: 'primary',
   production_line: 'warning',
-  station: 'neutral'
+  station: 'neutral',
+  equipment: 'error'
 }
 
 const assetTypeOptions: Array<{ label: string, value: AssetType | 'all' }> = [
@@ -408,61 +411,82 @@ const errorMessage = computed(() => {
 </script>
 
 <template>
-  <div class="flex flex-col gap-4">
-    <UAlert
-      v-if="status === 'error'"
-      color="error"
-      variant="subtle"
-      title="Unable to load assets"
-      :description="errorMessage"
-    />
+  <UDashboardPanel id="assets" :ui="{ body: 'lg:pt-4 lg:pb-12' }">
+    <template #header>
+      <UDashboardNavbar title="Assets">
+        <template #leading>
+          <UDashboardSidebarCollapse />
+        </template>
 
-    <MasterdataTable
-      :columns="columns"
-      :data="rows"
-      :loading="status === 'pending'"
-      search-placeholder="Search assets..."
-    >
-      <template #filters>
-        <USelect
-          v-model="assetTypeFilter"
-          :items="assetTypeOptions"
-          class="min-w-40"
-          :ui="{ trailingIcon: 'group-data-[state=open]:rotate-180 transition-transform duration-200' }"
-        />
-        <USelect
-          v-model="projectFilter"
-          :items="projectFilterOptions"
-          class="min-w-40"
-          :ui="{ trailingIcon: 'group-data-[state=open]:rotate-180 transition-transform duration-200' }"
-        />
-        <USelect
-          v-model="tenantFilter"
-          :items="tenantFilterOptions"
-          class="min-w-40"
-          :ui="{ trailingIcon: 'group-data-[state=open]:rotate-180 transition-transform duration-200' }"
-        />
-      </template>
-    </MasterdataTable>
-  </div>
+        <template #right>
+          <UButton
+            v-if="canCreate"
+            label="Add asset"
+            icon="i-lucide-plus"
+            @click="openCreate"
+          />
+        </template>
+      </UDashboardNavbar>
+    </template>
 
-  <MasterdataFormModal
-    v-model:open="formOpen"
-    v-model:project-id="selectedProjectId"
-    v-model:parent-id="selectedParentId"
-    resource-type="asset"
-    :resource="editingAsset"
-    :project-options="projectOptions"
-    :parent-options="parentOptions"
-    :loading="formLoading"
-    @submit-asset="saveAsset"
-  />
+    <template #body>
+      <div class="flex flex-col gap-4">
+        <UAlert
+          v-if="status === 'error'"
+          color="error"
+          variant="subtle"
+          title="Unable to load assets"
+          :description="errorMessage"
+        />
 
-  <ConfirmDeleteModal
-    v-model:open="deleteOpen"
-    :title="`Delete ${deletingAsset?.name ?? 'asset'}`"
-    description="This action cannot be undone. Child assets will remain as root assets."
-    :loading="deleteLoading"
-    @confirm="deleteSelectedAsset"
-  />
+        <MasterdataTable
+          :columns="columns"
+          :data="rows"
+          :loading="status === 'pending'"
+          search-placeholder="Search assets..."
+        >
+          <template #filters>
+            <USelect
+              v-model="assetTypeFilter"
+              :items="assetTypeOptions"
+              class="min-w-40"
+              :ui="{ trailingIcon: 'group-data-[state=open]:rotate-180 transition-transform duration-200' }"
+            />
+            <USelect
+              v-model="projectFilter"
+              :items="projectFilterOptions"
+              class="min-w-40"
+              :ui="{ trailingIcon: 'group-data-[state=open]:rotate-180 transition-transform duration-200' }"
+            />
+            <USelect
+              v-model="tenantFilter"
+              :items="tenantFilterOptions"
+              class="min-w-40"
+              :ui="{ trailingIcon: 'group-data-[state=open]:rotate-180 transition-transform duration-200' }"
+            />
+          </template>
+        </MasterdataTable>
+      </div>
+
+      <MasterdataFormModal
+        v-model:open="formOpen"
+        v-model:project-id="selectedProjectId"
+        v-model:parent-id="selectedParentId"
+        resource-type="asset"
+        :resource="editingAsset"
+        :project-options="projectOptions"
+        :parent-options="parentOptions"
+        :loading="formLoading"
+        @submit-asset="saveAsset"
+      />
+
+      <ConfirmDeleteModal
+        v-model:open="deleteOpen"
+        :title="`Delete ${deletingAsset?.name ?? 'asset'}`"
+        description="This action cannot be undone. Child assets will remain as root assets."
+        :loading="deleteLoading"
+        @confirm="deleteSelectedAsset"
+      />
+    </template>
+  </UDashboardPanel>
 </template>

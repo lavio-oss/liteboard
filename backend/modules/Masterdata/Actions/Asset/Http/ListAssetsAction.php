@@ -20,6 +20,7 @@ final class ListAssetsAction
     ): Response {
         $search = $request->string('search')->value();
         $assets = $project->assets()
+            ->with('incomingRelations')
             ->when($search !== '', static function (Builder $query) use ($search): void {
                 $query->where(static function (Builder $query) use ($search): void {
                     $query->where('name', 'like', "%$search%")
@@ -30,12 +31,14 @@ final class ListAssetsAction
                 $query->where('asset_type', $request->string('asset_type')->value());
             })
             ->when($request->filled('parent_asset_id'), function (Builder $query) use ($request): void {
-                $query->where('parent_asset_id', $request->integer('parent_asset_id'));
+                $query->whereHas('incomingRelations', function (Builder $query) use ($request): void {
+                    $query->where('source_id', $request->integer('parent_asset_id'));
+                });
             })
             ->when(
                 ! $request->filled('parent_asset_id') && $request->boolean('root_only'),
                 static function (Builder $query): void {
-                    $query->whereNull('parent_asset_id');
+                    $query->whereDoesntHave('incomingRelations');
                 },
             )
             ->orderBy('name')

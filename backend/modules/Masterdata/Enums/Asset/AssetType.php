@@ -9,4 +9,5 @@ enum AssetType: string
     case Area = 'area';
     case ProductionLine = 'production_line';
     case Station = 'station';
+    case Equipment = 'equipment';
 }

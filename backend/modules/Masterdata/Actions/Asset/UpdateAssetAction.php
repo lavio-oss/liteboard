@@ -2,7 +2,7 @@
 
 namespace Modules\Masterdata\Actions\Asset;
 
-use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\DB;
 use Modules\Masterdata\Models\Asset\Asset;
 
 final class UpdateAssetAction
@@ -19,43 +19,19 @@ final class UpdateAssetAction
      */
     public function execute(Asset $asset, array $attributes): Asset
     {
-        if (array_key_exists('parent_asset_id', $attributes) && $attributes['parent_asset_id'] !== null) {
-            $this->ensureParentDoesNotCreateCycle($asset, $attributes['parent_asset_id']);
-        }
+        return DB::transaction(function () use ($asset, $attributes): Asset {
+            $hasParentUpdate = array_key_exists('parent_asset_id', $attributes);
+            $parentAssetId = $hasParentUpdate ? $attributes['parent_asset_id'] : null;
+            unset($attributes['parent_asset_id']);
 
-        $asset->fill($attributes);
-        $asset->save();
+            $asset->fill($attributes);
+            $asset->save();
 
-        return $asset->refresh();
-    }
-
-    private function ensureParentDoesNotCreateCycle(Asset $asset, int $parentAssetId): void
-    {
-        $ancestor = Asset::query()->findOrFail($parentAssetId);
-        $visited = [];
-
-        while (true) {
-            $ancestorId = $ancestor->getKey();
-
-            if ($ancestorId === $asset->getKey()) {
-                throw ValidationException::withMessages([
-                    'parent_asset_id' => 'The selected parent would create an asset cycle.',
-                ]);
+            if ($hasParentUpdate) {
+                app(SyncAssetParentRelationAction::class)->execute($asset, $parentAssetId);
             }
 
-            if (isset($visited[$ancestorId])) {
-                throw ValidationException::withMessages([
-                    'parent_asset_id' => 'The asset hierarchy already contains a cycle.',
-                ]);
-            }
-
-            $visited[$ancestorId] = true;
-
-            if ($ancestor->parent_asset_id === null) {
-                return;
-            }
-
-            $ancestor = Asset::query()->findOrFail($ancestor->parent_asset_id);
-        }
+            return $asset->refresh();
+        });
     }
 }

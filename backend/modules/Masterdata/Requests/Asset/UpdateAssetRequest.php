@@ -78,29 +78,5 @@ final class UpdateAssetRequest extends FormRequest
             ],
         ]);
 
-        $validator->after(function (Validator $validator) use ($asset): void {
-            if (! $this->filled('parent_asset_id') || $validator->errors()->has('parent_asset_id')) {
-                return;
-            }
-
-            $ancestor = Asset::query()->find($this->integer('parent_asset_id'));
-
-            while ($ancestor instanceof Asset) {
-                if ($ancestor->is($asset)) {
-                    $validator->errors()->add(
-                        'parent_asset_id',
-                        'The selected parent would create an asset cycle.',
-                    );
-
-                    return;
-                }
-
-                if ($ancestor->parent_asset_id === null) {
-                    return;
-                }
-
-                $ancestor = Asset::query()->find($ancestor->parent_asset_id);
-            }
-        });
     }
 }

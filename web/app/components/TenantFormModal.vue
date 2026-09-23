@@ -54,7 +54,6 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
   <UModal
     :open="props.open"
     :title="title"
-    :description="props.tenant === null ? 'Create a new tenant organization.' : 'Update tenant organization details.'"
     @update:open="emit('update:open', $event)"
   >
     <template #body>

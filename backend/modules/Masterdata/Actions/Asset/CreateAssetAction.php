@@ -2,6 +2,7 @@
 
 namespace Modules\Masterdata\Actions\Asset;
 
+use Illuminate\Support\Facades\DB;
 use Modules\Masterdata\Models\Asset\Asset;
 use Modules\Masterdata\Models\Project\Project;
 
@@ -19,11 +20,20 @@ final class CreateAssetAction
      */
     public function execute(Project $project, array $attributes): Asset
     {
-        $asset = new Asset;
-        $asset->project()->associate($project);
-        $asset->fill($attributes);
-        $asset->save();
+        return DB::transaction(function () use ($project, $attributes): Asset {
+            $parentAssetId = array_key_exists('parent_asset_id', $attributes)
+                ? $attributes['parent_asset_id']
+                : null;
+            unset($attributes['parent_asset_id']);
 
-        return $asset->refresh();
+            $asset = new Asset;
+            $asset->project()->associate($project);
+            $asset->fill($attributes);
+            $asset->save();
+
+            app(SyncAssetParentRelationAction::class)->execute($asset, $parentAssetId);
+
+            return $asset->refresh();
+        });
     }
 }
