@@ -17,7 +17,7 @@ it('lets a platform admin manage tenants without a tenant membership', function 
         ->assertJsonPath('data.0.role', null);
 
     $this->actingAs($platformAdmin)
-        ->getJson('/api/admin/tenants/'.$tenant->id.'/projects')
+        ->getJson('/api/tenants/'.$tenant->id.'/projects')
         ->assertOk()
         ->assertJsonPath('data.0.id', $project->id);
 });
@@ -29,7 +29,7 @@ it('creates and assigns a new account to a project atomically', function (): voi
     $tenant->users()->attach($owner, ['role' => 'owner']);
 
     $response = $this->actingAs($owner)->postJson(
-        '/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/user-accounts',
+        '/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/user-accounts',
         [
             'name' => 'Project Engineer',
             'email' => 'engineer@example.com',
@@ -67,7 +67,7 @@ it('assigns existing tenant users and removes only project membership', function
     $tenant->users()->attach($member, ['role' => 'member']);
 
     $this->actingAs($owner)
-        ->postJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/users', [
+        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/users', [
             'user_id' => $member->id,
             'role' => 'viewer',
         ])
@@ -75,14 +75,14 @@ it('assigns existing tenant users and removes only project membership', function
         ->assertJsonPath('data.role', 'viewer');
 
     $this->actingAs($owner)
-        ->patchJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/users/'.$member->id, [
+        ->patchJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/users/'.$member->id, [
             'role' => 'admin',
         ])
         ->assertOk()
         ->assertJsonPath('data.role', 'admin');
 
     $this->actingAs($owner)
-        ->deleteJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/users/'.$member->id)
+        ->deleteJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/users/'.$member->id)
         ->assertNoContent();
 
     $this->assertDatabaseMissing('project_user', [
@@ -104,7 +104,7 @@ it('rejects hierarchy mutations for a viewer project member', function (): void 
     $project->users()->attach($viewer, ['role' => 'viewer']);
 
     $this->actingAs($viewer)
-        ->postJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets', [
+        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets', [
             'name' => 'Viewer Asset',
             'code' => 'viewer-asset',
             'asset_type' => AssetType::Factory->value,
@@ -120,7 +120,7 @@ it('allows an engineer project member to create hierarchy resources', function (
     $project->users()->attach($engineer, ['role' => 'engineer']);
 
     $this->actingAs($engineer)
-        ->postJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets', [
+        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets', [
             'name' => 'Engineer Asset',
             'code' => 'engineer-asset',
             'asset_type' => AssetType::Factory->value,
@@ -138,7 +138,7 @@ it('rejects cross-tenant and duplicate project assignments', function (): void {
     $otherTenant->users()->attach($member, ['role' => 'member']);
 
     $this->actingAs($owner)
-        ->postJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/users', [
+        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/users', [
             'user_id' => $member->id,
             'role' => 'viewer',
         ])
@@ -148,14 +148,14 @@ it('rejects cross-tenant and duplicate project assignments', function (): void {
     $tenant->users()->attach($member, ['role' => 'member']);
 
     $this->actingAs($owner)
-        ->postJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/users', [
+        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/users', [
             'user_id' => $member->id,
             'role' => 'viewer',
         ])
         ->assertCreated();
 
     $this->actingAs($owner)
-        ->postJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/users', [
+        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/users', [
             'user_id' => $member->id,
             'role' => 'viewer',
         ])

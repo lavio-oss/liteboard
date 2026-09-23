@@ -10,18 +10,18 @@ use Modules\Core\Models\Tenant\Tenant;
 use Modules\Core\Models\User\User;
 
 it('rejects unauthenticated asset access', function (): void {
-    $this->getJson('/api/admin/tenants/1/projects/1/assets')
+    $this->getJson('/api/tenants/1/projects/1/assets')
         ->assertUnauthorized();
 });
 
-it('does not expose project or asset routes under the previous prefix', function (): void {
-    $this->getJson('/api/tenants/1/projects')
+it('does not expose project routes under the admin prefix', function (): void {
+    $this->getJson('/api/admin/tenants/1/projects')
         ->assertNotFound();
 
-    $this->getJson('/api/tenants/1/projects/1/users')
+    $this->getJson('/api/admin/tenants/1/projects/1/users')
         ->assertNotFound();
 
-    $this->getJson('/api/tenants/1/projects/1/assets')
+    $this->getJson('/api/admin/tenants/1/projects/1/assets')
         ->assertNotFound();
 });
 
@@ -32,7 +32,7 @@ it('creates a tenant-scoped multi-level asset hierarchy', function (): void {
     $project = Project::factory()->for($tenant)->create();
 
     $siteResponse = $this->actingAs($owner)->postJson(
-        '/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets',
+        '/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets',
         [
             'name' => 'Site Hanoi',
             'code' => 'site-hanoi',
@@ -50,7 +50,7 @@ it('creates a tenant-scoped multi-level asset hierarchy', function (): void {
     $site = Asset::query()->where('code', 'site-hanoi')->firstOrFail();
 
     $factoryResponse = $this->actingAs($owner)->postJson(
-        '/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets',
+        '/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets',
         [
             'name' => 'Factory Hanoi',
             'code' => 'factory-hanoi',
@@ -69,7 +69,7 @@ it('creates a tenant-scoped multi-level asset hierarchy', function (): void {
     foreach ([AssetType::Area, AssetType::ProductionLine, AssetType::Station, AssetType::Equipment] as $assetType) {
         $this->actingAs($owner)
             ->postJson(
-                '/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets',
+                '/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets',
                 [
                     'name' => $assetType->name,
                     'code' => strtolower($assetType->name).'-1',
@@ -99,12 +99,12 @@ it('allows members to read but not mutate assets', function (): void {
     $project->users()->attach($member, ['role' => 'viewer']);
 
     $this->actingAs($member)
-        ->getJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets')
+        ->getJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets')
         ->assertOk()
         ->assertJsonPath('data.0.id', $asset->getKey());
 
     $this->actingAs($member)
-        ->postJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets', [
+        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets', [
             'name' => 'Forbidden Asset',
             'code' => 'forbidden-asset',
             'asset_type' => AssetType::Area->value,
@@ -112,13 +112,13 @@ it('allows members to read but not mutate assets', function (): void {
         ->assertForbidden();
 
     $this->actingAs($member)
-        ->patchJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$asset->id, [
+        ->patchJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$asset->id, [
             'name' => 'Forbidden Update',
         ])
         ->assertForbidden();
 
     $this->actingAs($member)
-        ->deleteJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$asset->id)
+        ->deleteJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$asset->id)
         ->assertForbidden();
 });
 
@@ -130,7 +130,7 @@ it('allows project admins to create, update and delete assets', function (): voi
     $project->users()->attach($admin, ['role' => 'admin']);
 
     $createResponse = $this->actingAs($admin)->postJson(
-        '/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets',
+        '/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets',
         [
             'name' => 'Admin Asset',
             'code' => 'admin-asset',
@@ -143,14 +143,14 @@ it('allows project admins to create, update and delete assets', function (): voi
     $createResponse->assertCreated();
 
     $this->actingAs($admin)
-        ->patchJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$asset->id, [
+        ->patchJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$asset->id, [
             'name' => 'Updated Admin Asset',
         ])
         ->assertOk()
         ->assertJsonPath('data.name', 'Updated Admin Asset');
 
     $this->actingAs($admin)
-        ->deleteJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$asset->id)
+        ->deleteJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$asset->id)
         ->assertNoContent();
 
     $this->assertDatabaseMissing('assets', ['id' => $asset->id]);
@@ -168,15 +168,15 @@ it('hides assets from another tenant and rejects cross-project parents', functio
     $project->users()->attach($user, ['role' => 'engineer']);
 
     $this->actingAs($user)
-        ->getJson('/api/admin/tenants/'.$otherTenant->id.'/projects')
+        ->getJson('/api/tenants/'.$otherTenant->id.'/projects')
         ->assertNotFound();
 
     $this->actingAs($user)
-        ->getJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$otherAsset->id)
+        ->getJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$otherAsset->id)
         ->assertNotFound();
 
     $this->actingAs($user)
-        ->postJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets', [
+        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets', [
             'name' => 'Cross Project Child',
             'code' => 'cross-project-child',
             'asset_type' => AssetType::Area->value,
@@ -199,7 +199,7 @@ it('rejects invalid asset input and duplicate codes within a type', function ():
     ]);
 
     $this->actingAs($owner)
-        ->postJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets', [
+        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets', [
             'name' => 'Invalid Asset',
             'code' => 'invalid-asset',
             'asset_type' => 'unknown',
@@ -208,7 +208,7 @@ it('rejects invalid asset input and duplicate codes within a type', function ():
         ->assertJsonValidationErrors(['asset_type']);
 
     $this->actingAs($owner)
-        ->postJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets', [
+        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets', [
             'name' => 'Duplicate Asset',
             'code' => 'duplicate-code',
             'asset_type' => AssetType::Factory->value,
@@ -242,20 +242,20 @@ it('supports asset search, type filtering, parent filtering and roots', function
     ]);
 
     $this->actingAs($member)
-        ->getJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets?search=Alpha&asset_type=factory&root_only=true&per_page=1')
+        ->getJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets?search=Alpha&asset_type=factory&root_only=true&per_page=1')
         ->assertOk()
         ->assertJsonCount(1, 'data')
         ->assertJsonPath('data.0.name', 'Alpha Factory')
         ->assertJsonPath('meta.per_page', 1);
 
     $this->actingAs($member)
-        ->getJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets?parent_asset_id='.$root->id)
+        ->getJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets?parent_asset_id='.$root->id)
         ->assertOk()
         ->assertJsonCount(1, 'data')
         ->assertJsonPath('data.0.name', 'Alpha Line');
 
     $this->actingAs($member)
-        ->getJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets?parent_asset_id='.$root->id.'&root_only=true')
+        ->getJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets?parent_asset_id='.$root->id.'&root_only=true')
         ->assertUnprocessable()
         ->assertJsonValidationErrors(['root_only']);
 });
@@ -273,14 +273,14 @@ it('rejects self-parenting and hierarchy cycles', function (): void {
     ]);
 
     $this->actingAs($owner)
-        ->patchJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$parent->id, [
+        ->patchJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$parent->id, [
             'parent_asset_id' => $parent->id,
         ])
         ->assertUnprocessable()
         ->assertJsonValidationErrors(['parent_asset_id']);
 
     $this->actingAs($owner)
-        ->patchJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$parent->id, [
+        ->patchJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$parent->id, [
             'parent_asset_id' => $child->id,
         ])
         ->assertUnprocessable()
@@ -295,7 +295,7 @@ it('replaces and removes an asset parent through contains relations', function (
     $firstParent = Asset::factory()->for($project)->create();
     $secondParent = Asset::factory()->for($project)->create();
     $child = Asset::factory()->for($project)->withParent($firstParent)->create();
-    $endpoint = '/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$child->id;
+    $endpoint = '/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$child->id;
 
     $this->actingAs($owner)
         ->patchJson($endpoint, ['parent_asset_id' => $secondParent->id])
@@ -333,7 +333,7 @@ it('keeps child assets when a parent asset is deleted', function (): void {
     $child = Asset::factory()->for($project)->withParent($parent)->create();
 
     $this->actingAs($owner)
-        ->deleteJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$parent->id)
+        ->deleteJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$parent->id)
         ->assertNoContent();
 
     $this->assertDatabaseHas('assets', [
@@ -363,11 +363,11 @@ it('does not expose the removed factory and production line endpoints', function
     $project = Project::factory()->for($tenant)->create();
 
     $this->actingAs($owner)
-        ->getJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/factories')
+        ->getJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/factories')
         ->assertNotFound();
 
     $this->actingAs($owner)
-        ->getJson('/api/admin/tenants/'.$tenant->id.'/projects/'.$project->id.'/production-lines')
+        ->getJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/production-lines')
         ->assertNotFound();
 });
 

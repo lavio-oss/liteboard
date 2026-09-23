@@ -8,7 +8,7 @@ use Modules\Admin\Actions\Project\Http\ShowProjectAction;
 use Modules\Admin\Actions\Project\Http\UpdateProjectAction;
 
 Route::middleware(['auth:sanctum', 'tenant.context'])
-    ->prefix('admin/tenants/{tenant}/projects')
+    ->prefix('tenants/{tenant}/projects')
     ->scopeBindings()
     ->group(function (): void {
         Route::get('/', ListProjectsAction::class)

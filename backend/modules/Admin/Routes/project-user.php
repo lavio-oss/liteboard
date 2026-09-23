@@ -9,7 +9,7 @@ use Modules\Admin\Actions\Project\Http\RemoveProjectUserAction;
 use Modules\Admin\Actions\Project\Http\UpdateProjectUserAction;
 
 Route::middleware(['auth:sanctum', 'tenant.context'])
-    ->prefix('admin/tenants/{tenant}/projects/{project}')
+    ->prefix('tenants/{tenant}/projects/{project}')
     ->scopeBindings()
     ->group(function (): void {
         Route::get('/users', ListProjectUsersAction::class)
