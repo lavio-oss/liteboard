@@ -143,7 +143,7 @@ async function deleteTenant(): Promise<void> {
     deleteOpen.value = false
     toast.add({
       title: 'Tenant deleted',
-      description: 'The tenant and its masterdata have been deleted.',
+      description: 'The tenant and its projects and assets have been deleted.',
       color: 'success'
     })
   } catch (error: unknown) {

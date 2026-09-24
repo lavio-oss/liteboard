@@ -3,7 +3,7 @@ import type { TableColumn } from '@nuxt/ui'
 import { upperFirst } from 'scule'
 import { getPaginationRowModel } from '@tanstack/table-core'
 import { ApiError } from '~/composables/useApi'
-import { useMasterdata } from '~/composables/useMasterdata'
+import { useAdmin } from '~/composables/useAdmin'
 import { useTenantContext } from '~/composables/useTenantContext'
 import type { TenantRole, TenantUser, TenantUserCreateInput, TenantUserUpdateInput } from '~/types/auth'
 
@@ -17,11 +17,11 @@ const toast = useToast()
 const table = useTemplateRef('table')
 const { user } = useAuth()
 const { activeTenant, canManageActiveTenant, loadTenants } = useTenantContext()
-const { createTenantUser, deleteTenantUser, loadTenantUsers, updateTenantUser } = useMasterdata()
+const { createTenantUser, deleteTenantUser, loadTenantUsers, updateTenantUser } = useAdmin()
 await loadTenants()
 
 const tenantId = computed(() => activeTenant.value?.id ?? null)
-const addRequested = useState('masterdata:add-requested', () => false)
+const addRequested = useState('admin:add-requested', () => false)
 const users = ref<TenantUser[]>([])
 const search = ref('')
 const roleFilter = ref<'all' | TenantRole>('all')
@@ -341,7 +341,7 @@ watch(addRequested, (requested) => {
         </template>
       </div>
 
-      <MasterdataTenantUserFormModal
+      <AdminTenantUserFormModal
         v-model:open="editOpen"
         :user="editingUser"
         :loading="editLoading"

@@ -8,7 +8,7 @@ import {
   projectsResponseSchema,
   projectUserResponseSchema,
   projectUsersResponseSchema
-} from '~/types/masterdata'
+} from '~/types/admin'
 import { tenantUserResponseSchema, tenantUsersResponseSchema } from '~/types/auth'
 import type {
   Asset,
@@ -20,10 +20,10 @@ import type {
   ProjectUserAccountInput,
   ProjectUserInput,
   TenantHierarchy
-} from '~/types/masterdata'
+} from '~/types/admin'
 import type { TenantUser, TenantUserCreateInput, TenantUserUpdateInput } from '~/types/auth'
 
-export function useMasterdata() {
+export function useAdmin() {
   const api = useApi()
 
   async function loadProjects(tenantId: number): Promise<Project[]> {

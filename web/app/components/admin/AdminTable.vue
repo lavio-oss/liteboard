@@ -2,11 +2,11 @@
 import type { TableColumn } from '@nuxt/ui'
 import { upperFirst } from 'scule'
 import { getPaginationRowModel } from '@tanstack/table-core'
-import type { MasterdataRow } from '~/types/masterdata'
+import type { AdminTableRow } from '~/types/admin'
 
 const props = defineProps<{
-  columns: TableColumn<MasterdataRow>[]
-  data: MasterdataRow[]
+  columns: TableColumn<AdminTableRow>[]
+  data: AdminTableRow[]
   loading?: boolean
   searchPlaceholder: string
 }>()
@@ -19,9 +19,9 @@ const pagination = ref({
   pageSize: 10
 })
 const search = ref('')
-const statusFilter = ref<'all' | MasterdataRow['status']>('all')
+const statusFilter = ref<'all' | AdminTableRow['status']>('all')
 
-function getColumnKey(column: TableColumn<MasterdataRow>): string {
+function getColumnKey(column: TableColumn<AdminTableRow>): string {
   return column.id ?? 'column'
 }
 

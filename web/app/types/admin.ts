@@ -1,13 +1,13 @@
 import { z } from 'zod'
 import { tenantRoleSchema } from '~/types/auth'
 
-export const masterdataStatusSchema = z.enum(['active', 'inactive'])
+export const resourceStatusSchema = z.enum(['active', 'inactive'])
 export const assetTypeSchema = z.enum(['site', 'factory', 'area', 'production_line', 'station', 'equipment'])
 
 const resourceBaseSchema = z.object({
   id: z.number().int().positive(),
   name: z.string(),
-  status: masterdataStatusSchema,
+  status: resourceStatusSchema,
   created_at: z.string(),
   updated_at: z.string()
 })
@@ -69,7 +69,7 @@ export const projectUserResponseSchema = z.object({
   data: projectUserSchema
 })
 
-export type MasterdataStatus = z.infer<typeof masterdataStatusSchema>
+export type ResourceStatus = z.infer<typeof resourceStatusSchema>
 export type AssetType = z.infer<typeof assetTypeSchema>
 export type Project = z.infer<typeof projectSchema>
 export type Asset = z.infer<typeof assetSchema>
@@ -80,7 +80,7 @@ export type AvailableProjectUser = z.infer<typeof availableProjectUserSchema>
 export interface ProjectInput {
   name: string
   description: string
-  status: MasterdataStatus
+  status: ResourceStatus
 }
 
 export interface ProjectFormInput extends ProjectInput {
@@ -93,7 +93,7 @@ export interface AssetInput {
   asset_type: AssetType
   parent_asset_id: number | null
   location: string
-  status: MasterdataStatus
+  status: ResourceStatus
 }
 
 export interface ProjectUserInput {
@@ -114,10 +114,10 @@ export interface TenantHierarchy {
   assets: Asset[]
 }
 
-export interface MasterdataRow {
+export interface AdminTableRow {
   id: number
   name: string
-  status: MasterdataStatus
+  status: ResourceStatus
   asset_type?: AssetType
   code?: string
   tenant_id?: number

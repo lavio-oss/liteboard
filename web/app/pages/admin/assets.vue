@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
 import { ApiError } from '~/composables/useApi'
-import { useMasterdata } from '~/composables/useMasterdata'
+import { useAdmin } from '~/composables/useAdmin'
 import { useTenantContext } from '~/composables/useTenantContext'
-import type { Asset, AssetInput, AssetType, MasterdataRow } from '~/types/masterdata'
+import type { AdminTableRow, Asset, AssetInput, AssetType } from '~/types/admin'
 
 definePageMeta({
   middleware: 'auth'
@@ -22,8 +22,8 @@ const manageableTenantIds = computed(() => new Set(
     .map(tenant => tenant.id)
 ))
 const canCreate = computed(() => isPlatformAdmin.value || manageableTenantIds.value.size > 0)
-const addRequested = useState('masterdata:add-requested', () => false)
-const { createAsset, deleteAsset, loadTenantHierarchy, updateAsset } = useMasterdata()
+const addRequested = useState('admin:add-requested', () => false)
+const { createAsset, deleteAsset, loadTenantHierarchy, updateAsset } = useAdmin()
 const formOpen = ref(false)
 const formLoading = ref(false)
 const selectedProjectId = ref<number | null>(null)
@@ -62,7 +62,7 @@ const assetTypeOptions: Array<{ label: string, value: AssetType | 'all' }> = [
   }))
 ]
 
-const { data: response, status, error, refresh } = await useAsyncData('masterdata-assets', async () => {
+const { data: response, status, error, refresh } = await useAsyncData('admin-assets', async () => {
   const hierarchies = await Promise.all(
     tenants.value.map(tenant => loadTenantHierarchy(tenant.id))
   )
@@ -138,7 +138,7 @@ function tenantIdForProject(projectId: number): number {
   return project.tenant_id
 }
 
-const rows = computed<MasterdataRow[]>(() => filteredAssets.value)
+const rows = computed<AdminTableRow[]>(() => filteredAssets.value)
 
 function projectNameFor(projectId: number | undefined): string {
   if (projectId === undefined) {
@@ -297,7 +297,7 @@ watch(addRequested, (requested) => {
   }
 })
 
-const columns: TableColumn<MasterdataRow>[] = [
+const columns: TableColumn<AdminTableRow>[] = [
   {
     id: 'sequence',
     header: 'STT',
@@ -439,7 +439,7 @@ const errorMessage = computed(() => {
           :description="errorMessage"
         />
 
-        <MasterdataTable
+        <AdminTable
           :columns="columns"
           :data="rows"
           :loading="status === 'pending'"
@@ -465,10 +465,10 @@ const errorMessage = computed(() => {
               :ui="{ trailingIcon: 'group-data-[state=open]:rotate-180 transition-transform duration-200' }"
             />
           </template>
-        </MasterdataTable>
+        </AdminTable>
       </div>
 
-      <MasterdataFormModal
+      <AdminResourceFormModal
         v-model:open="formOpen"
         v-model:project-id="selectedProjectId"
         v-model:parent-id="selectedParentId"

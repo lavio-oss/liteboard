@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ApiError } from '~/composables/useApi'
-import { useMasterdata } from '~/composables/useMasterdata'
+import { useAdmin } from '~/composables/useAdmin'
 import { useTenantContext } from '~/composables/useTenantContext'
 import type { Tenant } from '~/types/auth'
-import type { AssetType, Project, TenantHierarchy } from '~/types/masterdata'
+import type { AssetType, Project, TenantHierarchy } from '~/types/admin'
 
 definePageMeta({
   middleware: 'auth'
@@ -86,7 +86,7 @@ const assetCardDefinitions: Array<{
 ]
 
 const { isPlatformAdmin, loadTenants, selectTenant, tenants, activeTenantId } = useTenantContext()
-const { loadTenantHierarchy } = useMasterdata()
+const { loadTenantHierarchy } = useAdmin()
 await loadTenants()
 
 const scopeTenantId = ref<number | null>(isPlatformAdmin.value ? null : activeTenantId.value)

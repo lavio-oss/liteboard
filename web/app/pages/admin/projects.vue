@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
 import { ApiError } from '~/composables/useApi'
-import { useMasterdata } from '~/composables/useMasterdata'
+import { useAdmin } from '~/composables/useAdmin'
 import { useTenantContext } from '~/composables/useTenantContext'
-import type { MasterdataRow, Project, ProjectFormInput } from '~/types/masterdata'
+import type { AdminTableRow, Project, ProjectFormInput } from '~/types/admin'
 
 definePageMeta({
   middleware: 'auth'
@@ -24,8 +24,8 @@ const tenantOptions = computed(() => manageableTenants.value.map(tenant => ({
 })))
 const manageableTenantIds = computed(() => new Set(manageableTenants.value.map(tenant => tenant.id)))
 const canCreate = computed(() => isPlatformAdmin.value || manageableTenantIds.value.size > 0)
-const addRequested = useState('masterdata:add-requested', () => false)
-const { createProject, deleteProject, loadProjects, updateProject } = useMasterdata()
+const addRequested = useState('admin:add-requested', () => false)
+const { createProject, deleteProject, loadProjects, updateProject } = useAdmin()
 const formOpen = ref(false)
 const formLoading = ref(false)
 const selectedTenantId = ref<number | null>(null)
@@ -36,13 +36,13 @@ const deletingProject = ref<Project | null>(null)
 const managingProject = ref<Project | null>(null)
 const projectUsersOpen = ref(false)
 
-const { data: response, status, error, refresh } = await useAsyncData('masterdata-projects', () => {
+const { data: response, status, error, refresh } = await useAsyncData('admin-projects', () => {
   return Promise.all(tenants.value.map(tenant => loadProjects(tenant.id)))
     .then(projectResponses => projectResponses.flat())
 }, { watch: [tenantIds] })
 
 const projects = computed(() => response.value ?? [])
-const rows = computed<MasterdataRow[]>(() => projects.value)
+const rows = computed<AdminTableRow[]>(() => projects.value)
 
 function openCreate(): void {
   editingProject.value = null
@@ -131,7 +131,7 @@ async function deleteSelectedProject(): Promise<void> {
     deleteOpen.value = false
     toast.add({
       title: 'Project deleted',
-      description: 'The project and its child masterdata have been deleted.',
+      description: 'The project and its assets have been deleted.',
       color: 'success'
     })
   } catch (error: unknown) {
@@ -156,7 +156,7 @@ watch(addRequested, (requested) => {
   }
 })
 
-const columns: TableColumn<MasterdataRow>[] = [
+const columns: TableColumn<AdminTableRow>[] = [
   {
     id: 'sequence',
     header: 'STT',
@@ -284,7 +284,7 @@ const errorMessage = computed(() => {
           :description="errorMessage"
         />
 
-        <MasterdataTable
+        <AdminTable
           :columns="columns"
           :data="rows"
           :loading="status === 'pending'"
@@ -292,7 +292,7 @@ const errorMessage = computed(() => {
         />
       </div>
 
-      <MasterdataFormModal
+      <AdminResourceFormModal
         v-model:open="formOpen"
         v-model:tenant-id="selectedTenantId"
         resource-type="project"
@@ -310,7 +310,7 @@ const errorMessage = computed(() => {
         @confirm="deleteSelectedProject"
       />
 
-      <MasterdataProjectUsersModal
+      <AdminProjectUsersModal
         v-if="projectUsersOpen"
         v-model:open="projectUsersOpen"
         :tenant-id="managingProject?.tenant_id ?? null"

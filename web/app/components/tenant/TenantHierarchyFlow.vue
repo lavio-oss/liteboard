@@ -4,9 +4,9 @@ import { Controls } from '@vue-flow/controls'
 import { Handle, Position, VueFlow } from '@vue-flow/core'
 import type { Edge, Node } from '@vue-flow/core'
 import { ApiError } from '~/composables/useApi'
-import { useMasterdata } from '~/composables/useMasterdata'
+import { useAdmin } from '~/composables/useAdmin'
 import type { Tenant } from '~/types/auth'
-import type { Asset, AssetInput, AssetType, Project, TenantHierarchy } from '~/types/masterdata'
+import type { Asset, AssetInput, AssetType, Project, TenantHierarchy } from '~/types/admin'
 
 const props = defineProps<{
   tenants: Tenant[]
@@ -144,7 +144,7 @@ const selectedFilterKeys = ref<string[]>([])
 const expandedFilterKeys = ref<string[]>([])
 const toast = useToast()
 const { user } = useAuth()
-const { createAsset, loadTenantHierarchy } = useMasterdata()
+const { createAsset, loadTenantHierarchy } = useAdmin()
 
 const selectedTenant = computed(() => props.tenants.find(tenant => tenant.id === selectedTenantId.value))
 const canManageSelectedTenant = computed(() => {
@@ -673,9 +673,82 @@ const visibleNodeIds = computed<Set<string> | null>(() => {
 const visibleNodes = computed(() => {
   const ids = visibleNodeIds.value
 
-  return ids === null
-    ? nodes.value
-    : nodes.value.filter(node => ids.has(node.id))
+  if (ids === null) {
+    return nodes.value
+  }
+
+  const visible = nodes.value
+    .filter(node => ids.has(node.id))
+    .map(node => ({ ...node, position: { ...node.position } }))
+  const nodeById = new Map(visible.map(node => [node.id, node]))
+  const childrenById = new Map<string, string[]>()
+
+  for (const edge of edges.value) {
+    if (!ids.has(edge.source) || !ids.has(edge.target)) {
+      continue
+    }
+
+    const children = childrenById.get(edge.source) ?? []
+    children.push(edge.target)
+    childrenById.set(edge.source, children)
+  }
+
+  function getSubtreeWidth(nodeId: string): number {
+    const children = childrenById.get(nodeId) ?? []
+
+    return children.length === 0
+      ? CARD_WIDTH
+      : Math.max(
+          CARD_WIDTH,
+          children.reduce((total, childId) => total + getSubtreeWidth(childId), 0)
+          + (children.length - 1) * CARD_GAP
+        )
+  }
+
+  function layoutVisibleSubtree(nodeId: string, leftX: number): void {
+    const node = nodeById.get(nodeId)
+
+    if (node === undefined) {
+      return
+    }
+
+    const children = childrenById.get(nodeId) ?? []
+    const subtreeWidth = getSubtreeWidth(nodeId)
+
+    if (children.length === 0) {
+      node.position = { ...node.position, x: leftX + (subtreeWidth - CARD_WIDTH) / 2 }
+
+      return
+    }
+
+    const childrenWidth = children.reduce((total, childId) => total + getSubtreeWidth(childId), 0)
+      + (children.length - 1) * CARD_GAP
+    let childLeftX = leftX + (subtreeWidth - childrenWidth) / 2
+
+    for (const childId of children) {
+      layoutVisibleSubtree(childId, childLeftX)
+      childLeftX += getSubtreeWidth(childId) + CARD_GAP
+    }
+
+    const firstChild = nodeById.get(children[0]!)
+    const lastChild = nodeById.get(children[children.length - 1]!)
+
+    if (firstChild !== undefined && lastChild !== undefined) {
+      node.position = {
+        ...node.position,
+        x: (firstChild.position.x + lastChild.position.x) / 2 - CARD_WIDTH / 2
+      }
+    }
+  }
+
+  const rootNode = visible.find(node => !edges.value.some(edge => edge.target === node.id && ids.has(edge.source)))
+
+  if (rootNode !== undefined) {
+    const subtreeWidth = getSubtreeWidth(rootNode.id)
+    layoutVisibleSubtree(rootNode.id, Math.max(80, 600 - subtreeWidth / 2))
+  }
+
+  return visible
 })
 
 const visibleEdges = computed<Edge[]>(() => {
@@ -1008,7 +1081,7 @@ const flowKey = computed(() => `${selectedTenantId.value}-${selectedFilterKeys.v
     </template>
   </UModal>
 
-  <MasterdataFormModal
+  <AdminResourceFormModal
     v-model:open="assetFormOpen"
     v-model:project-id="selectedProjectId"
     v-model:parent-id="selectedParentId"

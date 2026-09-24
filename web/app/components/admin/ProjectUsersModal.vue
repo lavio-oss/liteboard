@@ -3,9 +3,9 @@ import type { TableColumn, FormSubmitEvent } from '@nuxt/ui'
 import { getPaginationRowModel } from '@tanstack/table-core'
 import * as z from 'zod'
 import { ApiError } from '~/composables/useApi'
-import { useMasterdata } from '~/composables/useMasterdata'
-import type { AvailableProjectUser, Project, ProjectRole, ProjectUser } from '~/types/masterdata'
-import { projectRoleSchema } from '~/types/masterdata'
+import { useAdmin } from '~/composables/useAdmin'
+import type { AvailableProjectUser, Project, ProjectRole, ProjectUser } from '~/types/admin'
+import { projectRoleSchema } from '~/types/admin'
 
 const props = withDefaults(defineProps<{
   tenantId: number | null
@@ -52,7 +52,7 @@ const {
   removeProjectUser,
   updateProjectUser,
   updateTenantUser
-} = useMasterdata()
+} = useAdmin()
 
 const users = ref<ProjectUser[]>([])
 const availableUsers = ref<AvailableProjectUser[]>([])

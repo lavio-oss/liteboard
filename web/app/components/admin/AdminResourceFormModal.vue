@@ -5,11 +5,11 @@ import type {
   Asset,
   AssetInput,
   AssetType,
-  MasterdataStatus,
+  ResourceStatus,
   Project,
   ProjectFormInput
-} from '~/types/masterdata'
-import { assetTypeSchema } from '~/types/masterdata'
+} from '~/types/admin'
+import { assetTypeSchema } from '~/types/admin'
 
 type Resource = Project | Asset
 type ResourceType = 'project' | 'asset'
@@ -81,7 +81,7 @@ const state = reactive<{
   code: string
   asset_type: AssetType
   location: string
-  status: MasterdataStatus
+  status: ResourceStatus
 }>({
   tenant_id: null,
   name: '',
