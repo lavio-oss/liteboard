@@ -1,11 +1,13 @@
 <?php
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Schema;
 use Modules\Admin\Enums\Asset\AssetType;
 use Modules\Admin\Models\Asset\Asset;
 use Modules\Admin\Models\EntityRelation\EntityRelation;
 use Modules\Admin\Models\Project\Project;
+use Modules\Admin\Services\Asset\AssetPersistenceService;
 use Modules\Core\Models\Tenant\Tenant;
 use Modules\Core\Models\User\User;
 
@@ -104,6 +106,11 @@ it('allows members to read but not mutate assets', function (): void {
         ->assertJsonPath('data.0.id', $asset->getKey());
 
     $this->actingAs($member)
+        ->getJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$asset->getKey())
+        ->assertOk()
+        ->assertJsonPath('data.id', $asset->getKey());
+
+    $this->actingAs($member)
         ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets', [
             'name' => 'Forbidden Asset',
             'code' => 'forbidden-asset',
@@ -162,8 +169,10 @@ it('hides assets from another tenant and rejects cross-project parents', functio
     $otherTenant = Tenant::factory()->create();
     $project = Project::factory()->for($tenant)->create();
     $otherProject = Project::factory()->for($otherTenant)->create();
+    $unassignedProject = Project::factory()->for($tenant)->create();
     $asset = Asset::factory()->for($project)->create();
     $otherAsset = Asset::factory()->for($otherProject)->create();
+    $unassignedAsset = Asset::factory()->for($unassignedProject)->create();
     $tenant->users()->attach($user, ['role' => 'member']);
     $project->users()->attach($user, ['role' => 'engineer']);
 
@@ -174,6 +183,14 @@ it('hides assets from another tenant and rejects cross-project parents', functio
     $this->actingAs($user)
         ->getJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/'.$otherAsset->id)
         ->assertNotFound();
+
+    $this->actingAs($user)
+        ->getJson('/api/tenants/'.$tenant->id.'/projects/'.$unassignedProject->id.'/assets/'.$unassignedAsset->id)
+        ->assertForbidden();
+
+    $this->actingAs($user)
+        ->deleteJson('/api/tenants/'.$tenant->id.'/projects/'.$unassignedProject->id.'/assets/'.$unassignedAsset->id)
+        ->assertForbidden();
 
     $this->actingAs($user)
         ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets', [
@@ -341,6 +358,36 @@ it('keeps child assets when a parent asset is deleted', function (): void {
     ]);
     $this->assertDatabaseMissing('entity_relations', [
         'target_id' => $child->id,
+        'relation_type' => EntityRelation::RELATION_TYPE_CONTAINS,
+    ]);
+});
+
+it('rolls back relation cleanup when deleting an asset fails', function (): void {
+    $tenant = Tenant::factory()->create();
+    $project = Project::factory()->for($tenant)->create();
+    $parent = Asset::factory()->for($project)->create();
+    $child = Asset::factory()->for($project)->withParent($parent)->create();
+    $event = 'eloquent.deleting: '.Asset::class;
+
+    Event::listen($event, static function (Asset $deletingAsset) use ($parent): ?bool {
+        if ($deletingAsset->is($parent)) {
+            return false;
+        }
+
+        return null;
+    });
+
+    try {
+        expect(fn () => app(AssetPersistenceService::class)->delete($parent))
+            ->toThrow(RuntimeException::class, 'Asset deletion was cancelled.');
+    } finally {
+        Event::forget($event);
+    }
+
+    $this->assertDatabaseHas('assets', ['id' => $parent->getKey()]);
+    $this->assertDatabaseHas('entity_relations', [
+        'source_id' => $parent->getKey(),
+        'target_id' => $child->getKey(),
         'relation_type' => EntityRelation::RELATION_TYPE_CONTAINS,
     ]);
 });

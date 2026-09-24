@@ -40,6 +40,53 @@ final class UpdateAssetRequest extends FormRequest
         ];
     }
 
+    /**
+     * @return array{
+     *     attributes: array{
+     *         name?: string,
+     *         code?: string,
+     *         asset_type?: string,
+     *         location?: string|null,
+     *         status?: string
+     *     },
+     *     parent_update: array{provided: bool, parent_asset_id: int|null}
+     * }
+     */
+    public function assetInput(): array
+    {
+        /** @var array{
+         *     parent_asset_id?: int|null,
+         *     name?: string,
+         *     code?: string,
+         *     asset_type?: string,
+         *     location?: string|null,
+         *     status?: string
+         * } $validated
+        */
+        $validated = $this->validated();
+        $parentUpdateProvided = array_key_exists('parent_asset_id', $validated);
+        $parentAssetId = $parentUpdateProvided ? $validated['parent_asset_id'] : null;
+        unset($validated['parent_asset_id']);
+
+        /** @var array{
+         *     name?: string,
+         *     code?: string,
+         *     asset_type?: string,
+         *     location?: string|null,
+         *     status?: string
+         * } $attributes
+         */
+        $attributes = $validated;
+
+        return [
+            'attributes' => $attributes,
+            'parent_update' => [
+                'provided' => $parentUpdateProvided,
+                'parent_asset_id' => $parentAssetId,
+            ],
+        ];
+    }
+
     public function withValidator(Validator $validator): void
     {
         $project = $this->route('project');

@@ -2,54 +2,25 @@
 
 namespace Modules\Admin\Actions\Asset\Http;
 
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Gate;
 use Modules\Admin\Models\Asset\Asset;
-use Modules\Admin\Models\EntityRelation\EntityRelation;
 use Modules\Admin\Models\Project\Project;
-use Modules\Admin\Requests\Asset\AuthenticatedRequest;
+use Modules\Admin\Requests\Asset\DeleteAssetRequest;
+use Modules\Admin\Services\Asset\AssetPersistenceService;
 use Modules\Core\Models\Tenant\Tenant;
-use Modules\Core\Models\User\User;
 use Modules\Core\Shared\Responders\Responder;
 use Symfony\Component\HttpFoundation\Response;
 
 final class DeleteAssetAction
 {
     public function __invoke(
-        AuthenticatedRequest $request,
+        DeleteAssetRequest $request,
         Tenant $tenant,
         Project $project,
         Asset $asset,
+        AssetPersistenceService $assetPersistenceService,
         Responder $responder,
     ): Response {
-        $user = $request->user();
-
-        if (! $user instanceof User) {
-            abort(Response::HTTP_UNAUTHORIZED);
-        }
-
-        Gate::forUser($user)->authorize('delete', $asset);
-        DB::transaction(function () use ($asset): void {
-            EntityRelation::query()
-                ->where('project_id', $asset->project_id)
-                ->where(function (Builder $query) use ($asset): void {
-                    $query
-                        ->where(function (Builder $query) use ($asset): void {
-                            $query
-                                ->where('source_type', EntityRelation::ENTITY_TYPE_ASSET)
-                                ->where('source_id', $asset->getKey());
-                        })
-                        ->orWhere(function (Builder $query) use ($asset): void {
-                            $query
-                                ->where('target_type', EntityRelation::ENTITY_TYPE_ASSET)
-                                ->where('target_id', $asset->getKey());
-                        });
-                })
-                ->delete();
-
-            $asset->delete();
-        });
+        $assetPersistenceService->delete($asset);
 
         return $responder->noContent();
     }

@@ -1,14 +1,14 @@
 <?php
 
-namespace Modules\Admin\Actions\Asset;
+namespace Modules\Admin\Services\Asset;
 
 use Illuminate\Validation\ValidationException;
 use Modules\Admin\Models\Asset\Asset;
 use Modules\Admin\Models\EntityRelation\EntityRelation;
 
-final class SyncAssetParentRelationAction
+final class AssetHierarchyService
 {
-    public function execute(Asset $asset, ?int $parentAssetId): void
+    public function synchronizeParent(Asset $asset, ?int $parentAssetId): void
     {
         if ($parentAssetId !== null) {
             $this->ensureParentIsValid($asset, $parentAssetId);

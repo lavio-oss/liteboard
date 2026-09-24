@@ -40,6 +40,49 @@ final class StoreAssetRequest extends FormRequest
         ];
     }
 
+    /**
+     * @return array{
+     *     attributes: array{
+     *         asset_type: string,
+     *         name: string,
+     *         code: string,
+     *         location?: string|null,
+     *         status?: string
+     *     },
+     *     parent_asset_id: int|null
+     * }
+     */
+    public function assetInput(): array
+    {
+        /** @var array{
+         *     asset_type: string,
+         *     name: string,
+         *     code: string,
+         *     parent_asset_id?: int|null,
+         *     location?: string|null,
+         *     status?: string
+         * } $validated
+         */
+        $validated = $this->validated();
+        $parentAssetId = $validated['parent_asset_id'] ?? null;
+        unset($validated['parent_asset_id']);
+
+        /** @var array{
+         *     asset_type: string,
+         *     name: string,
+         *     code: string,
+         *     location?: string|null,
+         *     status?: string
+         * } $attributes
+         */
+        $attributes = $validated;
+
+        return [
+            'attributes' => $attributes,
+            'parent_asset_id' => $parentAssetId,
+        ];
+    }
+
     public function withValidator(Validator $validator): void
     {
         $project = $this->route('project');

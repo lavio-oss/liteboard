@@ -18,6 +18,12 @@ final class TenantPolicy
         return $user->isPlatformAdmin() || $tenant->hasMember($user);
     }
 
+    public function viewTenantAssets(User $user, Tenant $tenant): bool
+    {
+        return $user->isPlatformAdmin()
+            || $tenant->hasRole($user, TenantRole::Owner, TenantRole::Admin);
+    }
+
     public function create(User $user): bool
     {
         return $user->isPlatformAdmin()
