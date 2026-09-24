@@ -736,7 +736,7 @@ const visibleNodes = computed(() => {
     if (firstChild !== undefined && lastChild !== undefined) {
       node.position = {
         ...node.position,
-        x: (firstChild.position.x + lastChild.position.x) / 2 - CARD_WIDTH / 2
+        x: (firstChild.position.x + lastChild.position.x) / 2
       }
     }
   }
