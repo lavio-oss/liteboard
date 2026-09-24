@@ -2,332 +2,227 @@
 
 ## 1. Product Identity
 
-**LiteBoard** is a lightweight, open-source and developer-first IoT backend for MQTT devices. It focuses on device connectivity, structured telemetry, real-time monitoring, condition-based rules, industrial equipment integration and operational visibility.
+LiteBoard is an open-source, multi-tenant IoT platform between MQTT brokers and business applications such as EAMO and MES. It focuses on real-time telemetry, device management, and distributed backend architecture.
 
-LiteBoard is not intended to become a full ThingsBoard replacement, SCADA platform, MES or ERP. It provides an understandable IoT foundation that developers can deploy quickly and connect to EAMO, MES, ERP or custom applications.
+> **LiteBoard is an open-source multi-tenant IoT platform focused on real-time telemetry, device management, and distributed backend architecture.**
 
-### Core positioning
+LiteBoard may overlap with parts of ThingsBoard, but it is not intended to reproduce the whole product. Its purpose is to build a small set of core IoT capabilities deeply and make the backend, messaging, storage, failure, and scaling behavior understandable and measurable.
 
-> **LiteBoard — A lightweight, developer-first IoT backend for MQTT devices.**
-
-### Main use case
+### Main architecture
 
 ~~~text
-ESP32 / Edge Device
-        ↓
-       MQTT
-        ↓
-     LiteBoard
-        ↓
-Telemetry Validation
-        ↓
-Telemetry Storage
-        ↓
-Rule / Condition Engine
-        ↓
-Alert / Event
-        ↓
-EAMO / MES / ERP / Custom App
+ESP32 / PLC / Edge Device
+          │ MQTT
+          ▼
+   EMQX or Mosquitto
+          │ MQTT subscription
+          ▼
+      LiteBoard
+      ├── Device Management
+      ├── Telemetry Ingestion
+      ├── Queue / Processing
+      ├── Device State
+      ├── Time-series Storage
+      ├── Rules / Alerts
+      ├── Command / RPC
+      ├── REST / WebSocket
+      └── Multi-tenancy / Observability
+          │
+          ▼
+   Dashboard / EAMO / MES
 ~~~
+
+LiteBoard uses an existing MQTT broker. It does not implement MQTT protocol handling or broker clustering itself.
 
 ### Product goals
 
-LiteBoard should help developers:
+LiteBoard should let a developer:
 
-- Register, authenticate and manage equipment endpoints.
-- Define explicit telemetry schemas.
-- Receive, validate and store MQTT telemetry.
-- Monitor equipment state in real time.
-- Inspect the lifecycle of each MQTT message.
-- Define condition-based rules and generate alerts.
-- Send events through webhooks.
-- Send commands back to equipment endpoints.
-- Deploy the complete platform with Docker.
+- Create tenant-scoped projects, devices, credentials, profiles, and telemetry schemas.
+- Connect devices through MQTT and inspect an authenticated, validated ingestion path.
+- Query stored time-series data through REST and receive authorized real-time events.
+- Define bounded rules, manage alerts, and send commands with acknowledgements.
+- Operate and diagnose the system under duplicates, disconnects, slow dependencies, restarts, and growing load.
+- Integrate downstream applications through stable APIs and versioned events.
 
-The project is also a signature backend engineering project demonstrating Industrial IoT, real-time systems, networking, databases, event-driven processing and observability.
+The project is also a system engineering lab. A feature is not complete merely because its happy path works: each milestone must expose its failure behavior, measurements, and scaling limit.
 
 ---
 
 ## 2. Scope and Non-Goals
 
-### Initial scope
+### Core modules
 
-~~~text
-MQTT
-Equipment
-Projects
-Equipment Profiles
-Telemetry Schemas
-Telemetry
-Rules
-Alerts
-Webhooks
-Commands
-Message Inspection
-Observability
-APIs
-~~~
+- Multi-tenancy, projects, roles, and tenant-scoped authorization.
+- Device management, credential lifecycle, device profiles, and Equipment association.
+- MQTT telemetry ingestion, envelope validation, normalization, and device state.
+- Time-series storage, retention, query, and aggregation.
+- Rule evaluation, alert lifecycle, and event delivery.
+- Command / RPC with acknowledgement, timeout, retry, and audit history.
+- REST and tenant-authorized WebSocket APIs.
+- Logs, metrics, tracing, simulator, load tests, and failure testing.
 
-### Non-goals for the first versions
+### Non-goals for the initial releases
 
-LiteBoard should not initially become:
+LiteBoard is not initially a:
 
-- A complete SCADA, MES or ERP system.
-- A large dashboard builder or low-code workflow platform.
-- A platform that runs arbitrary user Python or JavaScript code.
-- A multi-protocol IoT platform from day one.
-- A Kubernetes, Kafka or multi-region deployment exercise.
-- A custom MQTT broker, mobile app or advanced ML platform.
+- Custom MQTT broker or broker-clustering implementation.
+- Full ThingsBoard replacement or general-purpose dashboard builder.
+- SCADA, MES, ERP, maintenance-management, or arbitrary workflow system.
+- Multi-protocol gateway platform; MQTT is the first device protocol.
+- Arbitrary user-code execution platform or advanced ML / predictive-maintenance system.
+- Kubernetes, multi-region, or massive-scale benchmark exercise before the single-node path is correct.
 
-These features are deferred until real requirements justify them.
+EMQX and Mosquitto provide broker capabilities. LiteBoard owns application-level devices, telemetry contracts, tenant isolation, state, rules, APIs, and commands.
 
 ---
 
 ## 3. Engineering Principles
 
-### Simple to start
+### Small vertical slices
 
-A developer should be able to run:
+Build one end-to-end path at a time. Start with an authenticated device publishing one valid message, then add storage, query, and visibility before broadening the feature set.
 
-~~~bash
-docker compose up -d
-~~~
+### Failure-first engineering
 
-and connect an ESP32 or simulator within minutes.
+For every milestone, ask where it breaks under concurrency, duplicate delivery, out-of-order data, retries, queue saturation, broker or database interruption, worker restart, and horizontal scale. Record the observed result and the next engineering action.
 
-### Observable by design
+### Tenant isolation by construction
 
-Every telemetry message should have a traceable processing path:
-
-~~~text
-MQTT Received
-     ↓
-Authentication
-     ↓
-Payload Decode
-     ↓
-Schema Validation
-     ↓
-Normalization
-     ↓
-Rule Evaluation
-     ↓
-Telemetry Storage
-     ↓
-Realtime Broadcast
-~~~
+Tenant and project ownership must be preserved in authorization, broker topic permissions, validation, queries, cache keys, queue jobs, events, WebSocket subscriptions, commands, and tests. A client-supplied identifier is never authority by itself.
 
 ### Schema-first and API-first
 
-Telemetry must have an explicit, versioned structure before it enters the platform.
+Device messages use explicit versioned envelopes and schema definitions. REST, MQTT, and WebSocket contracts are documented so a dashboard or external application can consume LiteBoard without depending on internal service implementation.
 
-~~~yaml
-MotorTelemetry:
-  temperature:
-    type: float
-    unit: celsius
-    min: -20
-    max: 150
-  vibration:
-    type: float
-    unit: mm/s
-  rpm:
-    type: integer
-    min: 0
-~~~
+### Measure before optimizing
 
-Invalid data is rejected or recorded with a structured reason. The frontend consumes the same REST and WebSocket APIs available to external applications.
+Batching, indexes, retention, Redis, time-series extensions, partitioning, extra workers, and broker changes must respond to measured bottlenecks. Benchmark output records the exact commit, configuration, payload, hardware, and workload; targets are not presented as achieved results.
 
-### Measurable engineering
+### Learning outcomes
 
-Every major feature should have:
-
-~~~text
-Requirement
-Design
-Implementation
-Test
-Metrics
-~~~
-
-Use batching, indexing, caching, partitioning, backpressure and horizontal workers in response to measured bottlenecks. Avoid premature complexity.
+Milestones should deliberately develop backend architecture, PostgreSQL/time-series design, Redis and messaging, event-driven processing, distributed-systems failure handling, Linux, Docker, networking, monitoring, and performance testing.
 
 ---
 
 ## 4. Technical Baseline
 
-LiteBoard uses a Control Plane and a Data Plane so equipment management and high-frequency telemetry processing can evolve independently.
+LiteBoard separates control-plane changes from the high-throughput data path.
 
 ### Control Plane
 
-- PHP 8.4
-- Laravel 13
-- REST API
-- Authentication and RBAC
-- Projects, tenants and industrial hierarchy
-- Equipment endpoints, profiles and schemas
-- Rules, alerts, webhooks and commands
-- Laravel Events, Policies, Scheduler and Queue integration
+- Laravel REST API for authentication, tenants, projects, Devices, profiles, schemas, rules, alerts, and commands.
+- Policies and route-bound ownership checks for all tenant-owned resources.
+- PostgreSQL for control-plane records and initial telemetry storage.
+- API and event contracts consumed by the web application and external systems.
 
 ### Data Plane
 
-- Python 3.12+
-- FastAPI for data-plane health and service endpoints
-- Paho MQTT or gmqtt
-- asyncio
-- Pydantic
-- MQTT consumption, validation, normalization and ingestion
-- Buffering, batching and processing metrics
+- Python / FastAPI service for health and readiness endpoints.
+- Async MQTT client consuming from the configured external broker.
+- Authentication context, topic authorization, decoding, schema validation, normalization, idempotency, buffering, and telemetry ingestion.
+- Explicit processing outcomes and metrics; do not treat successful subscription or log output as successful ingestion.
 
-### Supporting stack
+### Supporting services and broker profiles
 
-- EMQX as the primary MQTT broker; Mosquitto is suitable for local development.
-- Vue 3, TypeScript, Pinia, Ant Design Vue and ECharts.
-- PostgreSQL for application data and initial telemetry storage.
-- TimescaleDB when time-series benchmarks justify it.
-- Redis for equipment state, queues and pub/sub.
-- Docker Compose, Nginx and Linux VPS.
-- Prometheus, Grafana, structured logs and optional OpenTelemetry.
-- ESP32 reference device and Python device simulator.
-
-LiteBoard connects to the MQTT broker and handles application-level IoT logic; it does not implement a custom broker.
+- Mosquitto is the default local-development broker.
+- EMQX is an alternative broker profile for integration and scale experiments. Verify the exact release license and deployment terms before recommending it for a distributable production setup.
+- Redis supports cache, transient device state, and asynchronous work where justified; durable business events must not depend on an unexamined cache-only queue.
+- PostgreSQL is the starting store. Add TimescaleDB, partitioning, or downsampling only after workload measurements justify them.
+- Docker Compose provides local services. Prometheus and Grafana support measured observability as the project matures.
 
 ---
 
 ## 5. High-Level Architecture
 
 ~~~text
-                         ┌─────────────────────────┐
-                         │        Vue 3 UI         │
-                         │   LiteBoard Dashboard   │
-                         └────────────┬────────────┘
-                                      │ REST / WebSocket
-                                      ▼
-                         ┌─────────────────────────┐
-                         │       Laravel API       │
-                         │      Control Plane      │
-                         │ Tenants / Projects     │
-                         │ Equipment / Hierarchy  │
-                         │ Schemas / Rules         │
-                         │ Alerts / Commands       │
-                         └────────────┬────────────┘
-                                      │
-                         PostgreSQL / Redis / Events
-                                      │
-ESP32 / Simulator ── MQTT ──► EMQX / Mosquitto
-                                      │
-                                      ▼
-                         ┌─────────────────────────┐
-                         │ Python MQTT/Data Plane   │
-                         │ Auth / Decode            │
-                         │ Schema Validation        │
-                         │ Normalization             │
-                         │ Buffer / Batch Insert    │
-                         └────────────┬────────────┘
-                                      │
-                           PostgreSQL / TimescaleDB
-                                      │
-                                      ▼
-                              Rule / State Events
-                                      │
-                              Redis / WebSocket
+                    ┌──────────────────────────┐
+                    │ Web UI / EAMO / MES      │
+                    └────────────┬─────────────┘
+                         REST / WebSocket / events
+                                 │
+                    ┌────────────▼─────────────┐
+                    │ Laravel Control Plane    │
+                    │ Tenant / Project / Device│
+                    │ Profiles / Schemas       │
+                    │ Rules / Alerts / Commands│
+                    └──────┬───────────┬───────┘
+                           │           │
+                    PostgreSQL        Redis
+                    control +         cache / queue /
+                    telemetry         transient state
+                           ▲           ▲
+                           │ ingest    │ async processing
+                    ┌──────┴───────────┴───────┐
+                    │ Python MQTT Data Plane   │
+                    │ Decode / Validate /       │
+                    │ Normalize / Buffer       │
+                    └────────────▲─────────────┘
+                                 │ MQTT subscribe
+                    ┌────────────┴─────────────┐
+                    │ EMQX or Mosquitto        │
+                    │ External MQTT broker    │
+                    └────────────▲─────────────┘
+                                 │ MQTT publish
+                    ┌────────────┴─────────────┐
+                    │ ESP32 / PLC / Edge Device│
+                    └──────────────────────────┘
 ~~~
 
-Message contract:
+### Message processing path
 
 ~~~text
-Equipment Endpoint
-  → MQTT Broker
-  → Authentication
-  → JSON Decode
-  → Schema Lookup
-  → Type and Range Validation
-  → Normalization
-  → Buffer / Queue
-  → Database
-  ├→ Rule Engine
-  ├→ Alert / Webhook Events
-  └→ WebSocket Broadcast
+MQTT received
+  → broker-authenticated connection and topic permission
+  → topic / Device / project ownership check
+  → decode and envelope validation
+  → schema validation and normalization
+  → idempotency check and bounded buffering
+  → telemetry persistence
+  → device state / rules / alerts
+  → REST query and authorized WebSocket delivery
 ~~~
 
----
+Each stage must have a measurable outcome and a defined failure policy. Business application delivery is retryable and idempotent; it must not block MQTT receipt indefinitely.
 
 ## 6. Domain Model
 
-LiteBoard is a Control Plane intermediary for IIoT resources. The industrial
-hierarchy is part of the core database model, even though this project does not
-implement a complete SCADA/MES platform.
+LiteBoard is a multi-tenant Control Plane and Data Plane platform. Tenant is the isolation boundary; Project is the authorization and ownership boundary for Devices and Assets.
 
-### 6.0 Backend implementation status — 2026-09-23
+### 6.0 Current implementation status — 2026-09-25
 
-The tenant-owned master-data foundation is implemented in the Laravel backend
-as the standalone `Masterdata` module. `Tenant` remains in `Core`; `Project` is
-a workspace and the authorization boundary for resources below the tenant.
-The current implemented subtree is:
+Implemented in Laravel:
 
-```text
-Tenant
-└── Project workspace
-    └── Asset graph
-        ├── Site
-        ├── Factory
-        ├── Area
-        ├── Production Line
-        ├── Station
-        └── Equipment
-```
+- Tenant and project management with membership and authorization boundaries.
+- Project-owned Asset hierarchy with Site, Factory, Area, Production Line, Station, and Equipment asset types.
+- Asset hierarchy stored through the project-scoped contains relation.
 
-All six entries are values of `AssetType` and are stored in the `assets` table.
-`Equipment` is not a separate table. The asset hierarchy uses the single
-`contains` relation in `entity_relations`, with forward-only migrations,
-scoped nested CRUD routes, request validation, resources, policies and feature
-tests.
+Not implemented yet:
 
-`Device`, MQTT identity, credentials, firmware, telemetry and commands are
-later phases. They are not part of this master-data implementation.
+- Device registry and credential lifecycle.
+- Device-to-Equipment association.
+- MQTT authentication and topic authorization.
+- Telemetry schemas, ingestion pipeline, telemetry storage/query, device state, rules, alerts, commands, WebSocket delivery, and data-plane tenant isolation.
 
-~~~text
-Tenant
- └── Project workspace
-      └── Asset graph (contains)
-           ├── Site
-           ├── Factory
-           ├── Area
-           ├── Production Line
-           ├── Station
-           └── Equipment
-~~~
+The MQTT service is a smoke skeleton: it connects to Mosquitto, subscribes, and logs message topic and payload size. Local Mosquitto currently allows anonymous access. These facts are starting-state notes, not readiness claims.
 
-Core entities:
+### Core entity distinctions
 
-- Tenant: isolation boundary for users, projects and all resources below it.
-- Project: logical workspace belonging to exactly one tenant.
-- Asset: a tenant-owned master-data node belonging to exactly one project.
-- AssetType: `site`, `factory`, `area`, `production_line`, `station` or
-  `equipment`.
-- Equipment: an `AssetType` value; it has no separate table or device identity
-  in this phase.
-- Telemetry Schema: field types, units, ranges, required state, descriptions and version.
-- Telemetry: normalized time-series data with message ID and processing status.
-- Rule: condition configuration evaluated against validated telemetry.
-- Alert: actionable event created by a rule or equipment-state condition.
-- Command: equipment message with status, timeout and acknowledgement history.
+- Tenant: isolation boundary for users, projects, and resources below them.
+- Project: workspace belonging to exactly one tenant.
+- Asset: tenant-owned master-data node in one project.
+- Equipment: an Asset type representing an operational machine or component.
+- Device: a technical identity that authenticates to MQTT and sends telemetry or receives commands. A Device belongs to one project and may be associated with an Equipment Asset.
+- Device Profile: shared protocol/schema defaults assigned to Devices.
+- Telemetry Schema: versioned field definitions, types, units, ranges, and required state.
+- Telemetry: normalized, time-stamped Device measurements with message identity and processing status.
+- Rule / Alert / Command: application-level resources scoped through their Device, Equipment, Project, and Tenant.
 
-Suggested fields:
-
-~~~text
-Tenant: id, name, code, status
-Project: id, tenant_id, name, description, status, timestamps
-Asset: id, project_id, asset_type, name, code, location, status, timestamps
-EntityRelation: project_id, source_type, source_id, target_type, target_id,
-                relation_type, timestamps
-~~~
+A Device credential must never be represented by an Equipment record. Authorization must resolve the authenticated Device to its project and permitted topics before trusting a topic or payload identifier.
 
 ### 6.1 Asset hierarchy database contract
 
-`assets.project_id` is required and asset codes are unique within
-`project_id + asset_type + code`. An asset may be a root or have one parent.
-The source of truth for hierarchy is `entity_relations`:
+The assets table requires project_id, and asset codes are unique within project_id + asset_type + code. An asset may be a root or have one parent. The source of truth for hierarchy is entity_relations:
 
 ~~~text
 entity_relations
@@ -339,89 +234,45 @@ entity_relations
   relation_type = contains
 ~~~
 
-This phase accepts only `asset contains asset`. A unique constraint on
-`project_id + target_type + target_id + relation_type` allows at most one
-incoming `contains` relation per asset. Source, target and project indexes
-support hierarchy traversal and scoped list queries.
-
-`parent_asset_id` remains in the request and resource contract as a derived
-projection for the existing frontend UX. It is not a database column and is
-never a second source of truth.
-
-The request/domain boundary rejects a parent from another project,
-self-parenting and cycles. Asset create, update and parent changes run in a
-transaction. Deleting an asset removes its relations, keeps its children and
-makes those children roots. Tenant and project scopes are resolved from route
-binding; request bodies do not provide `tenant_id` or `project_id`.
-
-The asset child relation is derived from the incoming `contains` relation:
-
-~~~text
-parent contains child
-child.parent_asset_id = parent.id (API projection only)
-~~~
-
-The relation table is the only hierarchy source of truth. `parent_asset_id` is
-an API/UI projection only; do not add it back as a storage column. This phase
-supports only the `contains` relation and requires the source and target to be
-assets in the same project.
-
-The application rejects cycles, self-parenting and a parent from a different
-project at the request/domain boundary.
+This phase accepts only asset contains asset. A unique constraint on project_id + target_type + target_id + relation_type allows at most one incoming contains relation per asset. Source, target, and project indexes support hierarchy traversal and scoped list queries.
 
 ### 6.2 Recommended relational shape
 
+Keep control-plane identity and high-volume telemetry concerns distinct. Recommended ownership:
+
 ~~~text
-tenants
-  id PK
-
-projects
-  id PK
-  tenant_id FK NOT NULL → tenants.id
-
-assets
-  id PK
-  project_id FK NOT NULL → projects.id
-  asset_type ENUM-like value: site | factory | area | production_line |
-              station | equipment
-  name, code, location, status, timestamps
-
-entity_relations
-  id PK
-  project_id FK NOT NULL → projects.id
-  source_type, source_id
-  target_type, target_id
-  relation_type = contains
+Tenant
+└── Project
+    ├── Asset graph
+    │   └── Equipment Asset
+    └── Device registry
+        ├── credential / status / last_seen_at
+        └── optional association to Equipment Asset
 ~~~
 
-Minimum indexes:
-
-- `projects(tenant_id)`
-- `assets(project_id)`
-- `assets(project_id, asset_type, code)`
-- `entity_relations(project_id, source_type, source_id, relation_type)`
-- `entity_relations(project_id, target_type, target_id, relation_type)`
-
-All list queries must start from the authorized tenant/project scope. The
-relation constraint is the hierarchy integrity boundary; the Policy remains
-the authorization boundary.
-
----
+Telemetry records and processing history must resolve to a project through the Device. Application queries must begin from authorized tenant/project scope. Never assume that a globally unique ID by itself grants access.
 
 ## 7. MQTT Protocol
 
-Topics are namespaced by project and equipment. Equipment tokens must never be logged and should be stored hashed where possible.
+The broker authenticates the MQTT connection or delegates authentication to the configured LiteBoard integration. LiteBoard authorizes each Device against its project and allowed topic namespace. A topic or payload ID alone is not proof of ownership.
 
-### Telemetry
+### Topic namespace
 
 ~~~text
-liteboard/{project_id}/equipments/{equipment_id}/telemetry
+liteboard/{project_id}/devices/{device_id}/telemetry
+liteboard/{project_id}/devices/{device_id}/heartbeat
+liteboard/{project_id}/devices/{device_id}/commands
+liteboard/{project_id}/devices/{device_id}/commands/ack
 ~~~
+
+Use project and Device IDs as routing context, but derive authority from the authenticated credential and server-side Device record. Store credentials safely, support revocation/rotation, and never log tokens.
+
+### Telemetry envelope
 
 ~~~json
 {
   "message_id": "01JXYZ",
-  "ts": 1789491600000,
+  "occurred_at": "2026-09-25T10:00:00Z",
   "values": {
     "temperature": 64.2,
     "vibration": 1.72,
@@ -431,27 +282,20 @@ liteboard/{project_id}/equipments/{equipment_id}/telemetry
 }
 ~~~
 
-### Heartbeat
+The Data Plane adds received_at and records processing status. The message ID is the idempotency key for QoS redelivery. Device schema version and data quality metadata are introduced with the versioned schema contract.
 
-~~~text
-liteboard/{project_id}/equipments/{equipment_id}/heartbeat
-~~~
+### Heartbeat
 
 ~~~json
 {
-  "ts": 1789491600000,
+  "occurred_at": "2026-09-25T10:00:00Z",
   "firmware": "1.0.3"
 }
 ~~~
 
-Heartbeat updates last_seen_at and equipment state: ONLINE, OFFLINE or UNSTABLE.
+Heartbeat updates last_seen_at and Device state: ONLINE, OFFLINE, or UNSTABLE. State transitions use server-side timeouts and emit tenant-scoped events.
 
 ### Commands and acknowledgement
-
-~~~text
-liteboard/{project_id}/equipments/{equipment_id}/commands
-liteboard/{project_id}/equipments/{equipment_id}/commands/ack
-~~~
 
 ~~~json
 {
@@ -466,596 +310,357 @@ liteboard/{project_id}/equipments/{equipment_id}/commands/ack
   "command_id": "cmd-123",
   "status": "SUCCESS",
   "result": {},
-  "executed_at": 1789491600000
+  "executed_at": "2026-09-25T10:00:00Z"
 }
 ~~~
 
-Protocol requirements:
+Command delivery is at-least-once unless a stronger guarantee is proven. Device handling must be idempotent by command_id; LiteBoard records pending, sent, acknowledged, failed, and timed-out states.
 
-- Validate equipment identity, topic ownership, timestamp, JSON and schema.
-- Preserve message_id for tracing and idempotency.
-- Define MQTT QoS and retained-message behavior.
-- Handle reconnects and duplicate messages safely.
-- Never log credentials or private data.
+### Protocol invariants
 
----
+- Validate connection identity, topic ownership, envelope, timestamp, payload size, and schema.
+- Keep occurred_at (device event time) separate from received_at (server arrival time).
+- Handle duplicate, late, out-of-order, malformed, and schema-invalid messages with explicit outcomes.
+- Define QoS and retained-message behavior for telemetry, heartbeat, commands, and acknowledgements.
+- Redact credentials and sensitive fields from logs, traces, message inspection, and error responses.
+- Carry tenant/project context through persistence, queues, rules, WebSocket events, and downstream delivery.
 
 ## 8. Technical Development Phases
 
-### Phase 0 — Foundation and local deployment
+Every phase is a vertical slice with an observable happy path, at least one failure or load scenario, tenant-isolation coverage where applicable, and recorded evidence. Do not advance by counting features alone. The gate is the measured result and a documented decision about the next bottleneck.
 
-Create a reproducible monorepo:
+### Phase 0 — Establish the real baseline
 
-~~~text
-liteboard/
-├── backend/              # Laravel Control Plane
-├── telemetry-service/    # Python MQTT/Data Plane
-├── frontend/             # Vue 3
-├── simulator/            # Python device simulator
-├── infrastructure/       # Docker, Nginx, monitoring
-├── docs/
-└── docker-compose.yml
-~~~
+- Reconcile the repository map, Docker Compose services, environment examples, service health checks, and actual application paths.
+- Keep Mosquitto as the local broker. Add an EMQX profile only for broker compatibility and scale exercises; verify version and license before production recommendations.
+- Record the working local workflow and known blockers. Do not call the platform end-to-end until simulator data is persisted and queryable.
 
-Features:
+Gate: reproducible service startup and health checks; document any mismatch between Compose and repository layout.
 
-- Laravel, FastAPI telemetry service and Vue foundations.
-- PostgreSQL migrations and Redis connection.
-- EMQX/Mosquitto, Docker network and health checks.
-- .env.example, structured logging and exception handling.
-- GET /health for each application service.
+### Phase 1 — Tenant-scoped Device Management
 
-Deliverable:
+- Keep Tenant → Project → Asset hierarchy as the existing master-data foundation.
+- Add Device identity, profile, credential issue/revocation, status, and optional association to an Equipment Asset.
+- Provide REST operations nested under the authorized tenant/project boundary. Enforce tenant/project ownership on Device list, detail, credential, and association operations.
+
+Planned resource shape:
 
 ~~~text
-PostgreSQL + Redis + EMQX + Laravel API + Python service + Vue frontend
+GET|POST /api/tenants/{tenant}/projects/{project}/devices
+GET|PATCH|DELETE /api/tenants/{tenant}/projects/{project}/devices/{device}
 ~~~
+- Define broker authentication and per-Device topic permissions before accepting production-like device traffic.
 
-runs with docker compose up -d.
+Failure exercise: guessed Device IDs, wrong-project topic, revoked credential, credential rotation, and cross-tenant API access.
 
-### Phase 1 — Identity, hierarchy and equipment
+Gate: an authorized Device can be created and assigned a topic scope; unauthorized identities cannot publish or access Device data. Record auth failures and connection state.
 
-- Login, logout, token refresh and current user.
-- Tenant management foundation plus the implemented Project workspace and
-  Asset Masterdata backend.
-- Asset CRUD for Site, Factory, Area, Production Line, Station and Equipment.
-- One `contains` relation with derived `parent_asset_id` API projection.
-- Device, MQTT, credentials, firmware, telemetry and command management remain
-  future phases.
-- Roles: Admin, Engineer, Operator and Viewer.
-- Permissions for equipment, schema, rule, alert and command actions.
-
-Example APIs:
+### Phase 2 — Secure MQTT ingestion L0
 
 ~~~text
-GET|POST /api/tenants/{tenant}/projects
-GET|PATCH|DELETE /api/tenants/{tenant}/projects/{project}
-GET|POST /api/tenants/{tenant}/projects/{project}/assets
-GET|PATCH|DELETE /api/tenants/{tenant}/projects/{project}/assets/{asset}
+Simulator → MQTT broker → Python consumer → authenticate / authorize
+          → decode / envelope validation → idempotent durable ingest → PostgreSQL
 ~~~
 
-### Phase 2 — MQTT connectivity and ingestion
+- Subscribe to Device topic namespaces and bind topic identity to the authenticated Device.
+- Require message_id, occurred_at, and values; add received_at and a traceable processing result.
+- Define payload-size limits, QoS and retained-message behavior. Redact credentials and avoid logging unrestricted payloads.
+- Persist accepted L0 messages through the first durable PostgreSQL path so sent/accepted/persisted counts can be reconciled. Phase 3 expands this into versioned schemas, queryable time-series records, and retention behavior.
+- Handle reconnect and QoS 1 redelivery with application-level idempotency.
 
-~~~text
-ESP32 → MQTT publish → Broker → Python consumer
-      → Authentication → Decode → Processing
-~~~
+Failure exercise: malformed JSON, wrong tenant or Device, duplicate message_id, revoked credential, broker restart, and consumer reconnect.
 
-Implement telemetry subscription, equipment authentication, topic authorization, payload decoding, normalization, heartbeat handling, reconnects and online/offline state.
+L0 gate: 10 simulated devices at 1 message/second each for 5 minutes; reconcile sent, accepted, rejected, persisted, and duplicate messages; bounded memory/queue; no unexplained loss; record end-to-end p50/p95/p99 and recovery behavior. This is a development gate, not a production capacity claim.
 
-### Phase 3 — Schema-first validation
+### Phase 3 — Schema validation and time-series persistence
 
-Implement create/update/version schema APIs, integer/float/string/boolean fields, units, required fields, ranges, schema lookup by profile, validation history and structured errors.
+- Add versioned Device/Profile telemetry schemas and structured rejection reasons.
+- Normalize accepted values and persist measurements with Device, project, message identity, event time, receive time, and processing status.
+- Add tenant-authorized query API with time range, metric keys, pagination/limits, and basic aggregation.
+  Planned route: GET /api/tenants/{tenant}/projects/{project}/devices/{device}/telemetry.
+- Begin with PostgreSQL. Add TimescaleDB, partitioning, downsampling, and retention automation only when measured workload supports them.
 
-~~~text
-MQTT Payload
-    ↓
-JSON Decode
-    ↓
-Schema Lookup
-    ↓
-Type Validation
-    ↓
-Range Validation
-    ↓
-Store / Reject with Reason
-~~~
+Failure exercise: invalid type/range, schema version mismatch, duplicate batch, late/out-of-order timestamps, PostgreSQL slowdown/outage, and process restart during buffered writes.
 
-Example error:
+Gate: accepted data reconciles with the simulator; duplicates do not create duplicate logical samples; rejected input has a reason; batch size, flush interval, write latency, queue depth, and recovery are measured.
 
-~~~json
-{
-  "field": "temperature",
-  "expected": "float",
-  "received": "HOT",
-  "reason": "invalid_type"
-}
-~~~
+### Phase 4 — Device state, realtime API, and message trace
 
-### Phase 4 — Telemetry storage and query
+- Compute ONLINE/OFFLINE/UNSTABLE from heartbeat and server-side timeout policy.
+- Expose authorized REST reads and WebSocket events for telemetry, state, and later alerts.
+  Scope WebSocket subscriptions under the authenticated tenant/project and Device; a suggested path is /ws/tenants/{tenant}/projects/{project}/devices/{device}.
+- Implement a bounded Message Inspector trace across receive, auth, decode, validation, persistence, rule evaluation, and broadcast.
+- Redact credentials and sensitive values; never let a client select a tenant by an untrusted header or topic alone.
 
-Initial record:
+Failure exercise: reconnect churn, stale heartbeat, WebSocket reconnect, slow subscriber, Redis interruption, and attempts to subscribe across tenant/project scope.
 
-~~~text
-telemetry:
-  id, message_id, equipment_id, metric_key, timestamp,
-  numeric_value, string_value, boolean_value, processing_status
-~~~
+Gate: trace correlation from message_id to stored telemetry and event delivery; bounded subscriber/queue behavior; tenant isolation verified for REST and WebSocket.
 
-Pipeline:
+### Phase 5 — Rules, alerts, and outbound events
 
-~~~text
-MQTT → Validation → Normalization → Memory Buffer
-     → Batch Insert → PostgreSQL / TimescaleDB
-~~~
+- Implement a constrained configuration-based rule language; do not execute arbitrary tenant code.
+- Start with scalar comparisons and bounded AND/OR conditions, then duration/debounce, recovery, and trigger history.
+- Define alert lifecycle and retryable outbound webhooks/events with idempotency and delivery history.
+- Keep rule ownership and evaluation scoped to the Device/Profile's project.
 
-Initial targets:
+Failure exercise: duplicate evaluation, out-of-order samples, rule update during processing, webhook timeout/5xx, retry exhaustion, and tenant-crossing references.
 
-~~~text
-batch_size = 100
-flush_interval = 500ms
-~~~
+Gate: one deterministic threshold-to-alert-to-webhook scenario has auditable history, bounded retries, duplicate protection, and latency/error metrics.
 
-Implement query API GET /api/equipments/{equipment}/telemetry with keys, from, to, limit and aggregation filters. Support avg, min, max and count over 1m, 5m, 15m, 1h and 1d intervals.
+### Phase 6 — Commands and RPC
 
-Indexes:
+- Dispatch authorized commands through the broker to a Device-specific command topic.
+  Planned API: POST /api/tenants/{tenant}/projects/{project}/devices/{device}/commands.
+- Track command_id through pending, sent, acknowledged, failed, and timed-out states.
+- Define timeout, retry limits, audit history, and safe handling of late or duplicate acknowledgements.
+- Command permissions are checked for the acting user and target Device's tenant/project.
 
-~~~text
-(equipment_id, timestamp)
-(equipment_id, metric_key, timestamp)
-~~~
+Failure exercise: offline Device, lost ACK, duplicate command delivery, duplicate/late ACK, worker restart, and unauthorized command attempt.
 
-Initial retention proposal: raw telemetry 30 days, minute aggregates 6 months and hourly aggregates 2 years. Adjust after storage benchmarks. Add TimescaleDB, partitioning and downsampling only when justified.
+Gate: simulator executes a command idempotently and LiteBoard reaches a terminal status without falsely reporting success.
 
-### Phase 5 — Realtime monitoring and Live Message Inspector
+### Phase 7 — Queues, backpressure, and horizontal scaling
 
-Implement WebSocket events:
+- Introduce asynchronous queues only where the measured L0/L1 path needs them.
+- Specify bounded buffering, admission/backpressure behavior, retry policy, dead-letter visibility, idempotency boundaries, and graceful worker shutdown.
+- Run multiple Data Plane workers and verify consumer coordination, duplicate delivery, ordering guarantees, and database connection limits.
+- Distinguish rebuildable cache/state from durable telemetry and business-event delivery.
 
-~~~text
-equipment.telemetry
-equipment.status
-alert.created
-alert.updated
-~~~
+Failure exercise: queue saturation, Redis outage, worker kill during processing, PostgreSQL slow writes, and concurrent workers processing the same message.
 
-Example endpoint:
+Gate: no unbounded memory growth; recovery time and accepted/lost/duplicated counts are measured; no cross-tenant work leakage; throughput and p95/p99 are reported for the tested topology.
 
-~~~text
-/ws/equipments/{id}/telemetry
-~~~
+### Phase 8 — EAMO/MES integration
 
-Live Message Inspector is a signature LiteBoard feature. It shows message ID, equipment, topic, safe payload, each processing stage, timing, final status and error reason.
+- Publish a versioned event contract for downstream applications and a receiver example for EAMO/MES.
+- Include source Device, optional Equipment Asset, tenant/project context, condition or alert identity, severity, event time, evidence reference, and idempotency key.
+- Use an outbox/retryable delivery path for important events; downstream applications own their business workflow and maintenance records.
+- Keep LiteBoard APIs usable by other clients; do not make EAMO the only supported consumer.
 
-~~~text
-MQTT received        ✓
-Authentication       ✓
-JSON decoding        ✓
-Schema validation    ✓
-Rule evaluation      ✓
-Database storage     ✓
-WebSocket broadcast  ✓
-~~~
+Failure exercise: receiver timeout, duplicate delivery, schema/version mismatch, credential rotation, and downstream outage followed by recovery.
 
-Redact tokens, credentials and sensitive payload fields.
+Gate: an end-to-end event is delivered once logically despite retries, is traceable to telemetry/rule origin, and cannot cross tenant boundaries.
 
-### Phase 6 — Rule and condition engine
+### Phase 9 — Progressive benchmark and release hardening
 
-Rules are configuration, not arbitrary user code.
+- Run L0 and L1 as routine gates. Run larger levels only after the prior level is stable and the environment can support the experiment.
+- Profile CPU, memory, broker connections, queue depth, database writes/indexes, network, retries, and end-to-end latency.
+- Document bottlenecks and choose one measured optimization per iteration.
+- Add retention/backup/restore, TLS, credential rotation, rate limits, dependency/image checks, deployment and incident procedures before a production-ready claim.
 
-~~~json
-{
-  "name": "High Temperature",
-  "conditions": [
-    {"metric": "temperature", "operator": ">", "value": 80}
-  ],
-  "duration_seconds": 30,
-  "severity": "WARNING"
-}
-~~~
+Failure exercise: soak, burst, broker restart, PostgreSQL/Redis failure, disk pressure, connection churn, and full restore.
 
-V1 operators: >, >=, <, <=, ==, !=, AND and OR.
-
-Implement rule CRUD, enable/disable, profile/equipment assignment, multi-condition evaluation, duration/debounce, trigger history and actions CREATE_ALERT, SEND_NOTIFICATION, PUBLISH_MQTT and WEBHOOK.
-
-### Phase 7 — Alerts, events and webhooks
-
-Alert levels: INFO, WARNING, MAJOR and CRITICAL.
-
-Lifecycle:
-
-~~~text
-OPEN → ACKNOWLEDGED → RESOLVED
-~~~
-
-Implement creation, active/history views, acknowledge, resolve, automatic recovery where supported, realtime notifications and outbound webhooks with retries and failure history.
-
-Target integrations: EAMO, MES, ERP, notification services and custom backends.
-
-### Phase 8 — Remote device commands / RPC
-
-Commands:
-
-~~~text
-RESTART
-SET_SAMPLING_RATE
-SET_THRESHOLD
-REQUEST_STATUS
-RELAY_ON
-RELAY_OFF
-~~~
-
-Lifecycle:
-
-~~~text
-PENDING → SENT → ACKNOWLEDGED
-                    └── FAILED / TIMEOUT
-~~~
-
-Require unique command_id, idempotent device handling, MQTT publisher, ACK/result handler, configurable 10-second timeout, maximum three retries, audit trail and permission checks.
-
-### Phase 9 — Industrial profiles and EAMO demo
-
-Profiles: Motor, Pump, Compressor, Boiler, Conveyor and Gateway.
-
-Demo:
-
-~~~text
-ESP32 / Simulator → Sensors → MQTT → LiteBoard
-→ Schema Validation → Storage → Rule Engine
-→ Abnormal Condition → Webhook → EAMO
-→ Maintenance Alert / Work Order
-~~~
-
-### Phase 10 — Queue and asynchronous processing
-
-Use Redis queues:
-
-~~~text
-telemetry, rules, notifications, commands, webhooks
-~~~
-
-Workers:
-
-~~~text
-TelemetryWorker, RuleWorker, NotificationWorker,
-CommandWorker, WebhookWorker
-~~~
-
-Add exponential backoff, dead-letter queues, idempotency, duplicate handling, queue metrics and backpressure. Expand queues after the synchronous end-to-end ingestion path works.
-
-### Phase 11 — Device simulator and load tests
-
-~~~bash
-python simulator.py --devices 10 --interval 1000
-python simulator.py --devices 1000 --interval 1000
-~~~
-
-Simulate temperature, vibration, current, voltage, rpm, pressure, packet loss, disconnects, invalid telemetry and reconnects. Test 100, 500, 1,000 and, when resources allow, 5,000 devices.
-
-### Phase 12 — Observability, performance and production readiness
-
-Prometheus metrics:
-
-~~~text
-mqtt_messages_total
-mqtt_messages_per_second
-telemetry_processing_latency
-telemetry_insert_latency
-rule_execution_latency
-websocket_broadcast_latency
-queue_depth
-active_devices
-failed_messages
-~~~
-
-Benchmark messages/sec, connected devices, p50/p95/p99 latency, CPU, RAM and database write latency.
-
-Reliability tests cover Redis outage, slow PostgreSQL, broker disconnect, offline devices, worker crash, duplicate telemetry and lost command ACKs. Anomaly detection, machine health score and fault probability come after this phase.
-
----
+Gate: report exact environment and commit, workload, reconciliation, latency percentiles, resource use, failure behavior, recovery time, and remaining limits. High-load experiments are capacity discovery, not an MVP promise.
 
 ## 9. Deployment Plan
 
 ### Local development with Docker Compose
 
-Required services:
+Local profile:
 
 ~~~text
-postgres        PostgreSQL / optional TimescaleDB
-redis           Cache and queue
-emqx            MQTT broker
-api             Laravel Control Plane
-telemetry       Python MQTT/Data Plane
-frontend        Vue application
-nginx           Reverse proxy when needed
-prometheus      Metrics
-grafana         Dashboards
+PostgreSQL
+Redis
+Mosquitto
+Laravel Control Plane
+Python Data Plane
+Web application
+Simulator (optional tools profile)
 ~~~
 
-Requirements:
+- Mosquitto is the local default. Keep the broker behind the Compose network where possible; anonymous access is a development-only setting and must not be presented as secure.
+- EMQX is an optional broker profile for protocol compatibility and scale exercises. Pin an explicit version and verify current license/deployment conditions before including it in a distributable production topology.
+- Keep application, database, Redis, and broker secrets separate. Use persistent volumes for state that must survive container restarts.
+- Every service has meaningful health/readiness checks. Broker readiness does not prove telemetry has been ingested or stored.
+- Record the real local startup workflow only after checking it against the repository and Compose paths.
 
-- .env.example with safe development defaults.
-- Separate database, Redis, MQTT and application secrets.
-- Persistent volumes for PostgreSQL/TimescaleDB, EMQX and Grafana.
-- Shared internal Docker network and service health checks.
-- Internal-only database and Redis ports where possible.
-- Documented MQTT credentials and topic permissions.
-- No secrets committed to the repository.
+### Production deployment on a Linux host
 
-Quick start:
-
-~~~bash
-git clone <repository>
-cd liteboard
-cp .env.example .env
-docker compose up -d
-docker compose ps
-~~~
-
-Then run migrations, open the UI, create a project/equipment and publish a sample MQTT message.
-
-### Production deployment on a Linux VPS
-
-Initial production deployment uses Docker Compose on Linux. Kubernetes and multi-region deployment are deferred.
-
-~~~text
-Internet
-   ↓ HTTPS :443
- Nginx / TLS
-   ├── /       → Vue frontend
-   ├── /api    → Laravel API
-   ├── /ws     → WebSocket gateway
-   └── /health → health endpoints
-
-Private Docker network
-   ├── Laravel API
-   ├── Python telemetry service
-   ├── PostgreSQL / TimescaleDB
-   ├── Redis
-   └── EMQX
-~~~
-
-Requirements:
-
-- Supported Linux distribution, Docker Engine and Compose plugin.
-- Domain name and TLS certificate at Nginx.
-- Firewall exposing only 80/443 and the required public MQTT listener.
-- PostgreSQL, Redis and internal service ports not publicly exposed.
-- Secrets supplied through environment or secret management.
-- Persistent, separately backed-up database and broker volumes.
-- Restart policies, resource limits, log rotation and monitoring alerts.
-- Migration and rollback procedure.
-- Smoke test after deployment: health, login, MQTT publish, storage, WebSocket, alert and command ACK.
-
-Example:
-
-~~~bash
-git pull
-docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm api php artisan migrate --force
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
-~~~
-
-Exact image tags, domains, ports and backup commands belong in docs/deployment.md once infrastructure files are implemented.
+- Publish HTTP/WebSocket through a TLS reverse proxy and expose MQTT/TLS only when devices require public broker access.
+- Do not expose PostgreSQL, Redis, or internal service ports publicly.
+- Scope broker credentials and ACLs to each Device's project/topic permissions.
+- Define resource limits, log rotation, monitoring, backup schedule, restore procedure, upgrade strategy, and operational ownership.
+- Treat broker clustering and database HA as measured deployment needs, not MVP prerequisites.
+- Document the chosen broker version and license review. EMQX is not an unqualified default for commercial redistribution or hosting.
 
 ### Backup and recovery
 
-- Schedule PostgreSQL backups and verify restoration periodically.
+- Back up PostgreSQL and verify restoration periodically.
 - Back up application configuration separately from data volumes.
-- Define retention for telemetry, aggregates, logs and dead-letter messages.
-- Document recovery after PostgreSQL, Redis and broker failure.
-- Treat Redis as rebuildable cache/queue state unless persistence is required.
+- Define retention for telemetry, aggregates, logs, and dead-letter records.
+- Document recovery after PostgreSQL, Redis, and broker failure.
+- Treat Redis as rebuildable cache/transient state unless a selected durable queue configuration is verified.
+- Use forward-only schema changes; correct a deployed schema with a later compensating migration rather than rollback.
 
----
+## 10. Web Application Screens
 
-## 10. Frontend Screens
+Keep the web application operational and focused. It is a client of the same REST and WebSocket contracts exposed to other applications.
 
 ~~~text
-Dashboard
-Projects / Tenants
-Production Lines / Equipment
-Equipment
- └── Equipment Detail
-      ├── Overview
-      ├── Telemetry
-      ├── Schema
-      ├── Commands
-      ├── Alerts
-      └── Message Inspector
-Equipment Profiles
-Telemetry Schemas
+Tenant / Project
+  ├── Assets / Equipment
+  └── Devices
+      └── Device Detail
+          ├── Overview / State
+          ├── Telemetry
+          ├── Schema / Profile
+          ├── Commands
+          ├── Alerts
+          └── Message Inspector
 Rules
-Alerts
-Webhooks
-System Logs
+Alerts / Event History
+System Health / Processing Metrics
 ~~~
 
-Avoid a complex dashboard editor initially. Prioritize total devices, online/offline devices, active alerts, messages per second and processing latency.
-
----
+Prioritize project-scoped device status, telemetry trends, active alerts, message processing stages, queue depth, and latency. Do not build a general-purpose dashboard editor in the initial releases.
 
 ## 11. Testing Strategy
 
+Every milestone includes unit and integration coverage for its new behavior, at least one failure case, and tenant-isolation assertions for tenant-owned data. A passing service health check or console log is not an ingestion acceptance test.
+
 ### Unit tests
 
-- Schema and payload validation.
-- Message normalization.
-- Rule evaluation and duration handling.
-- Command status transitions.
-- Alert lifecycle.
-- Idempotency and duplicate handling.
+- Envelope, timestamp, schema, and normalization behavior.
+- Rule evaluation, state transitions, and alert lifecycle.
+- Command state transitions, idempotency, and retry policy.
+- Tenant/project scope resolution and event serialization.
 
-### Integration tests
+### Integration and contract tests
 
 ~~~text
-MQTT → telemetry service → validation → database
+simulator → broker → Data Plane → validation → durable telemetry
+          → REST query / WebSocket / rule event / downstream delivery
 ~~~
 
-Also cover broker reconnect, queue processing and webhook retry.
+Cover broker authentication/ACL, wrong-project topic, invalid/revoked Device, malformed or oversized payload, duplicate message_id, late/out-of-order timestamps, reconnect, and persistence reconciliation. Verify MQTT, REST, and WebSocket contracts with representative clients.
 
-### API and frontend tests
+### Failure and tenant-isolation tests
 
-- Authentication and authorization.
-- Project, factory, production line, equipment, schema, rule, alert and command APIs.
-- WebSocket event delivery.
-- Critical dashboard flows.
+- Broker disconnect/restart, Redis outage, PostgreSQL slowness/outage, queue saturation, and worker termination during processing.
+- Duplicate or delayed telemetry and command acknowledgements.
+- Retry exhaustion and successful recovery after downstream service returns.
+- Cross-tenant/project API query, cache/job/event/WebSocket subscription, Device association, and command attempts.
+- Confirm secrets and restricted payload fields do not appear in logs or message traces.
 
-### Load and failure tests
+### Load and recovery tests
 
-Record actual throughput and p50/p95/p99 latency for 100, 500 and 1,000 devices. Test PostgreSQL slowness, Redis outage, MQTT disconnect, device offline, worker crash, duplicate messages and lost command ACKs.
-
----
+Run progressive load levels only after L0 acceptance. Record actual throughput, p50/p95/p99 latency, memory, database load, queue depth, retries, loss/duplicate reconciliation, and recovery time for the exact environment.
 
 ## 12. Benchmark Plan
 
-This section defines progressive load levels for LiteBoard. These are test scenarios, not guaranteed production capacity. Actual results must be recorded for the exact hardware, Docker configuration, payload size, MQTT QoS, worker count and database setup used in each run.
+Benchmark results describe only the measured commit and environment. Device counts and rates below are test scenarios, not capacity promises. L0 is the required end-to-end development gate; higher levels are run only when resources and prior results justify them.
 
 ### Benchmark dimensions
 
-Measure the complete path:
+Measure the full implemented path:
 
 ~~~text
-Simulator → MQTT Broker → Telemetry Service → Validation
-          → Buffer / Queue → Database → Rule Engine → WebSocket
+Simulator → MQTT Broker → Data Plane → Validation
+          → Buffer / Queue → Database → Rules → WebSocket
 ~~~
 
-Record at every level:
+Record messages sent, accepted, rejected, failed, duplicated, and reconciled; throughput; end-to-end and per-stage p50/p95/p99 latency; connected devices; queue depth; retries; dead letters; CPU/RAM; database connections, disk I/O, and network; and recovery after injected faults.
 
-- Total messages sent, accepted, rejected and failed.
-- Throughput in messages per second.
-- End-to-end p50, p95 and p99 latency.
-- MQTT receive, validation, queue, database and WebSocket latency.
-- Connected devices and messages per device.
-- Queue depth, retry count, duplicate count and dead-letter count.
-- CPU, RAM, database connections, disk I/O and network usage.
-- Data-loss or reconciliation result after the test.
+### Progressive load scenarios
 
-### Progressive load levels
+| Level | Devices | Rate per device | Aggregate rate | Duration | Purpose |
+|---|---:|---:|---:|---:|---|
+| L0 | 10 | 1 msg/s | 10 msg/s | 5 min | Verify end-to-end correctness, bounded buffering, reconnect, and reconciliation. |
+| L1 | 100 | 1 msg/s | 100 msg/s | 10 min | Establish a stable baseline. |
+| L2 | 500 | 1 msg/s | 500 msg/s | 15 min | Measure batching, queue growth, and database writes. |
+| L3 | 1,000 | 1 msg/s | 1,000 msg/s | 30 min | Exercise worker scaling and memory stability. |
+| L4 | 5,000 | 1 msg/s | 5,000 msg/s | 30 min | Capacity experiment for backpressure and recovery. |
+| L5 | 10,000 | 1 msg/s | 10,000 msg/s | 30 min | Optional capacity-ceiling experiment on suitable infrastructure. |
 
-| Level | Scenario | Devices | Rate per device | Total rate | Duration | Main objective |
-|---|---|---:|---:|---:|---:|---|
-| L0 Smoke | Developer smoke test | 10 | 1 msg/s | 10 msg/s | 5 min | Verify the complete path and data correctness. |
-| L1 Baseline | Stable baseline | 100 | 1 msg/s | 100 msg/s | 10 min | Establish normal latency and resource usage. |
-| L2 Growth | Medium workload | 500 | 1 msg/s | 500 msg/s | 15 min | Evaluate batching, queue depth and database writes. |
-| L3 High | High sustained workload | 1,000 | 1 msg/s | 1,000 msg/s | 30 min | Validate worker scaling and memory stability. |
-| L4 Stress | Stress and backpressure | 5,000 | 1 msg/s | 5,000 msg/s | 30 min | Find the ingestion limit and observe recovery behavior. |
-| L5 Extreme | Capacity ceiling experiment | 10,000 | 1 msg/s | 10,000 msg/s | 30 min | Locate the bottleneck and document the failure mode. |
+Also run burst tests, for example 10 seconds at 10 messages/second per device, and reconnect churn. L4 and L5 are not MVP or release gates.
 
-The simulator should also run burst tests, for example 10 seconds at 10 msg/s per device, to evaluate queue buffering and backpressure. L4 and L5 are capacity experiments and may require dedicated infrastructure; they are not release gates by themselves.
+### Pass criteria
 
-### Pass criteria by level
+- L0: complete processing trace, no unexplained loss, persisted data reconciles with accepted input, bounded queue/memory, reconnect succeeds, and all timing/resource metrics are recorded.
+- L1: stable for the run with no unbounded queue growth or continuing memory increase.
+- L2/L3: batching and worker scaling behavior are measured; latency is assessed against an environment-specific target.
+- L4/L5: document sustainable throughput, backpressure threshold, controlled degraded behavior, bottleneck, and recovery; do not claim a generic pass/fail SLA.
 
-- L0: all services are healthy, the message trace is complete and stored data reconciles with sent data.
-- L1: the system remains stable for the full run, with no unbounded queue growth or memory leak.
-- L2: batch insert and queue behavior are measurable; retry and duplicate rates are recorded.
-- L3: worker scaling is tested and p95/p99 latency remains within the project target defined for the environment.
-- L4: the backpressure threshold, recovery time and degraded behavior are documented.
-- L5: the maximum sustainable throughput, bottleneck and controlled failure behavior are documented; a pass/fail SLA is optional.
-
-### Benchmark report format
-
-Every run should produce a report containing:
+### Benchmark report
 
 ~~~text
 Date / commit:
-Environment:
-CPU / RAM:
-Docker service configuration:
+Environment / broker version:
+CPU / RAM / Docker configuration:
 Payload size / MQTT QoS:
-Device count / publish rate:
-Duration:
+Device count / publish rate / duration:
+Messages sent / accepted / rejected / failed / duplicate:
 Throughput:
-p50 / p95 / p99 latency:
-CPU / RAM / database latency:
-Queue depth / retries / failures:
+End-to-end and per-stage p50 / p95 / p99:
+CPU / RAM / database latency / queue depth:
+Fault injected / recovery time:
 Data reconciliation:
-Bottleneck:
-Conclusion and next action:
+Bottleneck / next measured change:
 ~~~
 
-Do not publish estimated numbers as benchmark results. Replace measured fields with actual values after running the simulator.
-
----
+Never publish estimated numbers as benchmark results.
 
 ## 13. MVP and Release Roadmap
 
-### MVP
+### MVP acceptance
 
-~~~text
-Tenant / Project / Equipment Registry
-MQTT Connectivity
-Telemetry Ingestion
-Schema Validation
-Telemetry Storage
-Realtime Dashboard
-Online / Offline Status
-Live Message Inspector
-Simple Rule Engine
-Alerts
-~~~
+A developer can start LiteBoard, create a tenant-scoped project and Device, issue/revoke credentials, publish authenticated schema-valid MQTT telemetry through Mosquitto, persist and query it, inspect its processing trace, receive authorized WebSocket updates, trigger a simple rule/alert, and complete a command/ACK simulator path.
+
+The MVP also passes L0 for the implemented end-to-end path, including bounded buffering, reconnect, tenant isolation, and message reconciliation. It does not claim production-scale capacity.
 
 ### Milestones
 
 ~~~text
-M1  Foundation and Docker deployment
-M2  Projects, hierarchy and equipment
-M3  MQTT ingestion and heartbeat
-M4  Telemetry storage and query API
-M5  Schema-first validation
-M6  Realtime telemetry
-M7  Live Message Inspector
-M8  Rule Engine
-M9  Alerts and lifecycle
-M10 Webhooks
-M11 Device Commands and ACK
-M12 Industrial profiles and EAMO demo
-M13 Queue and async workers
-M14 Simulator, performance and observability
-M15 Production deployment and open-source polish
+M1  Repository/runtime baseline and reproducible local services
+M2  Tenant-scoped Device registry, credentials, and Equipment association
+M3  Secure MQTT ingest vertical slice and L0
+M4  Versioned schema, durable time-series storage, and query API
+M5  Device state, WebSocket delivery, and message trace
+M6  Rules, alerts, and retryable event/webhook delivery
+M7  Command/RPC lifecycle with ACK and idempotency
+M8  Queue/backpressure and multi-worker failure behavior
+M9  EAMO/MES consumer contract and integration example
+M10 Progressive benchmarks, recovery, and release hardening
 ~~~
+
+Each milestone has a happy-path demo, a failure/load exercise, tenant-isolation tests, recorded metrics, and a decision note naming the next bottleneck. Ordering may be refined by evidence, but feature breadth must not bypass the L0 secure-ingestion gate.
 
 ### Version roadmap
 
 ~~~text
-v0.1  Foundation, Docker, authentication, projects and equipment
-v0.2  MQTT, telemetry ingestion and heartbeat
-v0.3  Schema validation, storage, query API and realtime dashboard
-v0.4  Message Inspector, rules and alerts
-v0.5  Webhooks, remote commands, ACK and retry
-v0.6  Device simulator and load testing
-v0.7  Redis queues, async workers and dead-letter handling
-v0.8  Prometheus, Grafana and structured logging
-v0.9  TimescaleDB, retention, partitioning and performance work
-v1.0  Stable release, deployment guide, API docs and EAMO demo
-v1.1+ Anomaly detection, health score, SDKs and horizontal scaling
+v0.1  Current tenant/project/asset foundation and reproducible local environment
+v0.2  Device identity, broker authentication, secure MQTT ingest, and L0
+v0.3  Schema validation, time-series persistence, and query API
+v0.4  Device state, WebSocket, and message processing trace
+v0.5  Rules, alerts, outbound events, and command/ACK
+v0.6  Queue/backpressure, multi-worker behavior, and failure testing
+v0.7  EAMO/MES integration examples and broker compatibility
+v0.8  Measured performance, retention, and operational documentation
+v1.0  Stable API/protocol contracts, deployment guide, security and recovery gates
 ~~~
 
-### Successful V1
+### Definition of successful V1
 
-A developer can start LiteBoard with Docker, create a project/device, define a schema, connect an ESP32 through MQTT, publish validated telemetry, query it through REST, watch it through WebSocket, inspect processing, create rules and alerts, send webhooks and send commands with ACKs.
-
----
+LiteBoard is a self-hosted multi-tenant IoT platform with Device management, authenticated MQTT ingestion, schema validation, queryable time-series telemetry, device state, rules/alerts, command/ACK, REST/WebSocket contracts, and operational observability. Its limits and failure behavior are documented from measured experiments; it does not claim to replace all ThingsBoard features.
 
 ## 14. Repository and Documentation
 
+Current repository map:
+
 ~~~text
 liteboard/
-├── backend/
-├── telemetry-service/
-├── frontend/
-├── simulator/
-├── infrastructure/
-│   ├── nginx/
-│   ├── prometheus/
-│   └── grafana/
+├── backend/                 # Laravel Control Plane
+├── telemetry-service/       # Python MQTT Data Plane
+├── web/                     # Vue / Nuxt application
+├── simulator/               # Python device simulator
+├── infrastructure/          # Broker and monitoring configuration
 ├── docs/
-├── docker-compose.yml
-├── docker-compose.prod.yml
-└── README.md
+└── docker-compose.yml
 ~~~
 
-Recommended docs:
+The current Compose frontend service references a frontend build context named frontend, while this checkout contains web. Resolve and verify that mismatch before documenting a successful one-command local startup; this plan records the discrepancy but does not imply it has been fixed.
+
+Recommended supporting documentation:
 
 ~~~text
 docs/
@@ -1071,31 +676,23 @@ docs/
 └── deployment.md
 ~~~
 
-README quick start should present:
+README quick start should show:
 
 ~~~text
-ESP32 → MQTT → LiteBoard → Your Application
+ESP32 → EMQX / Mosquitto → LiteBoard → Dashboard / EAMO / MES
 ~~~
 
-Include API/MQTT documentation, sample ESP32 client, Python simulator, EAMO integration example, contribution guidance and measured benchmark results.
-
----
+Include API/MQTT contracts, sample device client, Python simulator, broker setup, downstream integration example, contribution guidance, and measured benchmark reports.
 
 ## 15. Technical Outcomes and Long-Term Direction
 
-LiteBoard demonstrates Laravel architecture, async Python, FastAPI, MQTT, WebSocket, PostgreSQL, time-series storage, queues, retries, idempotency, Docker, Linux, Nginx, Prometheus, Grafana, backups and failure testing.
+LiteBoard is a system engineering lab for backend architecture, PostgreSQL/time-series storage, Redis and messaging, event-driven processing, distributed-systems reliability, Linux, Docker, networking, observability, and performance testing.
 
-Future features may include gateway support, device groups, device shadow, OTA updates, advanced time-window rules, anomaly detection, predictive maintenance, SDKs, plugins, tenant isolation and horizontal scaling.
+The learning sequence is deliberate: prove a small correct vertical slice, measure it, inject failures, understand the bottleneck, then change one part and measure again. Idempotency, message ordering, retry, backpressure, reconnect, tenant isolation, database optimization, and horizontal scaling are recurring engineering concerns, not one-time checklist items.
 
-These features are deferred, not deleted. They should be considered only after ingestion, schema validation, observability, reliability and deployment are stable.
+Deferred until core behavior and measurements justify them: additional device protocols, generalized dashboard composition, arbitrary workflows, OTA/device shadow, advanced analytics or ML, broker clustering, multi-region deployments, and very high device-count targets.
 
-LiteBoard should remain:
-
-> **A lightweight open-source IoT backend focused on MQTT, structured telemetry, observability and industrial integration.**
-
-The goal is to build a platform that is smaller, simpler, easier to understand, easier to debug and strong for industrial IoT integrations.
-
----
+> **LiteBoard is an open-source multi-tenant IoT platform focused on real-time telemetry, device management, and distributed backend architecture.**
 
 ## 16. Production Readiness Checklist
 
@@ -1104,11 +701,11 @@ The development plan is not production-ready only because the platform starts wi
 ### Security
 
 - TLS for MQTT, preferably on port 8883, and TLS for HTTP/WebSocket traffic.
-- Broker ACL scoped to the project and equipment; equipment credentials can be revoked and rotated.
+- Broker ACL scoped to the project and Device; Device credentials can be revoked and rotated. Anonymous access is development-only.
 - Secrets supplied through environment or secret management and never committed to Git.
 - API rate limiting, MQTT connection/message limits and maximum payload size.
 - Webhook SSRF protection, URL validation and outbound network restrictions.
-- Audit logs for authentication, permission changes, equipment credentials, commands, rules and alerts.
+- Audit logs for authentication, permission changes, Device credentials, commands, rules and alerts.
 - Dependency, container image, SBOM and vulnerability scanning in CI.
 - Security headers, strict CORS policy and production-safe error responses.
 
@@ -1122,17 +719,17 @@ The development plan is not production-ready only because the platform starts wi
 - Idempotent ingestion, duplicate detection and safe command execution.
 - Explicit handling for late, out-of-order and clock-skewed telemetry.
 - Graceful shutdown, readiness/liveness probes and worker draining.
-- Migration rollback procedure and disaster recovery runbook.
+- Forward-only schema migration and compensating-change procedure, plus an application rollback plan compatible with the current schema.
 
 ### SLO and observability
 
-Define targets per deployment environment instead of making unmeasured promises. Initial examples:
+Set SLOs per deployment environment after collecting a baseline. The values below are examples to evaluate, not achieved results or committed service guarantees:
 
 ~~~text
 Telemetry ingestion success rate  > 99.9%
 p95 processing latency            < 500 ms
 API availability                  > 99.9%
-~~
+~~~
 
 Add correlation IDs from MQTT message through storage, rule evaluation, webhook and WebSocket delivery. Configure alerts for queue growth, database latency, broker disconnects, error rate, disk usage, certificate expiry and worker health. Keep log retention rules and an incident runbook for each critical alert.
 
@@ -1142,7 +739,7 @@ Add correlation IDs from MQTT message through storage, rule evaluation, webhook 
 - Automated retention, aggregation and downsampling jobs.
 - Schema compatibility/version policy for devices and firmware.
 - Data quality checks for duplicates, late data and missing intervals.
-- Tenant isolation and authorization tests when multi-tenancy is enabled.
+- Tenant isolation and authorization tests on every tenant-owned access path.
 - Encryption at rest and controlled access for sensitive application data.
 
 ### Delivery and operations
@@ -1150,7 +747,7 @@ Add correlation IDs from MQTT message through storage, rule evaluation, webhook 
 - CI pipeline covering unit, integration, API, migration, lint, type, security and image checks.
 - Staging environment that matches production topology.
 - Immutable versioned images and versioned configuration.
-- Automated migration, smoke test and rollback steps.
+- Automated forward-only migration, smoke test and compatible application rollback steps.
 - Blue-green or canary deployment when downtime is unacceptable.
 - Resource limits, capacity plan, log rotation and host-level monitoring.
 - Patch process for the OS, runtime, dependencies, broker and database.
@@ -1158,7 +755,9 @@ Add correlation IDs from MQTT message through storage, rule evaluation, webhook 
 
 ### Production load validation
 
-Before go-live, run the Benchmark Plan at the highest intended level and also run:
+Before go-live, run the Benchmark Plan at the highest intended deployment level and also run:
+
+Capacity experiments beyond that level remain optional and are not generic guarantees.
 
 - A 24-hour soak test to find memory leaks and disk growth.
 - Burst traffic and recovery tests.

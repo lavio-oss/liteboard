@@ -144,13 +144,14 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
   <UModal
     v-model:open="open"
     :title="title"
+    :ui="{ content: props.resourceType === 'asset' ? 'sm:max-w-2xl' : undefined }"
   >
     <template #body>
       <UForm
         :schema="schema"
         :state="state"
         :disabled="props.loading"
-        class="space-y-4"
+        :class="props.resourceType === 'asset' ? 'grid grid-cols-1 gap-4 sm:grid-cols-2' : 'space-y-4'"
         @submit="onSubmit"
       >
         <UFormField
@@ -158,7 +159,7 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
           label="Name"
           required
         >
-          <UInput v-model="state.name" class="w-full" />
+          <UInput v-model="state.name" class="w-full" placeholder="Enter name" />
         </UFormField>
 
         <UFormField
@@ -181,7 +182,7 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
           name="description"
           label="Description"
         >
-          <UTextarea v-model="state.description" class="w-full" />
+          <UTextarea v-model="state.description" class="w-full" placeholder="Enter description" />
         </UFormField>
 
         <template v-else>
@@ -226,14 +227,14 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
             label="Code"
             required
           >
-            <UInput v-model="state.code" class="w-full" />
+            <UInput v-model="state.code" class="w-full" placeholder="Enter asset code" />
           </UFormField>
 
           <UFormField
             name="location"
             label="Location"
           >
-            <UInput v-model="state.location" class="w-full" />
+            <UInput v-model="state.location" class="w-full" placeholder="Enter asset location" />
           </UFormField>
         </template>
 
@@ -241,6 +242,7 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
           name="status"
           label="Status"
           required
+          :class="props.resourceType === 'asset' ? 'sm:col-span-2' : undefined"
         >
           <USelect
             v-model="state.status"
@@ -252,7 +254,7 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
           />
         </UFormField>
 
-        <div class="flex justify-end gap-2">
+        <div :class="props.resourceType === 'asset' ? 'flex justify-end gap-2 sm:col-span-2' : 'flex justify-end gap-2'">
           <UButton
             label="Cancel"
             color="neutral"

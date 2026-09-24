@@ -98,20 +98,39 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
         @submit="onSubmit"
       >
         <UFormField name="name" label="Name" required>
-          <UInput v-model="state.name" class="w-full" />
+          <UInput
+            v-model="state.name"
+            class="w-full"
+            placeholder="Enter name"
+          />
         </UFormField>
         <UFormField name="email" label="Email" required>
-          <UInput v-model="state.email" type="email" class="w-full" />
+          <UInput
+            v-model="state.email"
+            type="email"
+            class="w-full"
+            placeholder="Enter email address"
+          />
         </UFormField>
         <UFormField name="password" :label="props.user === null ? 'Password' : 'New password'" :required="props.user === null">
-          <UInput v-model="state.password" type="password" class="w-full" />
+          <UInput
+            v-model="state.password"
+            type="password"
+            class="w-full"
+            :placeholder="props.user === null ? 'Enter password' : 'Enter new password'"
+          />
         </UFormField>
         <UFormField
           name="password_confirmation"
           :label="props.user === null ? 'Confirm password' : 'Confirm new password'"
           :required="props.user === null"
         >
-          <UInput v-model="state.password_confirmation" type="password" class="w-full" />
+          <UInput
+            v-model="state.password_confirmation"
+            type="password"
+            class="w-full"
+            :placeholder="props.user === null ? 'Confirm password' : 'Confirm new password'"
+          />
         </UFormField>
         <div class="flex justify-end gap-2">
           <UButton

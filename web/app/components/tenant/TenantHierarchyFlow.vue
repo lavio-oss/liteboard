@@ -240,9 +240,6 @@ function flattenFilterTreeItems(items: FilterTreeItem[]): FilterTreeItem[] {
 
 const selectedFilterItems = computed(() => flattenFilterTreeItems(filterTreeItems.value)
   .filter(item => selectedFilterKeys.value.includes(item.id)))
-const filterInputPlaceholder = computed(() => selectedFilterItems.value.length === 0
-  ? 'Search nodes by name or code...'
-  : selectedFilterItems.value.map(item => item.label).join(', '))
 
 function getSelectedFilterPathKeys(items: FilterTreeItem[]): string[] {
   const selectedKeys = new Set(selectedFilterKeys.value)
@@ -780,8 +777,8 @@ const flowKey = computed(() => `${selectedTenantId.value}-${selectedFilterKeys.v
           v-model="filterQuery"
           icon="i-lucide-search"
           class="min-w-80"
-          :placeholder="filterInputPlaceholder"
-          :title="selectedFilterItems.length > 0 ? filterInputPlaceholder : undefined"
+          :ui="{ base: 'placeholder:text-muted' }"
+          placeholder="Search nodes by name or code..."
           aria-label="Filter hierarchy"
           @keydown.escape="filterOpen = false"
         >
