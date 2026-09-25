@@ -71,21 +71,23 @@ For the complete architectural design, technology stack, implementation details,
 
 ### 1. Running with Docker Compose (Recommended)
 
-Start the complete stack (PostgreSQL, Redis, Mosquitto, Backend API, Web App, Telemetry Service):
+Start the complete stack in Docker (PostgreSQL, Redis, Mosquitto, Backend API, Web App, Telemetry Service):
 
 ```powershell
 # Copy environment configuration
 Copy-Item .env.example .env
 
 # Build and start all services
-docker compose up -d --build
+docker compose --profile containerized-frontend up -d --build
 ```
 
 #### Service Endpoints & Health Checks:
 - **Web Dashboard**: [http://localhost:3000](http://localhost:3000)
-- **Backend API**: [http://localhost:8081/api/health](http://localhost:8081/api/health)
+- **Backend API**: [http://localhost:8800/api/health](http://localhost:8800/api/health)
 - **Telemetry Service**: [http://localhost:8100/health](http://localhost:8100/health)
 - **MQTT Broker**: `mqtt://localhost:1883` (WebSocket: `ws://localhost:9001`)
+
+Check container readiness with `docker compose ps`; the backend, web app, and telemetry service report `healthy` after startup.
 
 #### Run the IoT Device Simulator:
 ```powershell
@@ -96,16 +98,20 @@ docker compose --profile tools run --rm simulator
 
 ### 2. Running Locally for Development
 
-For active development, run the backend and web frontend in separate terminals:
+For active development, run PostgreSQL, Redis, and Mosquitto in Docker, with Laravel and Nuxt in local terminals. Nuxt uses port `3000`:
+
+```powershell
+docker compose up -d postgres redis mosquitto
+```
 
 #### Backend (Laravel)
 ```powershell
 cd backend
 composer install
 php artisan migrate
-php artisan serve --port=8081
+php artisan serve --port=8800
 ```
-API runs at `http://localhost:8081`.
+API runs at `http://localhost:8800`.
 
 #### Frontend (Nuxt 4)
 ```powershell

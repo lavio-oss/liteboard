@@ -51,7 +51,7 @@ services:
       APP_ENV: local
       APP_KEY: ${APP_KEY:-base64:ZmFrZS1saXRlYm9hcmQta2V5LWZvci1sb2NhbC1kZXY=}
       APP_DEBUG: '${APP_DEBUG:-true}'
-      APP_URL: http://localhost:8081
+      APP_URL: http://localhost:8800
       DB_CONNECTION: pgsql
       DB_HOST: postgres
       DB_PORT: 5432
@@ -66,7 +66,17 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
     ports:
-      - '${BACKEND_PORT:-8081}:8081'
+      - '${BACKEND_PORT:-8800}:8800'
+    healthcheck:
+      test:
+        - CMD
+        - php
+        - -r
+        - "exit(@file_get_contents('http://127.0.0.1:8800/api/health') === false ? 1 : 0);"
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
     depends_on:
       postgres:
         condition: service_healthy
@@ -81,19 +91,41 @@ services:
       MQTT_PORT: 1883
     ports:
       - '${TELEMETRY_PORT:-8100}:8100'
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health', timeout=2)"
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
     depends_on:
       mosquitto:
         condition: service_healthy
 
   frontend:
+    profiles: ['containerized-frontend']
     build:
-      context: frontend
+      context: web
     environment:
-      NUXT_LARAVEL_API_BASE: http://backend:8081
+      NUXT_LARAVEL_API_BASE: http://backend:8800
     ports:
       - '${FRONTEND_PORT:-3000}:3000'
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
   simulator:
     build:

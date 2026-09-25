@@ -44,6 +44,11 @@ const { data: response, status, error, refresh } = await useAsyncData('tenants',
   api.request('/api/tenants', tenantCollectionResponseSchema)
 )
 
+function resetFilters(): void {
+  search.value = ''
+  statusFilter.value = 'all'
+}
+
 const tenants = computed(() => response.value?.data ?? [])
 const filteredTenants = computed(() => {
   const query = search.value.toLowerCase()
@@ -334,6 +339,8 @@ const errorMessage = computed(() => {
                 trailing-icon="i-lucide-settings-2"
               />
             </UDropdownMenu>
+
+            <ResetFiltersButton @click="resetFilters" />
           </div>
         </div>
 

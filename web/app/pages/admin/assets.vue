@@ -36,6 +36,12 @@ const assetTypeFilter = ref<AssetType | 'all'>('all')
 const projectFilter = ref<number | null>(null)
 const tenantFilter = ref<number | null>(null)
 
+function resetAssetFilters(): void {
+  assetTypeFilter.value = 'all'
+  projectFilter.value = null
+  tenantFilter.value = null
+}
+
 const assetTypeLabels: Record<AssetType, string> = {
   site: 'Site',
   factory: 'Factory',
@@ -444,6 +450,7 @@ const errorMessage = computed(() => {
           :data="rows"
           :loading="status === 'pending'"
           search-placeholder="Search assets..."
+          @reset="resetAssetFilters"
         >
           <template #filters>
             <USelect

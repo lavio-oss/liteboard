@@ -11,6 +11,10 @@ const props = defineProps<{
   searchPlaceholder: string
 }>()
 
+const emit = defineEmits<{
+  reset: []
+}>()
+
 const table = useTemplateRef('table')
 const columnVisibility = ref()
 const columnPinning = ref({ right: ['actions'] })
@@ -20,6 +24,12 @@ const pagination = ref({
 })
 const search = ref('')
 const statusFilter = ref<'all' | AdminTableRow['status']>('all')
+
+function resetFilters(): void {
+  search.value = ''
+  statusFilter.value = 'all'
+  emit('reset')
+}
 
 function getColumnKey(column: TableColumn<AdminTableRow>): string {
   return column.id ?? 'column'
@@ -93,6 +103,8 @@ watch(filteredData, () => {
           trailing-icon="i-lucide-settings-2"
         />
       </UDropdownMenu>
+
+      <ResetFiltersButton @click="resetFilters" />
     </div>
   </div>
 

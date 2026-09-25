@@ -8,16 +8,16 @@ defineProps<{
 const { isAdminWorkspace, selectWorkspace } = useWorkspaceContext()
 
 const workspaces = [{
-  label: 'LiteBoard Admin',
-  icon: 'i-lucide-shield-check',
-  to: '/admin'
-}, {
   label: 'Liteboard',
   icon: 'i-lucide-cpu',
   to: '/'
+}, {
+  label: 'LiteBoard Admin',
+  icon: 'i-lucide-shield-check',
+  to: '/admin'
 }] as const
 
-const selectedWorkspace = computed(() => isAdminWorkspace.value ? workspaces[0] : workspaces[1])
+const selectedWorkspace = computed(() => isAdminWorkspace.value ? workspaces[1] : workspaces[0])
 
 const items = computed<DropdownMenuItem[][]>(() => [workspaces.map(workspace => ({
   label: workspace.label,

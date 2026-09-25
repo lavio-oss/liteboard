@@ -41,6 +41,12 @@ const roleOptions = [
   { label: 'Member', value: 'member' as const }
 ]
 
+function resetFilters(): void {
+  search.value = ''
+  roleFilter.value = 'all'
+  pagination.value.pageIndex = 0
+}
+
 const filteredUsers = computed(() => {
   const query = search.value.toLowerCase()
 
@@ -306,6 +312,8 @@ watch(addRequested, (requested) => {
                   trailing-icon="i-lucide-settings-2"
                 />
               </UDropdownMenu>
+
+              <ResetFiltersButton @click="resetFilters" />
             </div>
           </div>
 

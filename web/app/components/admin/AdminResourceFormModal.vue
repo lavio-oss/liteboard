@@ -144,7 +144,7 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
   <UModal
     v-model:open="open"
     :title="title"
-    :ui="{ content: props.resourceType === 'asset' ? 'sm:max-w-2xl' : undefined }"
+    :ui="{ content: props.resourceType === 'asset' ? 'sm:max-w-4xl' : undefined }"
   >
     <template #body>
       <UForm
