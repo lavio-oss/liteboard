@@ -9,8 +9,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('tenant_user', function (Blueprint $table): void {
-            $table->foreignId('tenant_id')->constrained()->cascadeOnUpdate()->cascadeOnDelete();
-            $table->foreignId('user_id')->constrained()->cascadeOnUpdate()->cascadeOnDelete();
+            $table->foreignUuid('tenant_id')->constrained()->cascadeOnUpdate()->cascadeOnDelete();
+            $table->foreignUuid('user_id')->constrained()->cascadeOnUpdate()->cascadeOnDelete();
             $table->string('role', 32)->default('member');
             $table->timestamps();
             $table->unique(['tenant_id', 'user_id']);

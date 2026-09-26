@@ -31,7 +31,7 @@ final class AssetIndexRequest extends FormRequest
         return [
             'search' => ['sometimes', 'string', 'max:255'],
             'asset_type' => ['sometimes', Rule::enum(AssetType::class)],
-            'parent_asset_id' => ['sometimes', 'integer', 'min:1'],
+            'parent_asset_id' => ['sometimes', 'bail', 'uuid'],
             'root_only' => [
                 'sometimes',
                 Rule::in([true, false, 1, 0, 'true', 'false', '1', '0']),

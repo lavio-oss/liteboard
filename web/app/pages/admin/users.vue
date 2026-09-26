@@ -151,7 +151,7 @@ async function confirmDelete(): Promise<void> {
   deleteLoading.value = true
 
   try {
-    await Promise.all(deletingUsers.value.map(item => deleteTenantUser(tenantId.value as number, item.id)))
+    await Promise.all(deletingUsers.value.map(item => deleteTenantUser(tenantId.value as string, item.id)))
     await reload()
     deleteOpen.value = false
     toast.add({ title: 'User deleted', description: 'The account has been deleted.', color: 'success' })

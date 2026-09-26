@@ -27,7 +27,7 @@ final class TenantResource extends JsonResource
         }
 
         return [
-            'id' => (int) $this->id,
+            'id' => (string) $this->getKey(),
             'name' => (string) $this->name,
             'code' => (string) $this->code,
             'status' => (string) $this->status,

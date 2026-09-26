@@ -7,9 +7,9 @@ export function useTenantContext() {
   const api = useApi()
   const { user } = useAuth()
   const tenants = useState<Tenant[]>('tenant-context:tenants', () => [])
-  const activeTenantId = useState<number | null>('tenant-context:active-id', () => null)
+  const activeTenantId = useState<string | null>('tenant-context:active-id', () => null)
   const loaded = useState<boolean>('tenant-context:loaded', () => false)
-  const loadedForUserId = useState<number | null>('tenant-context:user-id', () => null)
+  const loadedForUserId = useState<string | null>('tenant-context:user-id', () => null)
   const activeTenant = computed(() => tenants.value.find(tenant => tenant.id === activeTenantId.value) ?? null)
   const isPlatformAdmin = computed(() => user.value?.system_role === 'platform_admin')
   const canManageActiveTenant = computed(() => isPlatformAdmin.value
@@ -35,7 +35,7 @@ export function useTenantContext() {
     return tenants.value
   }
 
-  function selectTenant(tenantId: number): void {
+  function selectTenant(tenantId: string): void {
     if (!tenants.value.some(tenant => tenant.id === tenantId)) {
       throw new Error('The selected tenant is not available.')
     }

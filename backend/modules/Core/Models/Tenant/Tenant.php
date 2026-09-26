@@ -4,6 +4,7 @@ namespace Modules\Core\Models\Tenant;
 
 use Database\Factories\TenantFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -18,7 +19,7 @@ use Modules\Core\Models\User\User;
 final class Tenant extends Model
 {
     /** @use HasFactory<TenantFactory> */
-    use HasFactory;
+    use HasFactory, HasUuids;
 
     /** @return Factory<Tenant> */
     protected static function newFactory(): Factory

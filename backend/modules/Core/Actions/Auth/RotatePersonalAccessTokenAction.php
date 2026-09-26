@@ -13,7 +13,7 @@ final class RotatePersonalAccessTokenAction
         private readonly CreatePersonalAccessTokenAction $createToken,
     ) {}
 
-    public function execute(User $user, int $tokenId): ?NewAccessToken
+    public function execute(User $user, string $tokenId): ?NewAccessToken
     {
         return $this->database->transaction(function () use ($user, $tokenId): ?NewAccessToken {
             $token = $user->tokens()->whereKey($tokenId)->first();

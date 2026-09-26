@@ -23,7 +23,7 @@ final class AvailableProjectUserResource extends JsonResource
         }
 
         return [
-            'id' => (int) $user->getKey(),
+            'id' => (string) $user->getKey(),
             'name' => (string) $user->name,
             'email' => (string) $user->email,
             'tenant_role' => $pivot->getAttribute('role'),

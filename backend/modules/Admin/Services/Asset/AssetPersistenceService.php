@@ -22,7 +22,7 @@ final class AssetPersistenceService
      *     status?: string
      * }  $attributes
      */
-    public function create(Project $project, array $attributes, ?int $parentAssetId): Asset
+    public function create(Project $project, array $attributes, ?string $parentAssetId): Asset
     {
         return DB::transaction(function () use ($project, $attributes, $parentAssetId): Asset {
             $asset = $project->assets()->create($attributes);
@@ -40,7 +40,7 @@ final class AssetPersistenceService
      *     location?: string|null,
      *     status?: string
      * }  $attributes
-     * @param  array{provided: bool, parent_asset_id: int|null}  $parentUpdate
+     * @param  array{provided: bool, parent_asset_id: string|null}  $parentUpdate
      */
     public function update(Asset $asset, array $attributes, array $parentUpdate): Asset
     {

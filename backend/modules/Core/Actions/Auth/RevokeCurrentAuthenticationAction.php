@@ -3,7 +3,7 @@
 namespace Modules\Core\Actions\Auth;
 
 use Illuminate\Auth\AuthManager;
-use Laravel\Sanctum\PersonalAccessToken;
+use Modules\Core\Models\Auth\PersonalAccessToken;
 use Modules\Core\Models\User\User;
 use Modules\Core\Requests\Auth\AuthenticatedRequest;
 

@@ -29,7 +29,7 @@ final class StoreProjectUserRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'user_id' => ['required', 'integer', Rule::exists('users', 'id')],
+            'user_id' => ['required', 'bail', 'uuid', Rule::exists('users', 'id')],
             'role' => ['required', 'string', Rule::enum(ProjectRole::class)],
             'tenant_id' => ['prohibited'],
             'project_id' => ['prohibited'],

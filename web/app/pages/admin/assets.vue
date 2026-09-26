@@ -26,15 +26,15 @@ const addRequested = useState('admin:add-requested', () => false)
 const { createAsset, deleteAsset, loadTenantHierarchy, updateAsset } = useAdmin()
 const formOpen = ref(false)
 const formLoading = ref(false)
-const selectedProjectId = ref<number | null>(null)
-const selectedParentId = ref<number | null>(null)
+const selectedProjectId = ref<string | null>(null)
+const selectedParentId = ref<string | null>(null)
 const editingAsset = ref<Asset | null>(null)
 const deleteOpen = ref(false)
 const deleteLoading = ref(false)
 const deletingAsset = ref<Asset | null>(null)
 const assetTypeFilter = ref<AssetType | 'all'>('all')
-const projectFilter = ref<number | null>(null)
-const tenantFilter = ref<number | null>(null)
+const projectFilter = ref<string | null>(null)
+const tenantFilter = ref<string | null>(null)
 
 function resetAssetFilters(): void {
   assetTypeFilter.value = 'all'
@@ -95,7 +95,7 @@ const tenantFilterOptions = computed(() => [
 
 const disallowedParentIds = computed(() => {
   const editingId = editingAsset.value?.id
-  const disallowed = new Set<number>()
+  const disallowed = new Set<string>()
 
   if (editingId === undefined) {
     return disallowed
@@ -134,7 +134,7 @@ const filteredAssets = computed(() => assets.value.filter((asset) => {
   return matchesType && matchesProject && matchesTenant
 }))
 
-function tenantIdForProject(projectId: number): number {
+function tenantIdForProject(projectId: string): string {
   const project = projects.value.find(item => item.id === projectId)
 
   if (project === undefined) {
@@ -146,7 +146,7 @@ function tenantIdForProject(projectId: number): number {
 
 const rows = computed<AdminTableRow[]>(() => filteredAssets.value)
 
-function projectNameFor(projectId: number | undefined): string {
+function projectNameFor(projectId: string | undefined): string {
   if (projectId === undefined) {
     throw new Error('The asset project is missing.')
   }
@@ -160,7 +160,7 @@ function projectNameFor(projectId: number | undefined): string {
   return project.name
 }
 
-function parentNameFor(parentId: number | null | undefined): string {
+function parentNameFor(parentId: string | null | undefined): string {
   if (parentId === null) {
     return 'Root'
   }
@@ -193,7 +193,7 @@ function openCreate(): void {
   formOpen.value = true
 }
 
-function openEdit(assetId: number): void {
+function openEdit(assetId: string): void {
   const asset = assets.value.find(item => item.id === assetId)
 
   if (asset === undefined) {
@@ -206,7 +206,7 @@ function openEdit(assetId: number): void {
   formOpen.value = true
 }
 
-function openDelete(assetId: number): void {
+function openDelete(assetId: string): void {
   const asset = assets.value.find(item => item.id === assetId)
 
   if (asset === undefined) {

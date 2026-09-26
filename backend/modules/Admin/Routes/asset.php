@@ -10,6 +10,7 @@ use Modules\Admin\Actions\Asset\Http\UpdateAssetAction;
 
 Route::middleware(['auth:sanctum', 'tenant.context'])
     ->prefix('tenants/{tenant}/assets')
+    ->whereUuid('tenant')
     ->group(function (): void {
         Route::get('/', ListTenantAssetsAction::class)
             ->middleware('abilities:control-plane:read');
@@ -17,6 +18,7 @@ Route::middleware(['auth:sanctum', 'tenant.context'])
 
 Route::middleware(['auth:sanctum', 'tenant.context'])
     ->prefix('tenants/{tenant}/projects/{project}/assets')
+    ->whereUuid(['tenant', 'project', 'asset'])
     ->scopeBindings()
     ->group(function (): void {
         Route::get('/', ListAssetsAction::class)

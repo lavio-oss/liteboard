@@ -2,7 +2,8 @@
 
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\RateLimiter;
-use Laravel\Sanctum\PersonalAccessToken;
+use Illuminate\Support\Str;
+use Modules\Core\Models\Auth\PersonalAccessToken;
 use Modules\Core\Models\Tenant\Tenant;
 use Modules\Core\Models\User\User;
 
@@ -16,6 +17,7 @@ it('authenticates a user with the stateful session flow', function (): void {
         'email' => 'operator@example.com',
         'password' => 'correct-password',
     ]);
+    $this->assertTrue(Str::isUuid($user->id, 7));
 
     $response = $this->withHeader('Origin', 'http://localhost:3000')
         ->postJson('/api/login', [
@@ -86,6 +88,9 @@ it('returns the authenticated user and tenant memberships', function (): void {
 
     $response = $this->actingAs($user)->getJson('/api/me');
 
+    $this->assertTrue(Str::isUuid($user->id, 7));
+    $this->assertTrue(Str::isUuid($tenant->id, 7));
+
     $response
         ->assertOk()
         ->assertJsonPath('data.id', $user->id)
@@ -108,13 +113,33 @@ it('creates a personal access token and never returns it from the list endpoint'
         ->assertJsonPath('data.abilities.0', 'control-plane:read');
 
     $plainTextToken = $createResponse->json('data.token');
+    $tokenId = $createResponse->json('data.id');
 
     expect($plainTextToken)->toBeString()->not->toBeEmpty();
+    expect($tokenId)->toBeString();
+    $this->assertTrue(Str::isUuid($tokenId, 7));
+    $this->assertDatabaseHas('personal_access_tokens', [
+        'id' => $tokenId,
+        'tokenable_id' => $user->id,
+    ]);
 
     $this->actingAs($user)->getJson('/api/tokens')
         ->assertOk()
         ->assertJsonMissing(['token' => $plainTextToken])
+        ->assertJsonPath('data.0.id', $tokenId)
         ->assertJsonPath('data.0.name', 'CI integration');
+});
+
+it('rejects malformed UUIDs for tenant and personal access token routes', function (): void {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->getJson('/api/tenants/not-a-uuid')
+        ->assertNotFound();
+
+    $this->actingAs($user)
+        ->deleteJson('/api/tokens/not-a-uuid')
+        ->assertNotFound();
 });
 
 it('returns an English validation message for an excessive token expiration', function (): void {

@@ -68,6 +68,14 @@ it('assigns existing tenant users and removes only project membership', function
 
     $this->actingAs($owner)
         ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/users', [
+            'user_id' => 'not-a-uuid',
+            'role' => 'viewer',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['user_id']);
+
+    $this->actingAs($owner)
+        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/users', [
             'user_id' => $member->id,
             'role' => 'viewer',
         ])

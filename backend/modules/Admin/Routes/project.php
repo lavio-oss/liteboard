@@ -9,6 +9,7 @@ use Modules\Admin\Actions\Project\Http\UpdateProjectAction;
 
 Route::middleware(['auth:sanctum', 'tenant.context'])
     ->prefix('tenants/{tenant}/projects')
+    ->whereUuid(['tenant', 'project'])
     ->scopeBindings()
     ->group(function (): void {
         Route::get('/', ListProjectsAction::class)

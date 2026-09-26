@@ -23,7 +23,7 @@ final class TenantUserResource extends JsonResource
         }
 
         return [
-            'id' => (int) $user->getKey(),
+            'id' => (string) $user->getKey(),
             'name' => (string) $user->name,
             'email' => (string) $user->email,
             'role' => $pivot->getAttribute('role'),

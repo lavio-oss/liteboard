@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Laravel\Sanctum\Sanctum;
+use Modules\Core\Models\Auth\PersonalAccessToken;
 use Modules\Core\Models\Tenant\Tenant;
 use Modules\Core\Policies\Tenant\TenantPolicy;
 
@@ -15,6 +17,8 @@ final class CoreServiceProvider extends ServiceProvider
 {
     public function boot(): void
     {
+        Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
+
         Gate::policy(Tenant::class, TenantPolicy::class);
 
         RateLimiter::for('login', static function (Request $request): Limit {

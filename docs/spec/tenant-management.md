@@ -48,7 +48,7 @@ Tenant resource hiện trả:
 
 ```json
 {
-  "id": 1,
+  "id": "019c0000-0000-7000-8000-000000000001",
   "name": "Demo Tenant",
   "code": "demo",
   "status": "active",
@@ -62,14 +62,14 @@ authenticated user.
 Schema hiện tại:
 
 ```text
-tenants.id                 bigint primary key
-tenants.parent_id          bigint nullable, self-reference, nullOnDelete
+tenants.id                 uuid primary key, returned as a UUID string
+tenants.parent_id          uuid nullable, self-reference, nullOnDelete
 tenants.name               varchar(255)
 tenants.code               varchar(64), unique
 tenants.status             varchar(32), default active
 
-tenant_user.tenant_id      foreign key, cascade update/delete
-tenant_user.user_id        foreign key, cascade update/delete
+tenant_user.tenant_id      uuid foreign key, cascade update/delete
+tenant_user.user_id        uuid foreign key to users.id, cascade update/delete
 tenant_user.role           varchar(32), default member
 tenant_user.(tenant_id,user_id) unique
 ```

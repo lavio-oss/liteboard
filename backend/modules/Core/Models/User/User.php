@@ -5,15 +5,16 @@ namespace Modules\Core\Models\User;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
-use Laravel\Sanctum\PersonalAccessToken;
 use Modules\Admin\Models\Project\Project;
 use Modules\Core\Enums\System\SystemRole;
+use Modules\Core\Models\Auth\PersonalAccessToken;
 use Modules\Core\Models\Tenant\Tenant;
 
 #[Fillable(['name', 'email', 'password', 'system_role'])]
@@ -24,7 +25,7 @@ final class User extends Authenticatable
      * @use HasApiTokens<PersonalAccessToken>
      * @use HasFactory<UserFactory>
      */
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, HasUuids, Notifiable;
 
     /** @return Factory<User> */
     protected static function newFactory(): Factory

@@ -5,7 +5,7 @@ export const systemRoleSchema = z.literal('platform_admin').nullable()
 export const tenantStatusSchema = z.enum(['active', 'inactive'])
 
 export const tenantSchema = z.object({
-  id: z.number().int().positive(),
+  id: z.string().uuid(),
   name: z.string(),
   code: z.string(),
   status: tenantStatusSchema,
@@ -19,7 +19,7 @@ export const tenantMembershipSchema = tenantSchema.pick({
 }).extend({ role: tenantRoleSchema })
 
 export const authUserSchema = z.object({
-  id: z.number().int().positive(),
+  id: z.string().uuid(),
   name: z.string(),
   email: z.string().email(),
   email_verified_at: z.string().nullable(),
@@ -40,7 +40,7 @@ export const tenantResponseSchema = z.object({
 })
 
 export const tenantUserSchema = z.object({
-  id: z.number().int().positive(),
+  id: z.string().uuid(),
   name: z.string(),
   email: z.string().email(),
   role: tenantRoleSchema,

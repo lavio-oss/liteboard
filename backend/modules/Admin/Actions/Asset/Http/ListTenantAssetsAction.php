@@ -21,7 +21,7 @@ final class ListTenantAssetsAction
             $tenant,
             $request->string('search')->value(),
             $request->filled('asset_type') ? $request->string('asset_type')->value() : null,
-            $request->filled('project_id') ? $request->integer('project_id') : null,
+            $request->filled('project_id') ? $request->string('project_id')->value() : null,
             $request->integer('per_page', 15),
         );
 

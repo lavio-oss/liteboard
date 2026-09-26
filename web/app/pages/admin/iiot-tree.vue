@@ -10,7 +10,7 @@ definePageMeta({
 const api = useApi()
 const route = useRoute()
 const tenantQuerySchema = z.object({
-  tenant_id: z.coerce.number().int().positive().optional()
+  tenant_id: z.string().uuid().optional()
 })
 const { data: response, status, error } = await useAsyncData('iiot-tree-tenants', () =>
   api.request('/api/tenants', tenantCollectionResponseSchema)

@@ -13,7 +13,7 @@ final class RotatePersonalAccessTokenAction
 {
     public function __invoke(
         AuthenticatedRequest $request,
-        int $token,
+        string $token,
         RotateToken $rotateToken,
         Responder $responder,
     ): Response {

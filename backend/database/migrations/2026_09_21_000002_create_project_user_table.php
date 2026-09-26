@@ -10,8 +10,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('project_user', function (Blueprint $table): void {
-            $table->foreignId('project_id')->constrained('projects')->cascadeOnUpdate()->cascadeOnDelete();
-            $table->foreignId('user_id')->constrained('users')->cascadeOnUpdate()->cascadeOnDelete();
+            $table->foreignUuid('project_id')->constrained('projects')->cascadeOnUpdate()->cascadeOnDelete();
+            $table->foreignUuid('user_id')->constrained('users')->cascadeOnUpdate()->cascadeOnDelete();
             $table->string('role', 32);
             $table->timestamps();
             $table->unique(['project_id', 'user_id']);

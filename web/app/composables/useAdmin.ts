@@ -26,7 +26,7 @@ import type { TenantUser, TenantUserCreateInput, TenantUserUpdateInput } from '~
 export function useAdmin() {
   const api = useApi()
 
-  async function loadProjects(tenantId: number): Promise<Project[]> {
+  async function loadProjects(tenantId: string): Promise<Project[]> {
     const response = await api.request(
       `/api/tenants/${tenantId}/projects?per_page=100`,
       projectsResponseSchema
@@ -35,7 +35,7 @@ export function useAdmin() {
     return response.data
   }
 
-  async function loadAssets(tenantId: number, projectId: number): Promise<Asset[]> {
+  async function loadAssets(tenantId: string, projectId: string): Promise<Asset[]> {
     const response = await api.request(
       `/api/tenants/${tenantId}/projects/${projectId}/assets?per_page=100`,
       assetsResponseSchema
@@ -44,7 +44,7 @@ export function useAdmin() {
     return response.data
   }
 
-  async function loadTenantHierarchy(tenantId: number): Promise<TenantHierarchy> {
+  async function loadTenantHierarchy(tenantId: string): Promise<TenantHierarchy> {
     const projects = await loadProjects(tenantId)
     const assetResponses = await Promise.all(
       projects.map(project => loadAssets(tenantId, project.id))
@@ -56,7 +56,7 @@ export function useAdmin() {
     }
   }
 
-  async function createProject(tenantId: number, payload: ProjectInput): Promise<Project> {
+  async function createProject(tenantId: string, payload: ProjectInput): Promise<Project> {
     const response = await api.request(
       `/api/tenants/${tenantId}/projects`,
       projectResponseSchema,
@@ -66,7 +66,7 @@ export function useAdmin() {
     return response.data
   }
 
-  async function updateProject(tenantId: number, projectId: number, payload: Partial<ProjectInput>): Promise<Project> {
+  async function updateProject(tenantId: string, projectId: string, payload: Partial<ProjectInput>): Promise<Project> {
     const response = await api.request(
       `/api/tenants/${tenantId}/projects/${projectId}`,
       projectResponseSchema,
@@ -76,7 +76,7 @@ export function useAdmin() {
     return response.data
   }
 
-  async function deleteProject(tenantId: number, projectId: number): Promise<void> {
+  async function deleteProject(tenantId: string, projectId: string): Promise<void> {
     await api.request(
       `/api/tenants/${tenantId}/projects/${projectId}`,
       z.unknown(),
@@ -84,7 +84,7 @@ export function useAdmin() {
     )
   }
 
-  async function createAsset(tenantId: number, projectId: number, payload: AssetInput): Promise<Asset> {
+  async function createAsset(tenantId: string, projectId: string, payload: AssetInput): Promise<Asset> {
     const response = await api.request(
       `/api/tenants/${tenantId}/projects/${projectId}/assets`,
       assetResponseSchema,
@@ -95,9 +95,9 @@ export function useAdmin() {
   }
 
   async function updateAsset(
-    tenantId: number,
-    projectId: number,
-    assetId: number,
+    tenantId: string,
+    projectId: string,
+    assetId: string,
     payload: Partial<AssetInput>
   ): Promise<Asset> {
     const response = await api.request(
@@ -109,7 +109,7 @@ export function useAdmin() {
     return response.data
   }
 
-  async function deleteAsset(tenantId: number, projectId: number, assetId: number): Promise<void> {
+  async function deleteAsset(tenantId: string, projectId: string, assetId: string): Promise<void> {
     await api.request(
       `/api/tenants/${tenantId}/projects/${projectId}/assets/${assetId}`,
       z.unknown(),
@@ -117,7 +117,7 @@ export function useAdmin() {
     )
   }
 
-  async function loadProjectUsers(tenantId: number, projectId: number): Promise<ProjectUser[]> {
+  async function loadProjectUsers(tenantId: string, projectId: string): Promise<ProjectUser[]> {
     const response = await api.request(
       `/api/tenants/${tenantId}/projects/${projectId}/users?per_page=100`,
       projectUsersResponseSchema
@@ -126,7 +126,7 @@ export function useAdmin() {
     return response.data
   }
 
-  async function loadTenantUsers(tenantId: number): Promise<TenantUser[]> {
+  async function loadTenantUsers(tenantId: string): Promise<TenantUser[]> {
     const response = await api.request(
       `/api/tenants/${tenantId}/users?per_page=100`,
       tenantUsersResponseSchema
@@ -135,7 +135,7 @@ export function useAdmin() {
     return response.data
   }
 
-  async function createTenantUser(tenantId: number, payload: TenantUserCreateInput): Promise<TenantUser> {
+  async function createTenantUser(tenantId: string, payload: TenantUserCreateInput): Promise<TenantUser> {
     const response = await api.request(
       `/api/tenants/${tenantId}/users`,
       tenantUserResponseSchema,
@@ -145,7 +145,7 @@ export function useAdmin() {
     return response.data
   }
 
-  async function loadAvailableProjectUsers(tenantId: number, projectId: number): Promise<AvailableProjectUser[]> {
+  async function loadAvailableProjectUsers(tenantId: string, projectId: string): Promise<AvailableProjectUser[]> {
     const response = await api.request(
       `/api/tenants/${tenantId}/projects/${projectId}/available-users?per_page=100`,
       availableProjectUsersResponseSchema
@@ -155,8 +155,8 @@ export function useAdmin() {
   }
 
   async function attachProjectUser(
-    tenantId: number,
-    projectId: number,
+    tenantId: string,
+    projectId: string,
     payload: ProjectUserInput
   ): Promise<ProjectUser> {
     const response = await api.request(
@@ -169,8 +169,8 @@ export function useAdmin() {
   }
 
   async function createProjectUserAccount(
-    tenantId: number,
-    projectId: number,
+    tenantId: string,
+    projectId: string,
     payload: ProjectUserAccountInput
   ): Promise<ProjectUser> {
     const response = await api.request(
@@ -183,9 +183,9 @@ export function useAdmin() {
   }
 
   async function updateProjectUser(
-    tenantId: number,
-    projectId: number,
-    userId: number,
+    tenantId: string,
+    projectId: string,
+    userId: string,
     role: ProjectUserInput['role']
   ): Promise<ProjectUser> {
     const response = await api.request(
@@ -197,7 +197,7 @@ export function useAdmin() {
     return response.data
   }
 
-  async function removeProjectUser(tenantId: number, projectId: number, userId: number): Promise<void> {
+  async function removeProjectUser(tenantId: string, projectId: string, userId: string): Promise<void> {
     await api.request(
       `/api/tenants/${tenantId}/projects/${projectId}/users/${userId}`,
       z.unknown(),
@@ -206,8 +206,8 @@ export function useAdmin() {
   }
 
   async function updateTenantUser(
-    tenantId: number,
-    userId: number,
+    tenantId: string,
+    userId: string,
     payload: TenantUserUpdateInput
   ): Promise<void> {
     await api.request(
@@ -217,7 +217,7 @@ export function useAdmin() {
     )
   }
 
-  async function deleteTenantUser(tenantId: number, userId: number): Promise<void> {
+  async function deleteTenantUser(tenantId: string, userId: string): Promise<void> {
     await api.request(
       `/api/tenants/${tenantId}/users/${userId}`,
       z.unknown(),

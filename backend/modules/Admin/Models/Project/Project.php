@@ -4,6 +4,7 @@ namespace Modules\Admin\Models\Project;
 
 use Database\Factories\ProjectFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\Factory as EloquentFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -19,7 +20,7 @@ use Modules\Core\Models\User\User;
 final class Project extends Model
 {
     /** @use HasFactory<ProjectFactory> */
-    use HasFactory;
+    use HasFactory, HasUuids;
 
     /** @return EloquentFactory<Project> */
     protected static function newFactory(): EloquentFactory

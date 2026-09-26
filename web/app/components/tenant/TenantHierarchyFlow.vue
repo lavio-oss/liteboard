@@ -10,7 +10,7 @@ import type { Asset, AssetInput, AssetType, Project, TenantHierarchy } from '~/t
 
 const props = defineProps<{
   tenants: Tenant[]
-  initialTenantId: number | null
+  initialTenantId: string | null
 }>()
 
 type FlowKind = 'tenant' | 'project' | AssetType
@@ -128,7 +128,7 @@ function getKindLabel(kind: FlowKind): string {
   return `Asset - ${assetTypeLabels[kind]}`
 }
 
-const selectedTenantId = ref<number | null>(props.initialTenantId ?? props.tenants[0]?.id ?? null)
+const selectedTenantId = ref<string | null>(props.initialTenantId ?? props.tenants[0]?.id ?? null)
 const hierarchy = ref<TenantHierarchy | null>(null)
 const loading = ref(false)
 const error = ref<ApiError | null>(null)
@@ -136,8 +136,8 @@ const detailsOpen = ref(false)
 const selectedNode = ref<FlowNodeData | null>(null)
 const assetFormOpen = ref(false)
 const assetFormLoading = ref(false)
-const selectedProjectId = ref<number | null>(null)
-const selectedParentId = ref<number | null>(null)
+const selectedProjectId = ref<string | null>(null)
+const selectedParentId = ref<string | null>(null)
 const filterOpen = ref(false)
 const filterQuery = ref('')
 const selectedFilterKeys = ref<string[]>([])
@@ -167,7 +167,7 @@ const parentOptions = computed(() => [
     .map(asset => ({ label: `${asset.name} (${asset.code})`, value: asset.id }))
 ])
 
-function buildAssetFilterItems(projectId: number, parentAssetId: number | null): FilterTreeItem[] {
+function buildAssetFilterItems(projectId: string, parentAssetId: string | null): FilterTreeItem[] {
   return (hierarchy.value?.assets ?? [])
     .filter(asset => asset.project_id === projectId && asset.parent_asset_id === parentAssetId)
     .map(asset => ({
@@ -488,7 +488,7 @@ const nodes = computed<Node<FlowNodeData>[]>(() => {
 
   const assets = currentHierarchy.assets
 
-  function buildAssetChildren(projectId: number, parentAssetId: number | null, y: number): TreeNode[] {
+  function buildAssetChildren(projectId: string, parentAssetId: string | null, y: number): TreeNode[] {
     return assets
       .filter(asset => asset.project_id === projectId && asset.parent_asset_id === parentAssetId)
       .map((asset) => {

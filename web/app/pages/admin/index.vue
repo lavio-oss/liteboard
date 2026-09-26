@@ -89,9 +89,9 @@ const { isPlatformAdmin, loadTenants, selectTenant, tenants, activeTenantId } = 
 const { loadTenantHierarchy } = useAdmin()
 await loadTenants()
 
-const scopeTenantId = ref<number | null>(isPlatformAdmin.value ? null : activeTenantId.value)
+const scopeTenantId = ref<string | null>(isPlatformAdmin.value ? null : activeTenantId.value)
 const tenantIds = computed(() => tenants.value.map(tenant => tenant.id))
-const tenantOptions = computed<Array<{ label: string, value: number | null }>>(() => [
+const tenantOptions = computed<Array<{ label: string, value: string | null }>>(() => [
   ...(isPlatformAdmin.value ? [{ label: 'All tenants', value: null }] : []),
   ...tenants.value.map(tenant => ({
     label: `${tenant.name} (${tenant.code})`,

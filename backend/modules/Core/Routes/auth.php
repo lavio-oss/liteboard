@@ -35,10 +35,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/', CreatePersonalAccessTokenAction::class)
             ->middleware('abilities:control-plane:write');
         Route::delete('/{token}', RevokePersonalAccessTokenAction::class)
-            ->whereNumber('token')
+            ->whereUuid('token')
             ->middleware('abilities:control-plane:write');
         Route::post('/{token}/rotate', RotatePersonalAccessTokenAction::class)
-            ->whereNumber('token')
+            ->whereUuid('token')
             ->middleware('abilities:control-plane:write');
     });
 
@@ -49,14 +49,17 @@ Route::middleware('auth:sanctum')->group(function (): void {
         ->middleware('abilities:control-plane:write');
 
     Route::get('/tenants/{tenant}', ShowTenantAction::class)
+        ->whereUuid('tenant')
         ->scopeBindings()
         ->middleware(['abilities:control-plane:read', 'tenant.context']);
 
     Route::patch('/tenants/{tenant}', UpdateTenantAction::class)
+        ->whereUuid('tenant')
         ->scopeBindings()
         ->middleware(['abilities:control-plane:write', 'tenant.context']);
 
     Route::delete('/tenants/{tenant}', DeleteTenantAction::class)
+        ->whereUuid('tenant')
         ->scopeBindings()
         ->middleware(['abilities:control-plane:write', 'tenant.context']);
 });

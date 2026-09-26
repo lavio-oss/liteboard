@@ -32,7 +32,7 @@ final class UpdateAssetRequest extends FormRequest
             'name' => ['sometimes', 'string', 'min:2', 'max:255'],
             'code' => ['sometimes', 'string', 'max:64'],
             'asset_type' => ['sometimes', Rule::enum(AssetType::class)],
-            'parent_asset_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
+            'parent_asset_id' => ['sometimes', 'nullable', 'bail', 'uuid'],
             'location' => ['sometimes', 'nullable', 'string', 'max:255'],
             'status' => ['sometimes', 'string', Rule::in(['active', 'inactive'])],
             'tenant_id' => ['prohibited'],
@@ -49,13 +49,13 @@ final class UpdateAssetRequest extends FormRequest
      *         location?: string|null,
      *         status?: string
      *     },
-     *     parent_update: array{provided: bool, parent_asset_id: int|null}
+     *     parent_update: array{provided: bool, parent_asset_id: string|null}
      * }
      */
     public function assetInput(): array
     {
         /** @var array{
-         *     parent_asset_id?: int|null,
+         *     parent_asset_id?: string|null,
          *     name?: string,
          *     code?: string,
          *     asset_type?: string,

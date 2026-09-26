@@ -13,18 +13,18 @@ import { assetTypeSchema } from '~/types/admin'
 
 type Resource = Project | Asset
 type ResourceType = 'project' | 'asset'
-type ProjectFormState = Omit<ProjectFormInput, 'tenant_id'> & { tenant_id: number | null }
+type ProjectFormState = Omit<ProjectFormInput, 'tenant_id'> & { tenant_id: string | null }
 type FormState = ProjectFormState | Omit<AssetInput, 'parent_asset_id'>
-type SelectOption = { label: string, value: number | null }
+type SelectOption = { label: string, value: string | null }
 
 const props = withDefaults(defineProps<{
   resourceType: ResourceType
   resource?: Resource | null
-  tenantId?: number | null
+  tenantId?: string | null
   tenantOptions?: SelectOption[]
-  projectId?: number | null
+  projectId?: string | null
   projectOptions?: SelectOption[]
-  parentId?: number | null
+  parentId?: string | null
   parentOptions?: SelectOption[]
   loading?: boolean
 }>(), {
@@ -41,15 +41,15 @@ const props = withDefaults(defineProps<{
 const open = defineModel<boolean>('open', { required: true })
 
 const emit = defineEmits<{
-  'update:tenant-id': [value: number | null]
-  'update:project-id': [value: number | null]
-  'update:parent-id': [value: number | null]
+  'update:tenant-id': [value: string | null]
+  'update:project-id': [value: string | null]
+  'update:parent-id': [value: string | null]
   'submit-project': [value: ProjectFormInput]
   'submit-asset': [value: AssetInput]
 }>()
 
 const projectSchema = z.object({
-  tenant_id: z.number().int().positive('Tenant is required'),
+  tenant_id: z.string().uuid('Tenant is required'),
   name: z.string().min(2, 'Name must be at least 2 characters').max(255, 'Name is too long'),
   description: z.string().max(10000, 'Description is too long'),
   status: z.enum(['active', 'inactive'])
@@ -75,7 +75,7 @@ const assetTypeOptions: Array<{ label: string, value: AssetType }> = [
 const schema = computed(() => props.resourceType === 'project' ? projectSchema : assetSchema)
 
 const state = reactive<{
-  tenant_id: number | null
+  tenant_id: string | null
   name: string
   description: string
   code: string

@@ -6,7 +6,7 @@ use Modules\Core\Models\User\User;
 
 final class RevokePersonalAccessTokenAction
 {
-    public function execute(User $user, int $tokenId): bool
+    public function execute(User $user, string $tokenId): bool
     {
         $token = $user->tokens()->whereKey($tokenId)->first();
 

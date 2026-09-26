@@ -37,8 +37,8 @@ Tenant là dữ liệu trung tâm của Control Plane, gồm:
 
 ```text
 tenants
-  id
-  parent_id nullable
+  id uuid
+  parent_id uuid nullable
   name
   code unique
   status: active | inactive
@@ -46,8 +46,8 @@ tenants
   updated_at
 
 tenant_user
-  tenant_id
-  user_id
+  tenant_id uuid
+  user_id uuid
   role: owner | admin | member
 ```
 
@@ -62,8 +62,8 @@ thế Tenant security boundary.
 
 ```text
 projects
-  id
-  tenant_id NOT NULL
+  id uuid
+  tenant_id uuid NOT NULL
   name
   description nullable
   status: active | inactive
@@ -71,8 +71,8 @@ projects
   updated_at
 
 project_user
-  project_id
-  user_id
+  project_id uuid
+  user_id uuid
   role: admin | engineer | operator | viewer
 ```
 
@@ -92,8 +92,8 @@ Asset là master-data node tenant-owned, bắt buộc thuộc một Project.
 
 ```text
 assets
-  id
-  project_id NOT NULL
+  id uuid
+  project_id uuid NOT NULL
   asset_type: site | factory | area | production_line | station | equipment
   name
   code
@@ -119,12 +119,12 @@ Ràng buộc Asset:
 
 ```text
 entity_relations
-  id
-  project_id NOT NULL
+  id uuid
+  project_id uuid NOT NULL
   source_type = asset
-  source_id = parent asset id
+  source_id uuid = parent asset id
   target_type = asset
-  target_id = child asset id
+  target_id uuid = child asset id
   relation_type = contains
   created_at
   updated_at
@@ -217,14 +217,14 @@ Asset create/update nhận:
   "asset_type": "station",
   "location": "Line A",
   "status": "active",
-  "parent_asset_id": 12
+  "parent_asset_id": "019c0000-0000-7000-8000-000000000001"
 }
 ```
 
 `parent_asset_id` có ba trạng thái hợp lệ:
 
 - không gửi khi không thay đổi parent trong PATCH;
-- gửi số nguyên để set/thay parent;
+- gửi UUID để set/thay parent;
 - gửi `null` để gỡ parent và đưa Asset thành root.
 
 Response vẫn trả `parent_asset_id`, nhưng backend đọc giá trị này từ

@@ -12,7 +12,7 @@ final class RevokePersonalAccessTokenAction
 {
     public function __invoke(
         AuthenticatedRequest $request,
-        int $token,
+        string $token,
         RevokeToken $revokeToken,
         Responder $responder,
     ): Response {

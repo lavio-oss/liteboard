@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Modules\Admin\Enums\Asset\AssetType;
 use Modules\Admin\Models\Asset\Asset;
 use Modules\Admin\Models\EntityRelation\EntityRelation;
@@ -12,7 +13,7 @@ use Modules\Core\Models\Tenant\Tenant;
 use Modules\Core\Models\User\User;
 
 it('rejects unauthenticated asset access', function (): void {
-    $this->getJson('/api/tenants/1/projects/1/assets')
+    $this->getJson('/api/tenants/019c0000-0000-7000-8000-000000000001/projects/019c0000-0000-7000-8000-000000000002/assets')
         ->assertUnauthorized();
 });
 
@@ -33,6 +34,9 @@ it('creates a tenant-scoped multi-level asset hierarchy', function (): void {
     $tenant->users()->attach($owner, ['role' => 'owner']);
     $project = Project::factory()->for($tenant)->create();
 
+    $this->assertTrue(Str::isUuid($tenant->id, 7));
+    $this->assertTrue(Str::isUuid($project->id, 7));
+
     $siteResponse = $this->actingAs($owner)->postJson(
         '/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets',
         [
@@ -50,6 +54,7 @@ it('creates a tenant-scoped multi-level asset hierarchy', function (): void {
         ->assertJsonPath('data.asset_type', AssetType::Site->value);
 
     $site = Asset::query()->where('code', 'site-hanoi')->firstOrFail();
+    $this->assertTrue(Str::isUuid($site->id, 7));
 
     $factoryResponse = $this->actingAs($owner)->postJson(
         '/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets',
@@ -89,6 +94,7 @@ it('creates a tenant-scoped multi-level asset hierarchy', function (): void {
         ->where('project_id', $project->getKey())
         ->where('relation_type', EntityRelation::RELATION_TYPE_CONTAINS)
         ->count())->toBe(5);
+    $this->assertTrue(Str::isUuid((string) EntityRelation::query()->value('id'), 7));
     expect(Schema::hasColumn('assets', 'parent_asset_id'))->toBeFalse();
 });
 
@@ -234,6 +240,35 @@ it('rejects invalid asset input and duplicate codes within a type', function ():
         ])
         ->assertUnprocessable()
         ->assertJsonValidationErrors(['code', 'tenant_id', 'project_id']);
+});
+
+it('rejects malformed UUIDs in asset identifiers and parent references', function (): void {
+    $owner = User::factory()->create();
+    $tenant = Tenant::factory()->create();
+    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $project = Project::factory()->for($tenant)->create();
+
+    $this->actingAs($owner)
+        ->getJson('/api/tenants/not-a-uuid/projects/'.$project->id.'/assets')
+        ->assertNotFound();
+
+    $this->actingAs($owner)
+        ->getJson('/api/tenants/'.$tenant->id.'/projects/not-a-uuid/assets')
+        ->assertNotFound();
+
+    $this->actingAs($owner)
+        ->getJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets/not-a-uuid')
+        ->assertNotFound();
+
+    $this->actingAs($owner)
+        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets', [
+            'name' => 'Malformed Parent',
+            'code' => 'malformed-parent',
+            'asset_type' => AssetType::Area->value,
+            'parent_asset_id' => 'not-a-uuid',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['parent_asset_id']);
 });
 
 it('supports asset search, type filtering, parent filtering and roots', function (): void {
@@ -423,8 +458,8 @@ it('cascades project and tenant key updates through asset relations', function (
     $project = Project::factory()->for($tenant)->create();
     $parent = Asset::factory()->for($project)->create();
     $child = Asset::factory()->for($project)->withParent($parent)->create();
-    $newTenantId = $tenant->id + 10000;
-    $newProjectId = $project->id + 10000;
+    $newTenantId = (string) Str::uuid7();
+    $newProjectId = (string) Str::uuid7();
 
     DB::table('tenants')->where('id', $tenant->id)->update(['id' => $newTenantId]);
     DB::table('projects')->where('id', $project->id)->update(['id' => $newProjectId]);

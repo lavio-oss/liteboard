@@ -30,7 +30,7 @@ final class UserResource extends JsonResource
         $emailVerifiedAt = $user->getAttribute('email_verified_at');
 
         return [
-            'id' => (int) $user->getKey(),
+            'id' => (string) $user->getKey(),
             'name' => (string) $user->name,
             'email' => (string) $user->email,
             'system_role' => $user->getAttribute('system_role'),
@@ -46,7 +46,7 @@ final class UserResource extends JsonResource
                     }
 
                     return [
-                        'id' => (int) $tenant->getKey(),
+                        'id' => (string) $tenant->getKey(),
                         'name' => (string) $tenant->name,
                         'code' => (string) $tenant->code,
                         'role' => $pivot->getAttribute('role'),

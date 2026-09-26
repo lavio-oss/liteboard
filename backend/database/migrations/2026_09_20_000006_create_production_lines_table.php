@@ -9,8 +9,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('production_lines', function (Blueprint $table): void {
-            $table->id();
-            $table->foreignId('factory_id')
+            $table->uuid('id')->primary();
+            $table->foreignUuid('factory_id')
                 ->constrained('factories')
                 ->cascadeOnUpdate()
                 ->cascadeOnDelete();

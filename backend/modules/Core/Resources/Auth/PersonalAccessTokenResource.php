@@ -4,7 +4,7 @@ namespace Modules\Core\Resources\Auth;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Laravel\Sanctum\PersonalAccessToken;
+use Modules\Core\Models\Auth\PersonalAccessToken;
 
 /**
  * @mixin PersonalAccessToken
@@ -17,7 +17,7 @@ final class PersonalAccessTokenResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id' => (int) $this->id,
+            'id' => (string) $this->getKey(),
             'name' => (string) $this->name,
             'abilities' => is_array($this->abilities) ? array_values($this->abilities) : [],
             'created_at' => $this->created_at?->toISOString(),

@@ -29,11 +29,11 @@ final class AssetResource extends JsonResource
             : $asset->incomingRelations()->first();
 
         return [
-            'id' => (int) $asset->getKey(),
-            'project_id' => (int) $asset->getAttribute('project_id'),
+            'id' => (string) $asset->getKey(),
+            'project_id' => (string) $asset->getAttribute('project_id'),
             'parent_asset_id' => $parentRelation === null
                 ? null
-                : (int) $parentRelation->source_id,
+                : (string) $parentRelation->source_id,
             'asset_type' => $assetType->value,
             'name' => (string) $asset->name,
             'code' => (string) $asset->code,

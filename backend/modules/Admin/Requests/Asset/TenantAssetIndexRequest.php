@@ -30,7 +30,7 @@ final class TenantAssetIndexRequest extends FormRequest
         return [
             'search' => ['sometimes', 'string', 'max:255'],
             'asset_type' => ['sometimes', Rule::enum(AssetType::class)],
-            'project_id' => ['sometimes', 'integer', 'min:1'],
+            'project_id' => ['sometimes', 'bail', 'uuid'],
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
         ];

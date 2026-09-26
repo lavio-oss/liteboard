@@ -8,6 +8,7 @@ use Modules\Core\Actions\Tenant\Http\UpdateTenantUserAction;
 
 Route::middleware(['auth:sanctum', 'tenant.context'])
     ->prefix('tenants/{tenant}/users')
+    ->whereUuid(['tenant', 'user'])
     ->scopeBindings()
     ->group(function (): void {
         Route::get('/', ListTenantUsersAction::class)

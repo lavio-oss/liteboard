@@ -17,7 +17,7 @@ final class AssetQueryService
         Project $project,
         string $search,
         ?string $assetType,
-        ?int $parentAssetId,
+        ?string $parentAssetId,
         bool $rootOnly,
         int $perPage,
     ): LengthAwarePaginator {
@@ -41,7 +41,7 @@ final class AssetQueryService
         Tenant $tenant,
         string $search,
         ?string $assetType,
-        ?int $projectId,
+        ?string $projectId,
         int $perPage,
     ): LengthAwarePaginator {
         $query = Asset::query()

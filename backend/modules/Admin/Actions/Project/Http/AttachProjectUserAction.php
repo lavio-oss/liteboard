@@ -21,7 +21,7 @@ final class AttachProjectUserAction
         AttachProjectUser $attachProjectUser,
         Responder $responder,
     ): Response {
-        /** @var array{user_id: int, role: string} $attributes */
+        /** @var array{user_id: string, role: string} $attributes */
         $attributes = $request->validated();
         $user = User::query()->findOrFail($attributes['user_id']);
         $projectUser = $attachProjectUser->execute(

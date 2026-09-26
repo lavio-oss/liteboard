@@ -8,7 +8,7 @@ import type { AvailableProjectUser, Project, ProjectRole, ProjectUser } from '~/
 import { projectRoleSchema } from '~/types/admin'
 
 const props = withDefaults(defineProps<{
-  tenantId: number | null
+  tenantId: string | null
   project: Project | null
   canDeleteAccount?: boolean
 }>(), {
@@ -18,7 +18,7 @@ const props = withDefaults(defineProps<{
 const open = defineModel<boolean>('open', { required: true })
 
 type ExistingForm = {
-  user_id: number | undefined
+  user_id: string | undefined
   role: ProjectRole
 }
 
@@ -77,7 +77,7 @@ const selectedUser = ref<ProjectUser | null>(null)
 const usersToRemove = ref<ProjectUser[]>([])
 
 const existingSchema = z.object({
-  user_id: z.number().int().positive('Select a user'),
+  user_id: z.string().uuid('Select a user'),
   role: projectRoleSchema
 })
 const newAccountSchema = z.object({
@@ -138,7 +138,7 @@ const filteredUsers = computed(() => {
     return matchesSearch && matchesRole
   })
 })
-const selectedUsers = computed(() => users.value.filter(user => rowSelection.value[String(user.id)] === true))
+const selectedUsers = computed(() => users.value.filter(user => rowSelection.value[user.id] === true))
 const availableOptions = computed(() => availableUsers.value.map(user => ({
   label: `${user.name} (${user.email})`,
   value: user.id
@@ -321,7 +321,7 @@ async function confirmRemove(): Promise<void> {
   removeLoading.value = true
 
   try {
-    await Promise.all(usersToRemove.value.map(user => removeProjectUser(props.tenantId as number, props.project?.id as number, user.id)))
+    await Promise.all(usersToRemove.value.map(user => removeProjectUser(props.tenantId as string, props.project?.id as string, user.id)))
     await reload()
     removeOpen.value = false
     toast.add({ title: 'User removed', description: 'The user has been removed from the project.', color: 'success' })

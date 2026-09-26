@@ -20,8 +20,8 @@ final class ProjectResource extends JsonResource
         $updatedAt = $project->getAttribute('updated_at');
 
         return [
-            'id' => (int) $project->getKey(),
-            'tenant_id' => (int) $project->getAttribute('tenant_id'),
+            'id' => (string) $project->getKey(),
+            'tenant_id' => (string) $project->getAttribute('tenant_id'),
             'name' => (string) $project->name,
             'description' => $project->description,
             'status' => (string) $project->status,

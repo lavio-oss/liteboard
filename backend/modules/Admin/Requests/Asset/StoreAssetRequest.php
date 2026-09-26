@@ -32,7 +32,7 @@ final class StoreAssetRequest extends FormRequest
             'name' => ['required', 'string', 'min:2', 'max:255'],
             'code' => ['required', 'string', 'max:64'],
             'asset_type' => ['required', Rule::enum(AssetType::class)],
-            'parent_asset_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
+            'parent_asset_id' => ['sometimes', 'nullable', 'bail', 'uuid'],
             'location' => ['sometimes', 'nullable', 'string', 'max:255'],
             'status' => ['sometimes', 'string', Rule::in(['active', 'inactive'])],
             'tenant_id' => ['prohibited'],
@@ -49,7 +49,7 @@ final class StoreAssetRequest extends FormRequest
      *         location?: string|null,
      *         status?: string
      *     },
-     *     parent_asset_id: int|null
+     *     parent_asset_id: string|null
      * }
      */
     public function assetInput(): array
@@ -58,7 +58,7 @@ final class StoreAssetRequest extends FormRequest
          *     asset_type: string,
          *     name: string,
          *     code: string,
-         *     parent_asset_id?: int|null,
+         *     parent_asset_id?: string|null,
          *     location?: string|null,
          *     status?: string
          * } $validated

@@ -3,12 +3,13 @@
 namespace Modules\Admin\Services\Asset;
 
 use Illuminate\Validation\ValidationException;
+use LogicException;
 use Modules\Admin\Models\Asset\Asset;
 use Modules\Admin\Models\EntityRelation\EntityRelation;
 
 final class AssetHierarchyService
 {
-    public function synchronizeParent(Asset $asset, ?int $parentAssetId): void
+    public function synchronizeParent(Asset $asset, ?string $parentAssetId): void
     {
         if ($parentAssetId !== null) {
             $this->ensureParentIsValid($asset, $parentAssetId);
@@ -35,7 +36,7 @@ final class AssetHierarchyService
         ]);
     }
 
-    private function ensureParentIsValid(Asset $asset, int $parentAssetId): void
+    private function ensureParentIsValid(Asset $asset, string $parentAssetId): void
     {
         $parent = Asset::query()
             ->where('project_id', $asset->project_id)
@@ -49,6 +50,10 @@ final class AssetHierarchyService
 
         $visited = [];
         $currentAssetId = $parent->getKey();
+
+        if (! is_string($currentAssetId)) {
+            throw new LogicException('The asset key must be a UUID string.');
+        }
 
         while (true) {
             if ($currentAssetId === $asset->getKey()) {
@@ -76,7 +81,11 @@ final class AssetHierarchyService
                 return;
             }
 
-            $currentAssetId = (int) $ancestorId;
+            if (! is_string($ancestorId)) {
+                throw new LogicException('The asset ancestor key must be a UUID string.');
+            }
+
+            $currentAssetId = $ancestorId;
         }
     }
 }

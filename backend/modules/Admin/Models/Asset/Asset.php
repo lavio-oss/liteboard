@@ -4,6 +4,7 @@ namespace Modules\Admin\Models\Asset;
 
 use Database\Factories\AssetFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\Factory as EloquentFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -17,7 +18,7 @@ use Modules\Admin\Models\Project\Project;
 final class Asset extends Model
 {
     /** @use HasFactory<AssetFactory> */
-    use HasFactory;
+    use HasFactory, HasUuids;
 
     /** @return EloquentFactory<Asset> */
     protected static function newFactory(): EloquentFactory

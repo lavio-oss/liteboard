@@ -10,15 +10,15 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('entity_relations', function (Blueprint $table): void {
-            $table->id();
-            $table->foreignId('project_id')
+            $table->uuid('id')->primary();
+            $table->foreignUuid('project_id')
                 ->constrained('projects')
                 ->cascadeOnUpdate()
                 ->cascadeOnDelete();
             $table->string('source_type', 32);
-            $table->unsignedBigInteger('source_id');
+            $table->uuid('source_id');
             $table->string('target_type', 32);
-            $table->unsignedBigInteger('target_id');
+            $table->uuid('target_id');
             $table->string('relation_type', 32);
             $table->timestamps();
 

@@ -23,7 +23,7 @@ final class ListAssetsAction
             $project,
             $request->string('search')->value(),
             $request->filled('asset_type') ? $request->string('asset_type')->value() : null,
-            $request->filled('parent_asset_id') ? $request->integer('parent_asset_id') : null,
+            $request->filled('parent_asset_id') ? $request->string('parent_asset_id')->value() : null,
             $request->boolean('root_only'),
             $request->integer('per_page', 15),
         );

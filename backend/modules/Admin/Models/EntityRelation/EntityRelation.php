@@ -3,6 +3,7 @@
 namespace Modules\Admin\Models\EntityRelation;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Modules\Admin\Models\Project\Project;
@@ -17,6 +18,8 @@ use Modules\Admin\Models\Project\Project;
 ])]
 final class EntityRelation extends Model
 {
+    use HasUuids;
+
     public const ENTITY_TYPE_ASSET = 'asset';
 
     public const RELATION_TYPE_CONTAINS = 'contains';
@@ -31,9 +34,9 @@ final class EntityRelation extends Model
     protected function casts(): array
     {
         return [
-            'project_id' => 'integer',
-            'source_id' => 'integer',
-            'target_id' => 'integer',
+            'project_id' => 'string',
+            'source_id' => 'string',
+            'target_id' => 'string',
         ];
     }
 }

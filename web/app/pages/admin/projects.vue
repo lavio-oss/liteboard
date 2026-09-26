@@ -28,7 +28,7 @@ const addRequested = useState('admin:add-requested', () => false)
 const { createProject, deleteProject, loadProjects, updateProject } = useAdmin()
 const formOpen = ref(false)
 const formLoading = ref(false)
-const selectedTenantId = ref<number | null>(null)
+const selectedTenantId = ref<string | null>(null)
 const editingProject = ref<Project | null>(null)
 const deleteOpen = ref(false)
 const deleteLoading = ref(false)
@@ -50,7 +50,7 @@ function openCreate(): void {
   formOpen.value = true
 }
 
-function openEdit(projectId: number): void {
+function openEdit(projectId: string): void {
   const project = projects.value.find(item => item.id === projectId)
 
   if (project === undefined) {
@@ -62,7 +62,7 @@ function openEdit(projectId: number): void {
   formOpen.value = true
 }
 
-function openDelete(projectId: number): void {
+function openDelete(projectId: string): void {
   const project = projects.value.find(item => item.id === projectId)
 
   if (project === undefined) {
@@ -73,7 +73,7 @@ function openDelete(projectId: number): void {
   deleteOpen.value = true
 }
 
-function openProjectUsers(projectId: number): void {
+function openProjectUsers(projectId: string): void {
   const project = projects.value.find(item => item.id === projectId)
 
   if (project === undefined) {
