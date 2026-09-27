@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Modules\Admin\Enums\Project\ProjectRole;
 use Modules\Admin\Models\Asset\Asset;
+use Modules\Admin\Models\Device\Device;
 use Modules\Core\Models\Tenant\Tenant;
 use Modules\Core\Models\User\User;
 
@@ -38,6 +39,12 @@ final class Project extends Model
     public function assets(): HasMany
     {
         return $this->hasMany(Asset::class);
+    }
+
+    /** @return HasMany<Device, $this> */
+    public function devices(): HasMany
+    {
+        return $this->hasMany(Device::class);
     }
 
     /**

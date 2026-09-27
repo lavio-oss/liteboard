@@ -129,7 +129,7 @@ function getKindLabel(kind: FlowKind): string {
 }
 
 const selectedTenantId = ref<string | null>(props.initialTenantId ?? props.tenants[0]?.id ?? null)
-const hierarchy = ref<TenantHierarchy | null>(null)
+const tenantHierarchies = ref<Array<{ tenant: Tenant, hierarchy: TenantHierarchy }>>([])
 const loading = ref(false)
 const error = ref<ApiError | null>(null)
 const detailsOpen = ref(false)
@@ -146,36 +146,34 @@ const toast = useToast()
 const { user } = useAuth()
 const { createAsset, loadTenantHierarchy } = useAdmin()
 
-const selectedTenant = computed(() => props.tenants.find(tenant => tenant.id === selectedTenantId.value))
-const canManageSelectedTenant = computed(() => {
-  const tenant = selectedTenant.value
+const displayTenants = computed(() => props.initialTenantId === null
+  ? props.tenants
+  : props.tenants.filter(tenant => tenant.id === props.initialTenantId))
+const hierarchyForSelectedTenant = computed(() => tenantHierarchies.value
+  .find(item => item.tenant.id === selectedTenantId.value)?.hierarchy)
+const allProjects = computed(() => tenantHierarchies.value.flatMap(item => item.hierarchy.projects))
 
-  return user.value?.system_role === 'platform_admin'
-    || tenant?.role === 'owner'
-    || tenant?.role === 'admin'
-})
-
-const projectOptions = computed(() => (hierarchy.value?.projects ?? []).map(project => ({
+const projectOptions = computed(() => (hierarchyForSelectedTenant.value?.projects ?? []).map(project => ({
   label: project.name,
   value: project.id
 })))
 
 const parentOptions = computed(() => [
   { label: 'Root asset', value: null },
-  ...(hierarchy.value?.assets ?? [])
+  ...(hierarchyForSelectedTenant.value?.assets ?? [])
     .filter(asset => asset.project_id === selectedProjectId.value)
-    .map(asset => ({ label: `${asset.name} (${asset.code})`, value: asset.id }))
+    .map(asset => ({ label: asset.name, value: asset.id }))
 ])
 
-function buildAssetFilterItems(projectId: string, parentAssetId: string | null): FilterTreeItem[] {
-  return (hierarchy.value?.assets ?? [])
+function buildAssetFilterItems(assets: Asset[], projectId: string, parentAssetId: string | null): FilterTreeItem[] {
+  return assets
     .filter(asset => asset.project_id === projectId && asset.parent_asset_id === parentAssetId)
     .map(asset => ({
       id: `asset-${asset.id}`,
       label: asset.name,
       searchText: `${asset.name} ${asset.code} ${asset.location ?? ''} ${assetTypeLabels[asset.asset_type]}`,
       icon: getKindConfig(asset.asset_type).icon,
-      children: buildAssetFilterItems(projectId, asset.id),
+      children: buildAssetFilterItems(assets, projectId, asset.id),
       onSelect: preventFilterRowSelection
     }))
 }
@@ -185,17 +183,10 @@ function preventFilterRowSelection(event: FilterTreeSelectEvent): void {
 }
 
 const filterTreeItems = computed<FilterTreeItem[]>(() => {
-  const currentTenant = selectedTenant.value
-  const currentHierarchy = hierarchy.value
-
-  if (currentTenant === undefined || currentHierarchy === null) {
-    return []
-  }
-
-  return [{
-    id: `tenant-${currentTenant.id}`,
-    label: currentTenant.name,
-    searchText: `${currentTenant.name} ${currentTenant.code}`,
+  return tenantHierarchies.value.map(({ tenant, hierarchy: currentHierarchy }) => ({
+    id: `tenant-${tenant.id}`,
+    label: tenant.name,
+    searchText: `${tenant.name} ${tenant.code}`,
     icon: getKindConfig('tenant').icon,
     onSelect: preventFilterRowSelection,
     children: currentHierarchy.projects.map(project => ({
@@ -203,10 +194,10 @@ const filterTreeItems = computed<FilterTreeItem[]>(() => {
       label: project.name,
       searchText: `${project.name} ${project.description ?? ''}`,
       icon: getKindConfig('project').icon,
-      children: buildAssetFilterItems(project.id, null),
+      children: buildAssetFilterItems(currentHierarchy.assets, project.id, null),
       onSelect: preventFilterRowSelection
     }))
-  }]
+  }))
 })
 
 function filterTreeItemsByQuery(items: FilterTreeItem[], query: string): FilterTreeItem[] {
@@ -240,6 +231,43 @@ function flattenFilterTreeItems(items: FilterTreeItem[]): FilterTreeItem[] {
 
 const selectedFilterItems = computed(() => flattenFilterTreeItems(filterTreeItems.value)
   .filter(item => selectedFilterKeys.value.includes(item.id)))
+
+const topLevelSelectedItems = computed(() => {
+  const result: FilterTreeItem[] = []
+  const selectedKeys = new Set(selectedFilterKeys.value)
+
+  function traverse(item: FilterTreeItem): void {
+    if (selectedKeys.has(item.id)) {
+      result.push(item)
+
+      return
+    }
+
+    for (const child of item.children ?? []) {
+      traverse(child)
+    }
+  }
+
+  for (const item of filterTreeItems.value) {
+    traverse(item)
+  }
+
+  return result
+})
+
+const filterInputPlaceholder = computed(() => {
+  if (selectedFilterKeys.value.length === 0) {
+    return 'Search nodes, code, or hierarchy...'
+  }
+
+  const items = topLevelSelectedItems.value
+
+  if (items.length === 0) {
+    return 'Search nodes, code, or hierarchy...'
+  }
+
+  return items.map(item => item.label).join(', ')
+})
 
 function getSelectedFilterPathKeys(items: FilterTreeItem[]): string[] {
   const selectedKeys = new Set(selectedFilterKeys.value)
@@ -277,8 +305,47 @@ function getExpandableFilterKeys(items: FilterTreeItem[]): string[] {
     : [])
 }
 
-function updateFilterSelection(items: FilterTreeItem[]): void {
-  selectedFilterKeys.value = items.map(item => item.id)
+function getSubtreeItemIds(item: FilterTreeItem): string[] {
+  const ids = [item.id]
+
+  if (item.children?.length) {
+    for (const child of item.children) {
+      ids.push(...getSubtreeItemIds(child))
+    }
+  }
+
+  return ids
+}
+
+function toggleFilterNode(item: FilterTreeItem): void {
+  const tenantHierarchy = tenantHierarchies.value.find(({ tenant, hierarchy }) =>
+    item.id === `tenant-${tenant.id}`
+    || hierarchy.projects.some(project => item.id === `project-${project.id}`)
+    || hierarchy.assets.some(asset => item.id === `asset-${asset.id}`))
+
+  if (tenantHierarchy === undefined) {
+    throw new Error('The selected hierarchy node does not belong to a loaded tenant.')
+  }
+
+  if (selectedTenantId.value !== tenantHierarchy.tenant.id) {
+    selectedFilterKeys.value = []
+    selectedTenantId.value = tenantHierarchy.tenant.id
+  }
+
+  const subtreeIds = getSubtreeItemIds(item)
+  const isFullySelected = subtreeIds.every(id => selectedFilterKeys.value.includes(id))
+
+  if (isFullySelected) {
+    const removeSet = new Set(subtreeIds)
+    selectedFilterKeys.value = selectedFilterKeys.value.filter(id => !removeSet.has(id))
+  } else {
+    const combined = new Set([...selectedFilterKeys.value, ...subtreeIds])
+    selectedFilterKeys.value = Array.from(combined)
+  }
+}
+
+function selectAllHierarchyFilter(): void {
+  selectedFilterKeys.value = flattenFilterTreeItems(filterTreeItems.value).map(item => item.id)
 }
 
 function clearHierarchyFilter(): void {
@@ -290,18 +357,17 @@ function clearHierarchyFilter(): void {
 async function loadHierarchy(): Promise<void> {
   clearHierarchyFilter()
   filterOpen.value = false
-
-  if (selectedTenantId.value === null) {
-    hierarchy.value = null
-
-    return
-  }
+  tenantHierarchies.value = []
 
   loading.value = true
   error.value = null
 
   try {
-    hierarchy.value = await loadTenantHierarchy(selectedTenantId.value)
+    tenantHierarchies.value = await Promise.all(displayTenants.value.map(async tenant => ({
+      tenant,
+      hierarchy: await loadTenantHierarchy(tenant.id)
+    })))
+    selectAllHierarchyFilter()
   } catch (requestError: unknown) {
     if (!(requestError instanceof ApiError)) {
       throw requestError
@@ -313,15 +379,14 @@ async function loadHierarchy(): Promise<void> {
   }
 }
 
-watch(selectedTenantId, loadHierarchy, { immediate: true })
+watch(displayTenants, loadHierarchy, { immediate: true, deep: true })
 
 watch(filterOpen, (open) => {
-  if (!open) {
-    return
-  }
-
   filterQuery.value = ''
-  expandedFilterKeys.value = getSelectedFilterPathKeys(filterTreeItems.value)
+
+  if (open) {
+    expandedFilterKeys.value = getSelectedFilterPathKeys(filterTreeItems.value)
+  }
 })
 
 watch(filterQuery, (query) => {
@@ -336,17 +401,15 @@ watch(filterQuery, (query) => {
 
 watch(() => props.initialTenantId, (tenantId) => {
   selectedTenantId.value = tenantId ?? props.tenants[0]?.id ?? null
+  clearHierarchyFilter()
 })
 
-watch(
-  () => props.tenants,
-  (tenants) => {
-    if (!tenants.some(tenant => tenant.id === selectedTenantId.value)) {
-      selectedTenantId.value = tenants[0]?.id ?? null
-    }
-  },
-  { deep: true }
-)
+watch(() => props.tenants, (tenants) => {
+  if (!tenants.some(tenant => tenant.id === selectedTenantId.value)) {
+    selectedTenantId.value = props.initialTenantId ?? tenants[0]?.id ?? null
+    clearHierarchyFilter()
+  }
+}, { deep: true })
 
 function openDetails(data: FlowNodeData): void {
   selectedNode.value = data
@@ -365,15 +428,56 @@ function isAssetItem(item: FlowItem): item is Asset {
   return 'asset_type' in item
 }
 
+function tenantForNode(node: FlowNodeData): Tenant {
+  if (isTenantItem(node.rawItem)) {
+    return node.rawItem
+  }
+
+  let tenantId: string
+
+  if (isProjectItem(node.rawItem)) {
+    tenantId = node.rawItem.tenant_id
+  } else if (isAssetItem(node.rawItem)) {
+    const asset = node.rawItem
+    const project = allProjects.value.find(item => item.id === asset.project_id)
+
+    if (project === undefined) {
+      throw new Error('The asset project is not available in the loaded tenant hierarchy.')
+    }
+
+    tenantId = project.tenant_id
+  } else {
+    throw new Error('The node type cannot be assigned to a tenant.')
+  }
+
+  const tenant = props.tenants.find(item => item.id === tenantId)
+
+  if (tenant === undefined) {
+    throw new Error('The node tenant is not available in the loaded tenant list.')
+  }
+
+  return tenant
+}
+
+function canManageNode(node: FlowNodeData): boolean {
+  const tenant = tenantForNode(node)
+
+  return user.value?.system_role === 'platform_admin'
+    || tenant.role === 'owner'
+    || tenant.role === 'admin'
+}
+
 function openAddAsset(node: FlowNodeData): void {
-  if (!canManageSelectedTenant.value) {
+  if (!canManageNode(node)) {
     return
   }
 
   if (isProjectItem(node.rawItem)) {
+    selectedTenantId.value = tenantForNode(node).id
     selectedProjectId.value = node.rawItem.id
     selectedParentId.value = null
   } else if (isAssetItem(node.rawItem)) {
+    selectedTenantId.value = tenantForNode(node).id
     selectedProjectId.value = node.rawItem.project_id
     selectedParentId.value = node.rawItem.id
   } else {
@@ -479,76 +583,73 @@ const CARD_WIDTH = 250
 const CARD_GAP = 32
 
 const nodes = computed<Node<FlowNodeData>[]>(() => {
-  const currentTenant = selectedTenant.value
-  const currentHierarchy = hierarchy.value
+  const tenantNodes = tenantHierarchies.value
+    .filter(item => item.tenant.id === selectedTenantId.value)
+    .map<TreeNode>(({ tenant, hierarchy: currentHierarchy }): TreeNode => {
+      const assets = currentHierarchy.assets
 
-  if (currentTenant === undefined || currentHierarchy === null) {
-    return []
-  }
+      function buildAssetChildren(projectId: string, parentAssetId: string | null, y: number): TreeNode[] {
+        return assets
+          .filter(asset => asset.project_id === projectId && asset.parent_asset_id === parentAssetId)
+          .map((asset) => {
+            const children = buildAssetChildren(projectId, asset.id, y + 140)
+            const childrenTotalWidth = children.length > 0
+              ? children.reduce((sum, child) => sum + child.subtreeWidth, 0) + (children.length - 1) * CARD_GAP
+              : CARD_WIDTH
 
-  const assets = currentHierarchy.assets
+            return {
+              id: `asset-${asset.id}`,
+              label: asset.name,
+              kind: asset.asset_type,
+              code: asset.code,
+              sublabel: asset.location,
+              rawItem: asset,
+              children,
+              x: 0,
+              y,
+              subtreeWidth: Math.max(CARD_WIDTH, childrenTotalWidth)
+            }
+          })
+      }
 
-  function buildAssetChildren(projectId: string, parentAssetId: string | null, y: number): TreeNode[] {
-    return assets
-      .filter(asset => asset.project_id === projectId && asset.parent_asset_id === parentAssetId)
-      .map((asset) => {
-        const children = buildAssetChildren(projectId, asset.id, y + 140)
-        const childrenTotalWidth = children.length > 0
-          ? children.reduce((sum, child) => sum + child.subtreeWidth, 0) + (children.length - 1) * CARD_GAP
+      function buildProjectTree(project: Project): TreeNode {
+        const assetChildren = buildAssetChildren(project.id, null, 320)
+        const assetsTotalWidth = assetChildren.length > 0
+          ? assetChildren.reduce((sum, child) => sum + child.subtreeWidth, 0) + (assetChildren.length - 1) * CARD_GAP
           : CARD_WIDTH
 
         return {
-          id: `asset-${asset.id}`,
-          label: asset.name,
-          kind: asset.asset_type,
-          code: asset.code,
-          sublabel: asset.location,
-          rawItem: asset,
-          children,
+          id: `project-${project.id}`,
+          label: project.name,
+          kind: 'project',
+          code: null,
+          sublabel: project.description,
+          rawItem: project,
+          children: assetChildren,
           x: 0,
-          y,
-          subtreeWidth: Math.max(CARD_WIDTH, childrenTotalWidth)
+          y: 180,
+          subtreeWidth: Math.max(CARD_WIDTH, assetsTotalWidth)
         }
-      })
-  }
+      }
 
-  function buildProjectTree(project: Project): TreeNode {
-    const assetChildren = buildAssetChildren(project.id, null, 320)
-    const assetsTotalWidth = assetChildren.length > 0
-      ? assetChildren.reduce((sum, child) => sum + child.subtreeWidth, 0) + (assetChildren.length - 1) * CARD_GAP
-      : CARD_WIDTH
+      const projectNodes = currentHierarchy.projects.map(buildProjectTree)
+      const projectsTotalWidth = projectNodes.length > 0
+        ? projectNodes.reduce((sum, child) => sum + child.subtreeWidth, 0) + (projectNodes.length - 1) * CARD_GAP
+        : CARD_WIDTH
 
-    return {
-      id: `project-${project.id}`,
-      label: project.name,
-      kind: 'project',
-      code: null,
-      sublabel: project.description,
-      rawItem: project,
-      children: assetChildren,
-      x: 0,
-      y: 180,
-      subtreeWidth: Math.max(CARD_WIDTH, assetsTotalWidth)
-    }
-  }
-
-  const projectNodes = currentHierarchy.projects.map(buildProjectTree)
-  const projectsTotalWidth = projectNodes.length > 0
-    ? projectNodes.reduce((sum, child) => sum + child.subtreeWidth, 0) + (projectNodes.length - 1) * CARD_GAP
-    : CARD_WIDTH
-
-  const tenantNode: TreeNode = {
-    id: `tenant-${currentTenant.id}`,
-    label: currentTenant.name,
-    kind: 'tenant',
-    code: currentTenant.code,
-    sublabel: null,
-    rawItem: currentTenant,
-    children: projectNodes,
-    x: 0,
-    y: 40,
-    subtreeWidth: Math.max(CARD_WIDTH, projectsTotalWidth)
-  }
+      return {
+        id: `tenant-${tenant.id}`,
+        label: tenant.name,
+        kind: 'tenant',
+        code: tenant.code,
+        sublabel: null,
+        rawItem: tenant,
+        children: projectNodes,
+        x: 0,
+        y: 40,
+        subtreeWidth: Math.max(CARD_WIDTH, projectsTotalWidth)
+      }
+    })
 
   function layoutSubtree(node: TreeNode, leftX: number): void {
     if (node.children.length === 0) {
@@ -576,8 +677,12 @@ const nodes = computed<Node<FlowNodeData>[]>(() => {
     }
   }
 
-  const startLeftX = Math.max(80, 600 - tenantNode.subtreeWidth / 2)
-  layoutSubtree(tenantNode, startLeftX)
+  let currentLeftX = 80
+
+  for (const tenantNode of tenantNodes) {
+    layoutSubtree(tenantNode, currentLeftX)
+    currentLeftX += tenantNode.subtreeWidth + CARD_GAP * 2
+  }
 
   const flowNodes: Node<FlowNodeData>[] = []
 
@@ -601,70 +706,45 @@ const nodes = computed<Node<FlowNodeData>[]>(() => {
     }
   }
 
-  collectNodes(tenantNode)
+  tenantNodes.forEach(collectNodes)
 
   return flowNodes
 })
 
 const edges = computed<Edge[]>(() => {
-  const currentTenant = selectedTenant.value
-  const currentHierarchy = hierarchy.value
+  return tenantHierarchies.value
+    .filter(item => item.tenant.id === selectedTenantId.value)
+    .flatMap(({ tenant, hierarchy: currentHierarchy }) => {
+      const tenantEdges: Edge[] = currentHierarchy.projects.map(project => ({
+        id: `tenant-${tenant.id}-project-${project.id}`,
+        source: `tenant-${tenant.id}`,
+        target: `project-${project.id}`,
+        type: 'smoothstep',
+        animated: true,
+        style: { stroke: 'var(--ui-border-accented, #94a3b8)', strokeWidth: 1.5 }
+      }))
 
-  if (currentTenant === undefined || currentHierarchy === null) {
-    return []
-  }
+      currentHierarchy.assets.forEach((asset) => {
+        const source = asset.parent_asset_id === null
+          ? `project-${asset.project_id}`
+          : `asset-${asset.parent_asset_id}`
 
-  const result: Edge[] = []
+        tenantEdges.push({
+          id: `${source}-asset-${asset.id}`,
+          source,
+          target: `asset-${asset.id}`,
+          type: 'smoothstep',
+          animated: true,
+          style: { stroke: 'var(--ui-border-accented, #94a3b8)', strokeWidth: 1.5 }
+        })
+      })
 
-  currentHierarchy.projects.forEach((project) => {
-    result.push({
-      id: `tenant-${currentTenant.id}-project-${project.id}`,
-      source: `tenant-${currentTenant.id}`,
-      target: `project-${project.id}`,
-      type: 'smoothstep',
-      animated: true,
-      style: { stroke: 'var(--ui-border-accented, #94a3b8)', strokeWidth: 1.5 }
+      return tenantEdges
     })
-  })
-
-  currentHierarchy.assets.forEach((asset) => {
-    const source = asset.parent_asset_id === null
-      ? `project-${asset.project_id}`
-      : `asset-${asset.parent_asset_id}`
-
-    result.push({
-      id: `${source}-asset-${asset.id}`,
-      source,
-      target: `asset-${asset.id}`,
-      type: 'smoothstep',
-      animated: true,
-      style: { stroke: 'var(--ui-border-accented, #94a3b8)', strokeWidth: 1.5 }
-    })
-  })
-
-  return result
 })
 
-const visibleNodeIds = computed<Set<string> | null>(() => {
-  if (selectedFilterKeys.value.length === 0) {
-    return null
-  }
-
-  const parentByChildId = new Map(edges.value.map(edge => [edge.target, edge.source]))
-  const visibleIds = new Set<string>()
-
-  for (const selectedKey of selectedFilterKeys.value) {
-    let currentId: string | undefined = selectedKey
-    const visitedIds = new Set<string>()
-
-    while (currentId !== undefined && !visitedIds.has(currentId)) {
-      visibleIds.add(currentId)
-      visitedIds.add(currentId)
-      currentId = parentByChildId.get(currentId)
-    }
-  }
-
-  return visibleIds
+const visibleNodeIds = computed<Set<string>>(() => {
+  return new Set(selectedFilterKeys.value)
 })
 
 const visibleNodes = computed(() => {
@@ -738,11 +818,13 @@ const visibleNodes = computed(() => {
     }
   }
 
-  const rootNode = visible.find(node => !edges.value.some(edge => edge.target === node.id && ids.has(edge.source)))
+  const rootNodes = visible.filter(node => !edges.value.some(edge => edge.target === node.id && ids.has(edge.source)))
 
-  if (rootNode !== undefined) {
+  let currentLeftX = 80
+  for (const rootNode of rootNodes) {
     const subtreeWidth = getSubtreeWidth(rootNode.id)
-    layoutVisibleSubtree(rootNode.id, Math.max(80, 600 - subtreeWidth / 2))
+    layoutVisibleSubtree(rootNode.id, currentLeftX)
+    currentLeftX += subtreeWidth + CARD_GAP * 2
   }
 
   return visible
@@ -752,18 +834,16 @@ const visibleEdges = computed<Edge[]>(() => {
   const ids = visibleNodeIds.value
 
   return edges.value
-    .filter(edge => ids === null || (ids.has(edge.source) && ids.has(edge.target)))
-    .map(edge => ids === null
-      ? edge
-      : {
-          ...edge,
-          class: 'iiot-highlight-edge',
-          animated: true,
-          style: {
-            stroke: 'var(--ui-primary, #2563eb)',
-            strokeWidth: 2.5
-          }
-        })
+    .filter(edge => ids.has(edge.source) && ids.has(edge.target))
+    .map(edge => ({
+      ...edge,
+      class: 'iiot-highlight-edge',
+      animated: true,
+      style: {
+        stroke: 'var(--ui-primary, #2563eb)',
+        strokeWidth: 2.5
+      }
+    }))
 })
 
 const flowKey = computed(() => `${selectedTenantId.value}-${selectedFilterKeys.value.join('|')}`)
@@ -773,31 +853,37 @@ const flowKey = computed(() => `${selectedTenantId.value}-${selectedFilterKeys.v
   <div class="flex flex-col gap-4">
     <div class="flex flex-wrap items-center gap-3">
       <UPopover v-model:open="filterOpen">
-        <UInput
-          v-model="filterQuery"
-          icon="i-lucide-search"
-          class="min-w-80"
-          :ui="{ base: 'placeholder:text-muted' }"
-          placeholder="Search nodes by name or code..."
-          aria-label="Filter hierarchy"
-          @keydown.escape="filterOpen = false"
-        >
-          <template #trailing>
-            <UBadge
-              v-if="selectedFilterKeys.length > 0"
-              color="primary"
-              variant="subtle"
-              class="mr-1"
-            >
-              {{ selectedFilterKeys.length }}
-            </UBadge>
-            <UIcon
-              name="i-lucide-chevron-down"
-              class="size-4 text-dimmed transition-transform"
-              :class="filterOpen ? 'rotate-180' : ''"
-            />
-          </template>
-        </UInput>
+        <div class="inline-flex min-w-80">
+          <UInput
+            v-model="filterQuery"
+            icon="i-lucide-search"
+            class="w-full"
+            :ui="{ base: 'pe-20 truncate placeholder:truncate' }"
+            :placeholder="filterInputPlaceholder"
+            :title="selectedFilterKeys.length > 0 ? filterInputPlaceholder : undefined"
+            aria-label="Filter hierarchy"
+            @click.stop="filterOpen = true"
+            @focus="filterOpen = true"
+            @keydown.escape="filterOpen = false"
+          >
+            <template #trailing>
+              <UBadge
+                v-if="selectedFilterKeys.length > 0"
+                color="primary"
+                variant="subtle"
+                class="mr-1"
+              >
+                {{ selectedFilterKeys.length }}
+              </UBadge>
+              <UIcon
+                name="i-lucide-chevron-down"
+                class="size-4 cursor-pointer text-dimmed transition-transform"
+                :class="filterOpen ? 'rotate-180' : ''"
+                @click.stop="filterOpen = !filterOpen"
+              />
+            </template>
+          </UInput>
+        </div>
 
         <template #content>
           <div class="w-[min(32rem,calc(100vw-2rem))] p-3">
@@ -805,14 +891,23 @@ const flowKey = computed(() => `${selectedTenantId.value}-${selectedFilterKeys.v
               <p class="text-xs text-muted">
                 {{ selectedFilterKeys.length > 0 ? `${selectedFilterKeys.length} selected` : 'Select hierarchy nodes' }}
               </p>
-              <UButton
-                label="Clear"
-                color="neutral"
-                variant="ghost"
-                size="sm"
-                :disabled="selectedFilterKeys.length === 0 && filterQuery === ''"
-                @click="clearHierarchyFilter"
-              />
+              <div class="flex items-center gap-1">
+                <UButton
+                  label="Select all"
+                  color="primary"
+                  variant="ghost"
+                  size="sm"
+                  @click="selectAllHierarchyFilter"
+                />
+                <UButton
+                  label="Clear"
+                  color="neutral"
+                  variant="ghost"
+                  size="sm"
+                  :disabled="selectedFilterKeys.length === 0 && filterQuery === ''"
+                  @click="clearHierarchyFilter"
+                />
+              </div>
             </div>
 
             <div class="mt-3 max-h-80 overflow-y-auto">
@@ -825,9 +920,8 @@ const flowKey = computed(() => `${selectedTenantId.value}-${selectedFilterKeys.v
                 selection-behavior="toggle"
                 size="sm"
                 :ui="{ link: 'p-0 hover:before:bg-transparent' }"
-                @update:model-value="updateFilterSelection"
               >
-                <template #item="{ selected, indeterminate, expanded, item, handleSelect, handleToggle }">
+                <template #item="{ selected, indeterminate, expanded, item, handleToggle }">
                   <div
                     class="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors hover:bg-elevated/50"
                     @click.stop="handleToggle"
@@ -837,9 +931,9 @@ const flowKey = computed(() => `${selectedTenantId.value}-${selectedFilterKeys.v
                       tabindex="0"
                       class="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-sm"
                       :aria-checked="indeterminate ? 'mixed' : selected"
-                      @click.stop="handleSelect"
-                      @keydown.enter.stop.prevent="handleSelect"
-                      @keydown.space.stop.prevent="handleSelect"
+                      @click.stop="toggleFilterNode(item)"
+                      @keydown.enter.stop.prevent="toggleFilterNode(item)"
+                      @keydown.space.stop.prevent="toggleFilterNode(item)"
                     >
                       <UIcon
                         :name="indeterminate ? 'i-lucide-square-minus' : selected ? 'i-lucide-square-check' : 'i-lucide-square'"
@@ -907,15 +1001,22 @@ const flowKey = computed(() => `${selectedTenantId.value}-${selectedFilterKeys.v
     </div>
 
     <div
-      v-else-if="selectedTenant === undefined"
+      v-else-if="displayTenants.length === 0"
       class="flex h-[620px] items-center justify-center rounded-xl border border-default bg-elevated/20 text-sm text-muted"
     >
       No tenant is available for the current account.
     </div>
 
     <ClientOnly v-else>
-      <div class="h-[620px] overflow-hidden rounded-xl border border-default bg-elevated/20">
+      <div class="relative h-[620px] overflow-hidden rounded-xl border border-default bg-elevated/20">
+        <div
+          v-if="visibleNodes.length === 0"
+          class="flex h-full items-center justify-center text-sm text-muted"
+        >
+          No hierarchy nodes selected. Select nodes from the filter above to display.
+        </div>
         <VueFlow
+          v-else
           :key="flowKey"
           :nodes="visibleNodes"
           :edges="visibleEdges"
@@ -967,7 +1068,7 @@ const flowKey = computed(() => `${selectedTenantId.value}-${selectedFilterKeys.v
                     @mousedown.stop
                   />
                   <UButton
-                    v-if="canManageSelectedTenant && (data.kind === 'project' || isAssetItem(data.rawItem))"
+                    v-if="canManageNode(data) && (data.kind === 'project' || isAssetItem(data.rawItem))"
                     icon="i-lucide-plus"
                     color="primary"
                     variant="ghost"

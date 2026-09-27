@@ -64,6 +64,7 @@ LiteBoardv2/
 For the complete architectural design, technology stack, implementation details, and development roadmap of the project, refer to:
 
 - **[docs/plan.md](docs/plan.md)** — Master Project Plan & System Specifications.
+- **[infrastructure/mosquitto/README.md](infrastructure/mosquitto/README.md)** — Mosquitto MQTT Broker (`mosquitto-go-auth`) Setup, Authentication & Operations Guide.
 
 ---
 
@@ -85,7 +86,7 @@ docker compose --profile containerized-frontend up -d --build
 - **Web Dashboard**: [http://localhost:3000](http://localhost:3000)
 - **Backend API**: [http://localhost:8800/api/health](http://localhost:8800/api/health)
 - **Telemetry Service**: [http://localhost:8100/health](http://localhost:8100/health)
-- **MQTT Broker**: `mqtt://localhost:1883` (WebSocket: `ws://localhost:9001`)
+- **MQTT Broker**: `mqtt://localhost:1883` (WebSocket: `ws://localhost:9001`) — see [Mosquitto Setup Guide](infrastructure/mosquitto/README.md)
 
 Check container readiness with `docker compose ps`; the backend, web app, and telemetry service report `healthy` after startup.
 

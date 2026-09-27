@@ -123,7 +123,7 @@ const parentOptions = computed(() => [
   ...assets.value
     .filter(asset => asset.project_id === selectedProjectId.value)
     .filter(asset => !disallowedParentIds.value.has(asset.id))
-    .map(asset => ({ label: `${asset.name} (${asset.code})`, value: asset.id }))
+    .map(asset => ({ label: asset.name, value: asset.id }))
 ])
 
 const filteredAssets = computed(() => assets.value.filter((asset) => {

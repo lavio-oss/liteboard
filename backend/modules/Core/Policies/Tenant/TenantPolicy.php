@@ -24,6 +24,12 @@ final class TenantPolicy
             || $tenant->hasRole($user, TenantRole::Owner, TenantRole::Admin);
     }
 
+    public function viewTenantDevices(User $user, Tenant $tenant): bool
+    {
+        return $user->isPlatformAdmin()
+            || $tenant->hasRole($user, TenantRole::Owner, TenantRole::Admin);
+    }
+
     public function create(User $user): bool
     {
         return $user->isPlatformAdmin()

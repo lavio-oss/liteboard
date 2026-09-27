@@ -3,7 +3,7 @@
 > Thuộc kế hoạch: [access_token_plan.md](../access_token_plan.md)  
 > Tầng kiến trúc: **MQTT Broker Infrastructure (`Mosquitto + mosquitto-go-auth + Redis Cache`)**  
 > Phụ thuộc: [Phase 1](./phase-1-database-and-sql-views.md)  
-> Trạng thái: `Pending`
+> Trạng thái: `Completed`
 
 ---
 
@@ -42,15 +42,13 @@ Plugin `mosquitto-go-auth` cho phép chạy song song hai backend theo thứ t�
 
 1. **[MODIFY]** [infrastructure/mosquitto/mosquitto.conf](../../../../infrastructure/mosquitto/mosquitto.conf)
    - Thay `allow_anonymous true` bằng `allow_anonymous false`.
-   - Cấu hình `auth_plugin /mosquitto/go-auth.so`, backend `files, postgres` và Redis cache.
-2. **[NEW]** `infrastructure/mosquitto/passwords`
-   - Chứa mật khẩu đã băm PBKDF2/bcrypt của 2 tài khoản nội bộ: `telemetry-service` và `healthcheck`.
-3. **[NEW]** `infrastructure/mosquitto/acls`
-   - Định nghĩa quyền cho `user telemetry-service` (`topic readwrite liteboard/#`) và `user healthcheck` (`topic write healthcheck`).
-4. **[MODIFY]** [docker-compose.yml](../../../../docker-compose.yml)
+   - Cấu hình `auth_plugin /mosquitto/go-auth.so`, backend `files, postgres` và Redis cache sử dụng biến runtime (`__MQTT_PG_HOST__`, `__MQTT_PG_PASSWORD__`, ...) để không lưu thông tin nhạy cảm trên Git.
+2. **[NEW]** [infrastructure/mosquitto/acls](../../../../infrastructure/mosquitto/acls)
+   - Định nghĩa quyền cho `user telemetry-service` (`topic readwrite liteboard/#`, `topic subscribe liteboard/#`) và `user healthcheck` (`topic write healthcheck`).
+3. **[MODIFY]** [docker-compose.yml](../../../../docker-compose.yml) & [.env.example](../../../../.env.example)
    - Đổi `image` của service `mosquitto` sang `iegomez/mosquitto-go-auth:latest`.
-   - Mount `mosquitto.conf`, `passwords`, `acls` vào container.
-   - Cập nhật `healthcheck` của `mosquitto` sử dụng tài khoản `healthcheck`.
+   - Tự động sinh `/tmp/mosquitto-passwords` lúc khởi động container bằng `/mosquitto/pw -h bcrypt -c 10` từ các biến môi trường `MQTT_INTERNAL_PASSWORD` và `MQTT_HEALTHCHECK_PASSWORD` trong `.env` (không lưu file `passwords` tĩnh trên Git).
+   - Cập nhật `healthcheck` của `mosquitto` sử dụng `$MQTT_HEALTHCHECK_USERNAME` / `$MQTT_HEALTHCHECK_PASSWORD`.
    - Thêm `depends_on` tới `postgres` và `redis`.
 
 ---
@@ -69,5 +67,5 @@ Plugin `mosquitto-go-auth` cho phép chạy song song hai backend theo thứ t�
 
 ## 5. Checklist Nghiệm thu Phase 3
 
-- [ ] Container `mosquitto` khởi động `healthy` cùng `postgres` và `redis`.
-- [ ] Vượt qua toàn bộ 5 kịch bản kiểm thử bảo mật Broker ở Mục 4.
+- [x] Container `mosquitto` khởi động `healthy` cùng `postgres` và `redis`.
+- [x] Vượt qua toàn bộ 5 kịch bản kiểm thử bảo mật Broker ở Mục 4.

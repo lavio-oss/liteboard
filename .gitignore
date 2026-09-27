@@ -7,3 +7,4 @@ telemetry-service/.venv/
 simulator/.venv/
 vuestic-admin
 .pnpm-store/
+infrastructure/mosquitto/passwords

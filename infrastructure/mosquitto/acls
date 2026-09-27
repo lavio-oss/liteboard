@@ -1,0 +1,6 @@
+user telemetry-service
+topic readwrite liteboard/#
+topic subscribe liteboard/#
+
+user healthcheck
+topic write healthcheck

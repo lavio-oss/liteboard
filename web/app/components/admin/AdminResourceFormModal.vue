@@ -92,6 +92,13 @@ const state = reactive<{
   status: 'active'
 })
 
+const isActive = computed({
+  get: () => state.status === 'active',
+  set: (val: boolean) => {
+    state.status = val ? 'active' : 'inactive'
+  }
+})
+
 const title = computed(() => {
   const action = props.resource === null ? 'Add' : 'Edit'
 
@@ -241,16 +248,11 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
         <UFormField
           name="status"
           label="Status"
-          required
           :class="props.resourceType === 'asset' ? 'sm:col-span-2' : undefined"
         >
-          <USelect
-            v-model="state.status"
-            :items="[
-              { label: 'Active', value: 'active' },
-              { label: 'Inactive', value: 'inactive' }
-            ]"
-            class="w-full"
+          <USwitch
+            v-model="isActive"
+            :label="isActive ? 'Active' : 'Inactive'"
           />
         </UFormField>
 

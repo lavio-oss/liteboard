@@ -19,7 +19,7 @@ const manageableTenants = computed(() => tenants.value.filter(
   tenant => isPlatformAdmin.value || tenant.role === 'owner' || tenant.role === 'admin'
 ))
 const tenantOptions = computed(() => manageableTenants.value.map(tenant => ({
-  label: `${tenant.name} (${tenant.code})`,
+  label: tenant.name,
   value: tenant.id
 })))
 const manageableTenantIds = computed(() => new Set(manageableTenants.value.map(tenant => tenant.id)))
