@@ -131,6 +131,11 @@ services:
       MQTT_PORT: 1883
       MQTT_USERNAME: ${MQTT_INTERNAL_USERNAME:-telemetry-service}
       MQTT_PASSWORD: ${MQTT_INTERNAL_PASSWORD:-telemetry-service-secret}
+      DB_HOST: ${MQTT_PG_HOST:-postgres}
+      DB_PORT: ${POSTGRES_PORT:-5432}
+      DB_DATABASE: ${POSTGRES_DB:-liteboard}
+      DB_USERNAME: ${POSTGRES_USER:-liteboard}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-liteboard}
     ports:
       - '${TELEMETRY_PORT:-8100}:8100'
     healthcheck:
@@ -175,7 +180,9 @@ services:
     environment:
       MQTT_HOST: mosquitto
       MQTT_PORT: 1883
-      DEVICE_UID: ${SIMULATOR_DEVICE_UID:-simulator-01}
+      PROJECT_ID: ${SIMULATOR_PROJECT_ID:-}
+      DEVICE_ID: ${SIMULATOR_DEVICE_ID:-}
+      DEVICE_ACCESS_TOKEN: ${SIMULATOR_DEVICE_ACCESS_TOKEN:-}
     profiles: ['tools']
     depends_on:
       mosquitto:

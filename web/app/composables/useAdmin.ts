@@ -4,6 +4,9 @@ import {
   assetResponseSchema,
   assetsResponseSchema,
   availableProjectUsersResponseSchema,
+  deviceCredentialResponseSchema,
+  deviceResponseSchema,
+  devicesResponseSchema,
   projectResponseSchema,
   projectsResponseSchema,
   projectUserResponseSchema,
@@ -14,6 +17,10 @@ import type {
   Asset,
   AssetInput,
   AvailableProjectUser,
+  Device,
+  DeviceCredential,
+  DeviceCredentialInput,
+  DeviceInput,
   Project,
   ProjectInput,
   ProjectUser,
@@ -39,6 +46,24 @@ export function useAdmin() {
     const response = await api.request(
       `/api/tenants/${tenantId}/projects/${projectId}/assets?per_page=100`,
       assetsResponseSchema
+    )
+
+    return response.data
+  }
+
+  async function loadTenantDevices(tenantId: string): Promise<Device[]> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/devices?per_page=100`,
+      devicesResponseSchema
+    )
+
+    return response.data
+  }
+
+  async function loadDevices(tenantId: string, projectId: string): Promise<Device[]> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/devices?per_page=100`,
+      devicesResponseSchema
     )
 
     return response.data
@@ -115,6 +140,81 @@ export function useAdmin() {
       z.unknown(),
       { method: 'DELETE' }
     )
+  }
+
+  async function createDevice(tenantId: string, projectId: string, payload: DeviceInput): Promise<Device> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/devices`,
+      deviceResponseSchema,
+      { body: payload, method: 'POST' }
+    )
+
+    return response.data
+  }
+
+  async function updateDevice(
+    tenantId: string,
+    projectId: string,
+    deviceId: string,
+    payload: Partial<DeviceInput>
+  ): Promise<Device> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/devices/${deviceId}`,
+      deviceResponseSchema,
+      { body: payload, method: 'PATCH' }
+    )
+
+    return response.data
+  }
+
+  async function deleteDevice(tenantId: string, projectId: string, deviceId: string): Promise<void> {
+    await api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/devices/${deviceId}`,
+      z.unknown(),
+      { method: 'DELETE' }
+    )
+  }
+
+  async function loadDeviceCredentials(
+    tenantId: string,
+    projectId: string,
+    deviceId: string
+  ): Promise<DeviceCredential> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/devices/${deviceId}/credentials`,
+      deviceCredentialResponseSchema
+    )
+
+    return response.data
+  }
+
+  async function updateDeviceCredentials(
+    tenantId: string,
+    projectId: string,
+    deviceId: string,
+    payload: DeviceCredentialInput
+  ): Promise<DeviceCredential> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/devices/${deviceId}/credentials`,
+      deviceCredentialResponseSchema,
+      { body: payload, method: 'PUT' }
+    )
+
+    return response.data
+  }
+
+  async function rotateDeviceCredentials(
+    tenantId: string,
+    projectId: string,
+    deviceId: string
+  ): Promise<DeviceCredential> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/devices/${deviceId}/credentials/rotate`,
+      deviceCredentialResponseSchema,
+      { method: 'POST' }
+    )
+
+    return response.data
   }
 
   async function loadProjectUsers(tenantId: string, projectId: string): Promise<ProjectUser[]> {
@@ -228,20 +328,28 @@ export function useAdmin() {
   return {
     attachProjectUser,
     createAsset,
+    createDevice,
     createProject,
     createProjectUserAccount,
     createTenantUser,
     deleteAsset,
+    deleteDevice,
     deleteProject,
     deleteTenantUser,
     loadAssets,
     loadAvailableProjectUsers,
+    loadDeviceCredentials,
+    loadDevices,
     loadProjectUsers,
     loadProjects,
+    loadTenantDevices,
     loadTenantHierarchy,
     loadTenantUsers,
     removeProjectUser,
+    rotateDeviceCredentials,
     updateAsset,
+    updateDevice,
+    updateDeviceCredentials,
     updateProject,
     updateProjectUser,
     updateTenantUser

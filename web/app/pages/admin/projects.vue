@@ -159,7 +159,7 @@ watch(addRequested, (requested) => {
 const columns: TableColumn<AdminTableRow>[] = [
   {
     id: 'sequence',
-    header: 'STT',
+    header: 'No.',
     cell: ({ row }) => row.index + 1
   },
   {

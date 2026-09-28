@@ -92,8 +92,8 @@ Toàn bộ lộ trình triển khai được chia thành **5 Phase độc lập 
 | **Phase 1** | **Database & PostgreSQL Views** (`backend/database/`) | [phase-1-database-and-sql-views.md](./access_token_progress/phase-1-database-and-sql-views.md) | `projects`, `assets` | `Completed` |
 | **Phase 2** | **Laravel Control Plane API** (`backend/modules/Admin/`) | [phase-2-laravel-control-plane.md](./access_token_progress/phase-2-laravel-control-plane.md) | Phase 1 | `Completed` |
 | **Phase 3** | **MQTT Broker Auth & ACL** (`infrastructure/mosquitto/`, `docker-compose.yml`) | [phase-3-mqtt-broker-mosquitto-go-auth.md](./access_token_progress/phase-3-mqtt-broker-mosquitto-go-auth.md) | Phase 1 | `Completed` |
-| **Phase 4** | **Python Data Plane & Simulator/ESP32** (`telemetry-service/`, `simulator/`) | [phase-4-telemetry-data-plane-and-edge.md](./access_token_progress/phase-4-telemetry-data-plane-and-edge.md) | Phase 2, Phase 3 | `Pending` |
-| **Phase 5** | **Nuxt 4 Web UI** (`web/`) | [phase-5-nuxt-web-ui.md](./access_token_progress/phase-5-nuxt-web-ui.md) | Phase 2 | `Pending` |
+| **Phase 4** | **Python Data Plane & Simulator/ESP32** (`telemetry-service/`, `simulator/`) | [phase-4-telemetry-data-plane-and-edge.md](./access_token_progress/phase-4-telemetry-data-plane-and-edge.md) | Phase 2, Phase 3 | `Completed` |
+| **Phase 5** | **Nuxt 4 Web UI** (`web/`) | [phase-5-nuxt-web-ui.md](./access_token_progress/phase-5-nuxt-web-ui.md) | Phase 2 | `Completed` |
 
 ---
 
@@ -115,5 +115,5 @@ Các tính năng nâng cao cho môi trường Industrial IoT Production được
 - [x] **Phase 1**: Migration chạy thành công, tạo đầy đủ bảng `devices`, `device_credentials` và 2 View `v_mqtt_users`, `v_mqtt_acls` trên PostgreSQL; không sử dụng `down()`.
 - [x] **Phase 2**: Toàn bộ REST API CRUD Device và Manage Credentials (`show`, `update`, `rotate`) hoạt động đúng contract; pass `composer stan`, `composer test` và `composer pint`.
 - [x] **Phase 3**: Mosquitto (`mosquitto-go-auth`) chặn kết nối ẩn danh; thiết bị dùng đúng `ACCESS_TOKEN` chỉ publish/subscribe được vào topic của chính `{project_id}` và `{device_id}` đó; token bị `revoke` hoặc `rotate` mất quyền truy cập sau khi hết TTL cache (5s).
-- [ ] **Phase 4**: `telemetry-service` kết nối bằng tài khoản nội bộ, nhận gói tin trên `liteboard/+/devices/+/telemetry` và `heartbeat`, cập nhật `last_seen_at` và `connection_state = 'online'`; `simulator` và `Base.ino` gửi dữ liệu thành công bằng `ACCESS_TOKEN`.
-- [ ] **Phase 5**: Giao diện Nuxt UI (`/devices` và `/admin/devices`) cho phép CRUD Device, gắn Equipment Asset, Copy/Rotate/Revoke Access Token và hiển thị lệnh `mosquitto_pub` / code `ESP32` trong hộp thoại Check Connectivity.
+- [x] **Phase 4**: `telemetry-service` kết nối bằng tài khoản nội bộ, nhận gói tin trên `liteboard/+/devices/+/telemetry` và `heartbeat`, cập nhật `last_seen_at` và `connection_state = 'online'`; `simulator` và `Base.ino` gửi dữ liệu thành công bằng `ACCESS_TOKEN`.
+- [x] **Phase 5**: Giao diện Nuxt UI (`/devices` và `/admin/devices`) cho phép CRUD Device, gắn Equipment Asset, Copy/Rotate/Revoke Access Token và hiển thị lệnh `mosquitto_pub` / code `ESP32` trong hộp thoại Check Connectivity.

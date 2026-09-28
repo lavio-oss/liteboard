@@ -3,7 +3,7 @@
 > Thuộc kế hoạch: [access_token_plan.md](../access_token_plan.md)  
 > Tầng kiến trúc: **Data Plane & Edge Simulator (`Python FastAPI + gmqtt`, `Arduino ESP32`)**  
 > Phụ thuộc: [Phase 2](./phase-2-laravel-control-plane.md), [Phase 3](./phase-3-mqtt-broker-mosquitto-go-auth.md)  
-> Trạng thái: `Pending`
+> Trạng thái: `Completed`
 
 ---
 
@@ -94,5 +94,5 @@ Khi nhận bản tin trên `liteboard/{project_id}/devices/{device_id}/{channel}
 
 ## 5. Checklist Nghiệm thu Phase 4
 
-- [ ] `telemetry-service` đăng nhập thành công vào Mosquitto và subscribe `liteboard/+/devices/+/telemetry`, `liteboard/+/devices/+/heartbeat`.
-- [ ] Khi chạy `simulator` (hoặc `mosquitto_pub`) với `ACCESS_TOKEN` hợp lệ, bản ghi `Device` tương ứng trong DB tự động chuyển `connection_state` từ `'offline'` sang `'online'` và `last_seen_at` được cập nhật.
+- [x] `telemetry-service` đăng nhập thành công vào Mosquitto và subscribe `liteboard/+/devices/+/telemetry`, `liteboard/+/devices/+/heartbeat`.
+- [x] Khi chạy `simulator` (hoặc `mosquitto_pub`) với `ACCESS_TOKEN` hợp lệ, bản ghi `Device` tương ứng trong DB tự động chuyển `connection_state` từ `'offline'` sang `'online'` và `last_seen_at` được cập nhật.

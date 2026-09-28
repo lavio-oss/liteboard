@@ -177,7 +177,7 @@ function getColumnKey(column: TableColumn<Tenant>): string {
 const columns: TableColumn<Tenant>[] = [
   {
     id: 'sequence',
-    header: 'STT',
+    header: 'No.',
     cell: ({ row }) => row.index + 1
   },
   {

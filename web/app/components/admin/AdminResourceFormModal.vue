@@ -5,16 +5,24 @@ import type {
   Asset,
   AssetInput,
   AssetType,
+  Device,
+  DeviceInput,
   ResourceStatus,
   Project,
   ProjectFormInput
 } from '~/types/admin'
 import { assetTypeSchema } from '~/types/admin'
 
-type Resource = Project | Asset
-type ResourceType = 'project' | 'asset'
+type Resource = Project | Asset | Device
+type ResourceType = 'project' | 'asset' | 'device'
 type ProjectFormState = Omit<ProjectFormInput, 'tenant_id'> & { tenant_id: string | null }
-type FormState = ProjectFormState | Omit<AssetInput, 'parent_asset_id'>
+type DeviceFormState = {
+  name: string
+  code: string
+  description: string
+  status: ResourceStatus
+}
+type FormState = ProjectFormState | Omit<AssetInput, 'parent_asset_id'> | DeviceFormState
 type SelectOption = { label: string, value: string | null }
 
 const props = withDefaults(defineProps<{
@@ -26,6 +34,8 @@ const props = withDefaults(defineProps<{
   projectOptions?: SelectOption[]
   parentId?: string | null
   parentOptions?: SelectOption[]
+  equipmentAssetId?: string | null
+  equipmentAssetOptions?: SelectOption[]
   loading?: boolean
 }>(), {
   resource: null,
@@ -35,6 +45,8 @@ const props = withDefaults(defineProps<{
   projectOptions: () => [],
   parentId: null,
   parentOptions: () => [],
+  equipmentAssetId: null,
+  equipmentAssetOptions: () => [],
   loading: false
 })
 
@@ -44,8 +56,10 @@ const emit = defineEmits<{
   'update:tenant-id': [value: string | null]
   'update:project-id': [value: string | null]
   'update:parent-id': [value: string | null]
+  'update:equipment-asset-id': [value: string | null]
   'submit-project': [value: ProjectFormInput]
   'submit-asset': [value: AssetInput]
+  'submit-device': [value: DeviceInput]
 }>()
 
 const projectSchema = z.object({
@@ -63,6 +77,13 @@ const assetSchema = z.object({
   status: z.enum(['active', 'inactive'])
 })
 
+const deviceSchema = z.object({
+  name: z.string().min(2, 'Name must be at least 2 characters').max(255, 'Name is too long'),
+  code: z.string().min(1, 'Code is required').max(64, 'Code is too long'),
+  description: z.string().max(1000, 'Description is too long'),
+  status: z.enum(['active', 'inactive'])
+})
+
 const assetTypeOptions: Array<{ label: string, value: AssetType }> = [
   { label: 'Site', value: 'site' },
   { label: 'Factory', value: 'factory' },
@@ -72,7 +93,19 @@ const assetTypeOptions: Array<{ label: string, value: AssetType }> = [
   { label: 'Equipment', value: 'equipment' }
 ]
 
-const schema = computed(() => props.resourceType === 'project' ? projectSchema : assetSchema)
+const isTwoColumnLayout = computed(() => props.resourceType === 'asset' || props.resourceType === 'device')
+
+const schema = computed(() => {
+  if (props.resourceType === 'project') {
+    return projectSchema
+  }
+
+  if (props.resourceType === 'device') {
+    return deviceSchema
+  }
+
+  return assetSchema
+})
 
 const state = reactive<{
   tenant_id: string | null
@@ -138,6 +171,21 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
     return
   }
 
+  if (props.resourceType === 'device') {
+    const data = deviceSchema.parse(event.data)
+    const normalizedDescription = data.description.trim() === '' ? null : data.description
+
+    emit('submit-device', {
+      name: data.name,
+      code: data.code,
+      description: normalizedDescription,
+      equipment_asset_id: props.equipmentAssetId,
+      status: data.status
+    })
+
+    return
+  }
+
   const data = assetSchema.parse(event.data)
 
   emit('submit-asset', {
@@ -151,14 +199,14 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
   <UModal
     v-model:open="open"
     :title="title"
-    :ui="{ content: props.resourceType === 'asset' ? 'sm:max-w-4xl' : undefined }"
+    :ui="{ content: isTwoColumnLayout ? 'sm:max-w-4xl' : undefined }"
   >
     <template #body>
       <UForm
         :schema="schema"
         :state="state"
         :disabled="props.loading"
-        :class="props.resourceType === 'asset' ? 'grid grid-cols-1 gap-4 sm:grid-cols-2' : 'space-y-4'"
+        :class="isTwoColumnLayout ? 'grid grid-cols-1 gap-4 sm:grid-cols-2' : 'space-y-4'"
         @submit="onSubmit"
       >
         <UFormField
@@ -192,7 +240,7 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
           <UTextarea v-model="state.description" class="w-full" placeholder="Enter description" />
         </UFormField>
 
-        <template v-else>
+        <template v-else-if="props.resourceType === 'asset'">
           <UFormField
             label="Project"
             required
@@ -245,10 +293,52 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
           </UFormField>
         </template>
 
+        <template v-else-if="props.resourceType === 'device'">
+          <UFormField
+            label="Project"
+            required
+          >
+            <USelect
+              :model-value="props.projectId"
+              :items="props.projectOptions"
+              class="w-full"
+              :disabled="props.resource !== null"
+              @update:model-value="emit('update:project-id', $event)"
+            />
+          </UFormField>
+
+          <UFormField
+            label="Equipment asset"
+          >
+            <USelect
+              :model-value="props.equipmentAssetId"
+              :items="props.equipmentAssetOptions"
+              class="w-full"
+              @update:model-value="emit('update:equipment-asset-id', $event)"
+            />
+          </UFormField>
+
+          <UFormField
+            name="code"
+            label="Code"
+            required
+          >
+            <UInput v-model="state.code" class="w-full" placeholder="Enter device code" />
+          </UFormField>
+
+          <UFormField
+            name="description"
+            label="Description"
+            class="sm:col-span-2"
+          >
+            <UTextarea v-model="state.description" class="w-full" placeholder="Enter device description" />
+          </UFormField>
+        </template>
+
         <UFormField
           name="status"
           label="Status"
-          :class="props.resourceType === 'asset' ? 'sm:col-span-2' : undefined"
+          :class="isTwoColumnLayout ? 'sm:col-span-2' : undefined"
         >
           <USwitch
             v-model="isActive"
@@ -256,7 +346,7 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
           />
         </UFormField>
 
-        <div :class="props.resourceType === 'asset' ? 'flex justify-end gap-2 sm:col-span-2' : 'flex justify-end gap-2'">
+        <div :class="isTwoColumnLayout ? 'flex justify-end gap-2 sm:col-span-2' : 'flex justify-end gap-2'">
           <UButton
             label="Cancel"
             color="neutral"

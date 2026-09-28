@@ -169,7 +169,7 @@ async function confirmDelete(): Promise<void> {
 const columns: TableColumn<TenantUser>[] = [
   {
     id: 'sequence',
-    header: 'STT',
+    header: 'No.',
     cell: ({ row }) => row.index + 1
   },
   {

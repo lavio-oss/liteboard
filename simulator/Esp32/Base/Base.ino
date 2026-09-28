@@ -1,13 +1,16 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 
-// Dien thong tin Wi-Fi va Access Token cua device ThingsBoard o day.
+// Dien thong tin Wi-Fi va cau hinh thiet bi LiteBoard o day.
 const char *WIFI_SSID = "Khanh Hoa";
 const char *WIFI_PASSWORD = "phukhanh";
-const char *TB_ACCESS_TOKEN = "0bszem6ntw2bi0d28q1a";
 
-const char *TB_HOST = "mqtt.thingsboard.cloud";
-constexpr uint16_t TB_PORT = 1883;
+const char *LB_HOST = "192.168.1.100";
+constexpr uint16_t LB_PORT = 1883;
+const char *LB_PROJECT_ID = "019c0000-0000-7000-8000-000000000002";
+const char *LB_DEVICE_ID = "019c0000-0000-7000-8000-000000000100";
+const char *LB_ACCESS_TOKEN = "0bszem6ntw2bi0d28q1a";
+
 constexpr unsigned long TELEMETRY_INTERVAL_MS = 5000;
 
 WiFiClient wifiClient;
@@ -15,6 +18,7 @@ PubSubClient mqttClient(wifiClient);
 
 unsigned long lastPublishAt = 0;
 float simulatedTemperature = 25.0F;
+char telemetryTopic[128];
 
 void connectWiFi() {
   if (WiFi.status() == WL_CONNECTED) {
@@ -35,16 +39,16 @@ void connectWiFi() {
   Serial.println(WiFi.localIP());
 }
 
-void connectThingsBoard() {
+void connectLiteBoard() {
   while (!mqttClient.connected()) {
     const uint64_t chipId = ESP.getEfuseMac();
     char clientId[32];
     snprintf(clientId, sizeof(clientId), "ESP32-%llX",
              static_cast<unsigned long long>(chipId));
 
-    Serial.print("Connecting to ThingsBoard MQTT... ");
-    // Access Token la username; password de trong.
-    if (mqttClient.connect(clientId, TB_ACCESS_TOKEN, nullptr)) {
+    Serial.print("Connecting to LiteBoard MQTT... ");
+    // LiteBoard Access Token mode: username = LB_ACCESS_TOKEN, password = LB_ACCESS_TOKEN.
+    if (mqttClient.connect(clientId, LB_ACCESS_TOKEN, LB_ACCESS_TOKEN)) {
       Serial.println("connected");
     } else {
       Serial.print("failed, state=");
@@ -68,12 +72,19 @@ float nextTemperature() {
 
 void publishTelemetry() {
   const float temperature = nextTemperature();
-  char payload[64];
-  snprintf(payload, sizeof(payload), "{\"temperature\":%.2f}", temperature);
+  char payload[128];
+  snprintf(
+      payload,
+      sizeof(payload),
+      "{\"values\":{\"temperature\":%.2f}}",
+      temperature
+  );
 
-  const bool published = mqttClient.publish("v1/devices/me/telemetry", payload);
+  const bool published = mqttClient.publish(telemetryTopic, payload);
   if (published) {
-    Serial.print("Telemetry sent: ");
+    Serial.print("Telemetry sent to ");
+    Serial.print(telemetryTopic);
+    Serial.print(": ");
     Serial.println(payload);
   } else {
     Serial.println("Telemetry publish failed");
@@ -85,10 +96,18 @@ void setup() {
   delay(500);
   randomSeed(esp_random());
 
+  snprintf(
+      telemetryTopic,
+      sizeof(telemetryTopic),
+      "liteboard/%s/devices/%s/telemetry",
+      LB_PROJECT_ID,
+      LB_DEVICE_ID
+  );
+
   connectWiFi();
-  mqttClient.setServer(TB_HOST, TB_PORT);
+  mqttClient.setServer(LB_HOST, LB_PORT);
   mqttClient.setKeepAlive(60);
-  connectThingsBoard();
+  connectLiteBoard();
 }
 
 void loop() {
@@ -96,7 +115,7 @@ void loop() {
     connectWiFi();
   }
   if (!mqttClient.connected()) {
-    connectThingsBoard();
+    connectLiteBoard();
   }
 
   mqttClient.loop();

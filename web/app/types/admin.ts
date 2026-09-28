@@ -3,6 +3,16 @@ import { tenantRoleSchema } from '~/types/auth'
 
 export const resourceStatusSchema = z.enum(['active', 'inactive'])
 export const assetTypeSchema = z.enum(['site', 'factory', 'area', 'production_line', 'station', 'equipment'])
+export const deviceConnectionStateSchema = z.enum(['online', 'offline', 'unstable'])
+export const deviceCredentialTypeSchema = z.enum(['access_token'])
+export const deviceCredentialStatusSchema = z.enum(['active', 'revoked'])
+
+export const deviceMqttTopicsSchema = z.object({
+  telemetry: z.string(),
+  heartbeat: z.string(),
+  commands: z.string(),
+  commands_ack: z.string()
+})
 
 const resourceBaseSchema = z.object({
   id: z.string().uuid(),
@@ -23,6 +33,30 @@ export const assetSchema = resourceBaseSchema.extend({
   asset_type: assetTypeSchema,
   code: z.string(),
   location: z.string().nullable()
+})
+
+export const deviceSchema = resourceBaseSchema.extend({
+  project_id: z.string().uuid(),
+  equipment_asset_id: z.string().uuid().nullable(),
+  code: z.string(),
+  description: z.string().nullable(),
+  connection_state: deviceConnectionStateSchema,
+  credential_type: deviceCredentialTypeSchema,
+  credential_status: deviceCredentialStatusSchema,
+  mqtt_topics: deviceMqttTopicsSchema,
+  last_seen_at: z.string().nullable()
+})
+
+export const deviceCredentialSchema = z.object({
+  device_id: z.string().uuid(),
+  project_id: z.string().uuid(),
+  credential_type: deviceCredentialTypeSchema,
+  access_token: z.string(),
+  status: deviceCredentialStatusSchema,
+  mqtt_topics: deviceMqttTopicsSchema,
+  rotated_at: z.string().nullable(),
+  revoked_at: z.string().nullable(),
+  updated_at: z.string()
 })
 
 export const projectRoleSchema = z.enum(['admin', 'engineer', 'operator', 'viewer'])
@@ -57,6 +91,18 @@ export const assetResponseSchema = z.object({
   data: assetSchema
 })
 
+export const devicesResponseSchema = z.object({
+  data: z.array(deviceSchema)
+}).passthrough()
+
+export const deviceResponseSchema = z.object({
+  data: deviceSchema
+})
+
+export const deviceCredentialResponseSchema = z.object({
+  data: deviceCredentialSchema
+})
+
 export const projectUsersResponseSchema = z.object({
   data: z.array(projectUserSchema)
 }).passthrough()
@@ -71,8 +117,14 @@ export const projectUserResponseSchema = z.object({
 
 export type ResourceStatus = z.infer<typeof resourceStatusSchema>
 export type AssetType = z.infer<typeof assetTypeSchema>
+export type DeviceConnectionState = z.infer<typeof deviceConnectionStateSchema>
+export type DeviceCredentialType = z.infer<typeof deviceCredentialTypeSchema>
+export type DeviceCredentialStatus = z.infer<typeof deviceCredentialStatusSchema>
+export type DeviceMqttTopics = z.infer<typeof deviceMqttTopicsSchema>
 export type Project = z.infer<typeof projectSchema>
 export type Asset = z.infer<typeof assetSchema>
+export type Device = z.infer<typeof deviceSchema>
+export type DeviceCredential = z.infer<typeof deviceCredentialSchema>
 export type ProjectRole = z.infer<typeof projectRoleSchema>
 export type ProjectUser = z.infer<typeof projectUserSchema>
 export type AvailableProjectUser = z.infer<typeof availableProjectUserSchema>
@@ -94,6 +146,19 @@ export interface AssetInput {
   parent_asset_id: string | null
   location: string
   status: ResourceStatus
+}
+
+export interface DeviceInput {
+  name: string
+  code: string
+  description: string | null
+  equipment_asset_id: string | null
+  status: ResourceStatus
+}
+
+export interface DeviceCredentialInput {
+  access_token?: string | null
+  status?: DeviceCredentialStatus
 }
 
 export interface ProjectUserInput {
@@ -123,8 +188,14 @@ export interface AdminTableRow {
   tenant_id?: string
   project_id?: string
   parent_asset_id?: string | null
+  equipment_asset_id?: string | null
   description?: string | null
   location?: string | null
+  connection_state?: DeviceConnectionState
+  credential_type?: DeviceCredentialType
+  credential_status?: DeviceCredentialStatus
+  mqtt_topics?: DeviceMqttTopics
+  last_seen_at?: string | null
   created_at?: string
   updated_at?: string
 }
