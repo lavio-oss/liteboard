@@ -26,9 +26,14 @@ final class ListProjectsAction
         }
 
         $projects = $tenant->projects()
+            ->with([
+                'users' => static function ($query) use ($user): void {
+                    $query->whereKey($user->getKey());
+                },
+            ])
             ->when(
                 ! $user->isPlatformAdmin()
-                    && ! $tenant->hasRole($user, TenantRole::Owner, TenantRole::Admin),
+                    && ($request->boolean('participating') || ! $tenant->hasRole($user, TenantRole::Owner, TenantRole::Admin)),
                 static function (Builder $query) use ($user): void {
                     $query->whereHas('users', static function (Builder $query) use ($user): void {
                         $query->whereKey($user->getKey());

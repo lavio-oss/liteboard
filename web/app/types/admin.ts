@@ -22,9 +22,12 @@ const resourceBaseSchema = z.object({
   updated_at: z.string()
 })
 
+export const projectRoleSchema = z.enum(['admin', 'engineer', 'operator', 'viewer'])
+
 export const projectSchema = resourceBaseSchema.extend({
   tenant_id: z.string().uuid(),
-  description: z.string().nullable()
+  description: z.string().nullable(),
+  role: projectRoleSchema.nullable()
 })
 
 export const assetSchema = resourceBaseSchema.extend({
@@ -58,8 +61,6 @@ export const deviceCredentialSchema = z.object({
   revoked_at: z.string().nullable(),
   updated_at: z.string()
 })
-
-export const projectRoleSchema = z.enum(['admin', 'engineer', 'operator', 'viewer'])
 
 export const projectUserSchema = z.object({
   id: z.string().uuid(),

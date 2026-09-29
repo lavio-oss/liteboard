@@ -25,10 +25,6 @@ const adminLinks = [{
   icon: 'i-lucide-boxes',
   to: '/admin/assets'
 }, {
-  label: 'Devices',
-  icon: 'i-lucide-router',
-  to: '/admin/devices'
-}, {
   label: 'Users',
   icon: 'i-lucide-users',
   to: '/admin/users'

@@ -62,7 +62,7 @@ final class UpdateAssetRequest extends FormRequest
          *     location?: string|null,
          *     status?: string
          * } $validated
-        */
+         */
         $validated = $this->validated();
         $parentUpdateProvided = array_key_exists('parent_asset_id', $validated);
         $parentAssetId = $parentUpdateProvided ? $validated['parent_asset_id'] : null;

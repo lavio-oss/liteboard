@@ -33,9 +33,10 @@ import type { TenantUser, TenantUserCreateInput, TenantUserUpdateInput } from '~
 export function useAdmin() {
   const api = useApi()
 
-  async function loadProjects(tenantId: string): Promise<Project[]> {
+  async function loadProjects(tenantId: string, options?: { participating?: boolean }): Promise<Project[]> {
+    const query = options?.participating ? 'per_page=100&participating=1' : 'per_page=100'
     const response = await api.request(
-      `/api/tenants/${tenantId}/projects?per_page=100`,
+      `/api/tenants/${tenantId}/projects?${query}`,
       projectsResponseSchema
     )
 

@@ -193,3 +193,42 @@ it('allows a platform admin to delete a global account', function (): void {
 
     $this->assertDatabaseMissing('users', ['id' => $owner->id]);
 });
+
+it('filters participating projects only and includes user role in project resource', function (): void {
+    $owner = User::factory()->create();
+    $tenant = Tenant::factory()->create();
+    $assignedProject = Project::factory()->for($tenant)->create(['name' => 'Assigned Project']);
+    $unassignedProject = Project::factory()->for($tenant)->create(['name' => 'Unassigned Project']);
+
+    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $assignedProject->users()->attach($owner, ['role' => 'admin']);
+
+    $responseAll = $this->actingAs($owner)
+        ->getJson('/api/tenants/'.$tenant->id.'/projects');
+
+    $responseAll->assertOk()
+        ->assertJsonCount(2, 'data');
+
+    $responseParticipating = $this->actingAs($owner)
+        ->getJson('/api/tenants/'.$tenant->id.'/projects?participating=1');
+
+    $responseParticipating->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.id', $assignedProject->id)
+        ->assertJsonPath('data.0.role', 'admin');
+});
+
+it('allows platform admin to load all projects and receive admin role even when participating filter is applied', function (): void {
+    $platformAdmin = User::factory()->create(['system_role' => 'platform_admin']);
+    $tenant = Tenant::factory()->create();
+    $projectA = Project::factory()->for($tenant)->create(['name' => 'Project A']);
+    $projectB = Project::factory()->for($tenant)->create(['name' => 'Project B']);
+
+    $response = $this->actingAs($platformAdmin)
+        ->getJson('/api/tenants/'.$tenant->id.'/projects?participating=1');
+
+    $response->assertOk()
+        ->assertJsonCount(2, 'data')
+        ->assertJsonPath('data.0.role', 'admin')
+        ->assertJsonPath('data.1.role', 'admin');
+});

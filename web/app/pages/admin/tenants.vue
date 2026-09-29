@@ -310,7 +310,7 @@ const errorMessage = computed(() => {
         <div class="flex flex-wrap items-center justify-between gap-1.5">
           <UInput
             v-model="search"
-            class="max-w-sm"
+            class="w-64"
             icon="i-lucide-search"
             placeholder="Search tenants..."
           />

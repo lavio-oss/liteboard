@@ -38,6 +38,7 @@ function parseApiErrorPayload(payload: unknown): ApiErrorPayload {
 }
 
 export function useApi() {
+  const fetcher = import.meta.server ? useRequestFetch() : $fetch
   const serverHeaders = import.meta.server
     ? useRequestHeaders(['cookie', 'x-xsrf-token', 'origin', 'referer'])
     : undefined
@@ -45,7 +46,6 @@ export function useApi() {
 
   async function request<T>(path: string, schema: z.ZodType<T>, options: ApiRequestOptions = {}): Promise<T> {
     try {
-      const fetcher = import.meta.server ? useRequestFetch() : $fetch
       const requestHeaders = new Headers(serverHeaders)
 
       if (xsrfToken.value !== null && xsrfToken.value !== undefined && xsrfToken.value !== '') {

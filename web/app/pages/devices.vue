@@ -18,8 +18,6 @@ const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
 const toast = useToast()
 const { activeTenantId, canManageActiveTenant, loadTenants } = useTenantContext()
-await loadTenants()
-
 const {
   createDevice,
   deleteDevice,
@@ -27,6 +25,7 @@ const {
   loadTenantHierarchy,
   updateDevice
 } = useAdmin()
+await loadTenants()
 
 const formOpen = ref(false)
 const formLoading = ref(false)

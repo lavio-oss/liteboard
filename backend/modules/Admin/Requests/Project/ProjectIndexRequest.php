@@ -25,6 +25,7 @@ final class ProjectIndexRequest extends FormRequest
     {
         return [
             'search' => ['sometimes', 'string', 'max:255'],
+            'participating' => ['sometimes', 'boolean'],
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
         ];

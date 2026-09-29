@@ -70,12 +70,16 @@ watch(filteredData, () => {
 
 <template>
   <div class="flex flex-wrap items-center justify-between gap-1.5">
-    <UInput
-      v-model="search"
-      class="max-w-sm"
-      icon="i-lucide-search"
-      :placeholder="searchPlaceholder"
-    />
+    <div class="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
+      <UInput
+        v-model="search"
+        class="w-64"
+        icon="i-lucide-search"
+        :placeholder="searchPlaceholder"
+      />
+
+      <slot name="search-trailing" />
+    </div>
 
     <div class="flex flex-wrap items-center gap-1.5">
       <slot name="filters" />

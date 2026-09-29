@@ -478,7 +478,7 @@ watch(
             v-model="search"
             icon="i-lucide-search"
             placeholder="Search users..."
-            class="max-w-sm"
+            class="w-64"
           />
           <div class="flex flex-wrap items-center gap-2">
             <USelect v-model="roleFilter" :items="roleFilterOptions" class="min-w-36" />
