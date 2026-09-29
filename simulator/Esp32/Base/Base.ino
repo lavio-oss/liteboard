@@ -1,19 +1,19 @@
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <PubSubClient.h>
+#include "mqtt_ca_cert.h"
+#include "device_config.h"
 
 // Dien thong tin Wi-Fi va cau hinh thiet bi LiteBoard o day.
 const char *WIFI_SSID = "Khanh Hoa";
 const char *WIFI_PASSWORD = "phukhanh";
 
-const char *LB_HOST = "192.168.1.100";
-constexpr uint16_t LB_PORT = 1883;
-const char *LB_PROJECT_ID = "019c0000-0000-7000-8000-000000000002";
-const char *LB_DEVICE_ID = "019c0000-0000-7000-8000-000000000100";
-const char *LB_ACCESS_TOKEN = "0bszem6ntw2bi0d28q1a";
+const char *LB_HOST = "192.168.100.102";
+constexpr uint16_t LB_PORT = 8883;
 
 constexpr unsigned long TELEMETRY_INTERVAL_MS = 5000;
 
-WiFiClient wifiClient;
+WiFiClientSecure wifiClient;
 PubSubClient mqttClient(wifiClient);
 
 unsigned long lastPublishAt = 0;
@@ -96,15 +96,10 @@ void setup() {
   delay(500);
   randomSeed(esp_random());
 
-  snprintf(
-      telemetryTopic,
-      sizeof(telemetryTopic),
-      "liteboard/%s/devices/%s/telemetry",
-      LB_PROJECT_ID,
-      LB_DEVICE_ID
-  );
+  snprintf(telemetryTopic, sizeof(telemetryTopic), "%s", LB_TELEMETRY_TOPIC);
 
   connectWiFi();
+  wifiClient.setCACert(LB_MQTT_CA_CERT);
   mqttClient.setServer(LB_HOST, LB_PORT);
   mqttClient.setKeepAlive(60);
   connectLiteBoard();

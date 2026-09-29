@@ -1,14 +1,14 @@
 # Kế hoạch Phát triển Tương lai (Future Roadmap): Bảo mật Nâng cao, Provisioning, Quotas & Toàn vẹn Telemetry
 
 > Phiên bản: 2026-09-27  
-> Phạm vi: Mở rộng sau MVP Access Token (Phase 1 – Phase 5)  
+> Phạm vi: Mở rộng sau MVP Access Token (Phase 1 – Phase 5), bao gồm hardening TLS server-auth tại Phase 6
 > Liên kết gốc: [access_token_plan.md](./access_token_plan.md) | [docs/plan.md](../../plan.md)
 
 ---
 
 ## 1. Bối cảnh & Mục tiêu
 
-Sau khi hoàn thành **Phase 1 → Phase 5** (đăng ký và xác thực thiết bị bằng `Access Token` cơ bản qua `mosquitto-go-auth`), hệ thống đã giải quyết được luồng kết nối chuẩn cho môi trường phát triển và thử nghiệm nội bộ (L0/L1).
+Phase 1 → Phase 5 đã hoàn thành. Cấu hình Phase 6 hiện tích hợp MQTT TLS server-auth trên `8883` và loại bỏ listener/port mapping `1883`/`9001`; kiểm tra cấu hình, client TLS và chứng chỉ cục bộ đã qua. Nghiệm thu broker end-to-end chưa hoàn tất vì Docker Engine hiện không truy cập được.
 
 Tuy nhiên, để đưa LiteBoard lên môi trường **Industrial IoT / Production** thực tế (nhiều nhà máy, kết nối qua mạng công cộng, chống tấn công DoS/Replay, quản lý hàng nghìn thiết bị), hệ thống cần bổ sung **11 năng lực bảo mật và kiểm soát luồng dữ liệu** được chia thành **4 Phase tiếp theo (Phase 6 → Phase 9)**:
 
@@ -17,9 +17,9 @@ Tuy nhiên, để đưa LiteBoard lên môi trường **Industrial IoT / Product
 | 1 | **MQTT Basic credential mode riêng** | [Phase 6](./access_token_progress/phase-6-mqtt-basic-clientid-and-provisioning.md) | Database + Laravel Control Plane + Broker |
 | 2 | **Bind `clientId` ↔ `device`** | [Phase 6](./access_token_progress/phase-6-mqtt-basic-clientid-and-provisioning.md) | Database + Mosquitto/EMQX ACL + Data Plane |
 | 3 | **Device Provisioning Bootstrap** | [Phase 6](./access_token_progress/phase-6-mqtt-basic-clientid-and-provisioning.md) | Laravel Control Plane + Edge Firmware |
-| 4 | **TLS MQTT 8883** | [Phase 7](./access_token_progress/phase-7-tls-8883-x509-and-cert-rotation.md) | Mosquitto/EMQX TLS Listener + Edge Firmware |
+| 4 | **MQTT TLS server-auth trên `8883`; đóng `1883` và `9001`** | [Phase 6](./access_token_progress/phase-6-mqtt-basic-clientid-and-provisioning.md) | Mosquitto + Python clients + Edge Firmware |
 | 5 | **X.509 Certificate Authentication (mTLS)** | [Phase 7](./access_token_progress/phase-7-tls-8883-x509-and-cert-rotation.md) | Broker TLS + PostgreSQL (`device_credentials`) |
-| 6 | **Certificate Rotation** | [Phase 7](./access_token_progress/phase-7-tls-8883-x509-and-cert-rotation.md) | Laravel Control Plane + Broker + Edge |
+| 6 | **Device Certificate Rotation** | [Phase 7](./access_token_progress/phase-7-tls-8883-x509-and-cert-rotation.md) | Laravel Control Plane + Broker + Edge |
 | 7 | **Message-size Quota** | [Phase 8](./access_token_progress/phase-8-quotas-and-rate-limiting.md) | Mosquitto (`max_packet_size`) + `telemetry-service` |
 | 8 | **Connection Quota** | [Phase 8](./access_token_progress/phase-8-quotas-and-rate-limiting.md) | Broker Listener / EMQX + Redis Connection Tracker |
 | 9 | **Rate Limiting per Device** | [Phase 8](./access_token_progress/phase-8-quotas-and-rate-limiting.md) | `telemetry-service` + Redis Token Bucket |
@@ -38,7 +38,7 @@ flowchart TD
     end
 
     subgraph Broker["Tầng Cửa ngõ MQTT Broker (Mosquitto / EMQX)"]
-        TLS["TLS 1.2/1.3 Termination (:8883)\n& X.509 CN / Thumbprint Extraction"]
+        TLS["TLS 1.2+ Termination (:8883)\nServer certificate verification"]
         Quota1["Broker Guard:\n- max_packet_size\n- Connection Quota\n- ClientID == Device Binding"]
         ACL["Auth & Topic ACL\n(v_mqtt_users / v_mqtt_acls)"]
         TLS --> Quota1 --> ACL
@@ -88,20 +88,23 @@ flowchart TD
      - Mạch ESP32 mới xuất xưởng chỉ chứa `provisioning_key`, `provisioning_secret` và `serial_number`/`mac_address`.
      - Khi khởi động lần đầu, mạch gọi `POST /api/device-provisioning/claim` → Laravel tự tạo bản ghi `Device` + `DeviceCredential` và trả về `{ device_id, project_id, access_token, mqtt_topics }` để mạch lưu vào bộ nhớ Flash (NVS) và dùng cố định từ đó về sau.
 
+4. **MQTT TLS server-auth trên `8883` (đã tích hợp; E2E pending)**:
+   - Cấu hình chỉ khai báo listener MQTT TLS `8883`; không khai báo listener MQTT plaintext `1883` hoặc WebSocket `9001`.
+   - Mosquitto giữ server certificate/private key. Mọi client xác minh CA và hostname/SAN; không bật client certificate ở Phase 6.
+   - Development dùng CA/chứng chỉ sinh từ script trong repo; production dùng chứng chỉ hợp lệ cho hostname broker và private key được cấp ngoài Git.
+   - Unit tests Python và xác minh chứng chỉ cục bộ đã qua; kiểm tra broker/client đang chạy và từ chối kết nối trên `1883`/`9001` vẫn chưa thực hiện được.
+
 ---
 
-### Nhóm 2: Bảo mật Đường truyền & Chứng chỉ Số X.509 ([Phase 7](./access_token_progress/phase-7-tls-8883-x509-and-cert-rotation.md))
-
-4. **TLS MQTT 8883**:
-   - Toàn bộ gói tin MQTT trên cổng `1883` đi qua mạng dưới dạng bản rõ (plain text) — kẻ tấn công bắt gói tin (sniffing) sẽ đọc được ngay `ACCESS_TOKEN`.
-   - Mở cổng `8883` trên Mosquitto với chứng chỉ Server TLS (`ca.crt`, `server.crt`, `server.key`, hỗ trợ Let's Encrypt hoặc Internal CA). Cổng `1883` chỉ giữ trong mạng nội bộ Docker hoặc khóa hoàn toàn trên Production.
+### Nhóm 2: Xác thực X.509 và xoay vòng chứng chỉ ([Phase 7](./access_token_progress/phase-7-tls-8883-x509-and-cert-rotation.md))
 
 5. **X.509 Certificate Authentication (`mTLS`, `credential_type = 'x509'`)**:
    - Ở cấp độ bảo mật cao nhất, thiết bị không gửi mật khẩu mà dùng cặp khóa bất đối xứng (`client.crt` + `client.key`).
-   - Trên listener `8883`, bật `require_certificate true` và `use_identity_as_username true` (hoặc kiểm tra SHA-256 thumbprint của chứng chỉ).
+   - Dùng listener TLS riêng cho mTLS (dự kiến `8884`) để thiết bị Access Token/MQTT Basic tiếp tục dùng server-auth TLS trên `8883`.
+   - Listener mTLS bật `require_certificate true`, xác minh client certificate bằng CA thiết bị và ánh xạ danh tính theo CN hoặc SHA-256 fingerprint.
    - Lưu `cert_common_name` và `cert_sha256_fingerprint` trong `device_credentials`.
 
-6. **Certificate Rotation (Xoay vòng Chứng chỉ không gián đoạn)**:
+6. **Device Certificate Rotation (Xoay vòng chứng chỉ thiết bị không gián đoạn)**:
    - Chứng chỉ X.509 đều có ngày hết hạn (`not_after` / `expires_at`). Nếu chỉ lưu 1 chứng chỉ duy nhất, khi đổi chứng chỉ mới thiết bị sẽ mất kết nối trước khi kịp cập nhật.
    - Cho phép 1 Device có **2 bản ghi credential trong giai đoạn chuyển giao (Grace Period)**: 1 bản ghi `active` (chứng chỉ hiện tại) và 1 bản ghi `pending_rotation` (chứng chỉ mới). Khi thiết bị kết nối thành công bằng chứng chỉ mới, hệ thống tự động thu hồi (`revoked`) chứng chỉ cũ.
 
@@ -144,7 +147,7 @@ flowchart TD
 
 ## 4. Lộ trình Triển khai Chi tiết (Phase 6 → Phase 9)
 
-- **[Phase 6: MQTT Basic, Khóa ClientID & Device Provisioning Bootstrap](./access_token_progress/phase-6-mqtt-basic-clientid-and-provisioning.md)**
-- **[Phase 7: Bảo mật TLS 8883, Xác thực Chứng chỉ X.509 & Xoay vòng Chứng chỉ](./access_token_progress/phase-7-tls-8883-x509-and-cert-rotation.md)**
+- **[Phase 6: MQTT TLS server-auth, MQTT Basic, Khóa ClientID & Device Provisioning Bootstrap](./access_token_progress/phase-6-mqtt-basic-clientid-and-provisioning.md)**
+- **[Phase 7: Xác thực mTLS bằng X.509 & Xoay vòng chứng chỉ thiết bị](./access_token_progress/phase-7-tls-8883-x509-and-cert-rotation.md)**
 - **[Phase 8: Connection Quota, Message-Size Quota & Rate Limiting theo Thiết bị](./access_token_progress/phase-8-quotas-and-rate-limiting.md)**
 - **[Phase 9: Telemetry Schema Validation & Chống Replay / Trùng lặp Gói tin](./access_token_progress/phase-9-schema-validation-and-replay-protection.md)**

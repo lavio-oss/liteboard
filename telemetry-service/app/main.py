@@ -11,6 +11,8 @@ import asyncpg
 from fastapi import FastAPI
 from gmqtt import Client as MQTTClient
 
+from app.mqtt_tls import build_mqtt_ssl_context
+
 TELEMETRY_TOPIC = 'liteboard/+/devices/+/telemetry'
 HEARTBEAT_TOPIC = 'liteboard/+/devices/+/heartbeat'
 
@@ -96,7 +98,12 @@ async def lifespan(application: FastAPI):
         client.set_auth_credentials(mqtt_username, mqtt_password)
 
     client.on_message = on_message
-    await client.connect(os.getenv('MQTT_HOST', 'localhost'), int(os.getenv('MQTT_PORT', '1883')))
+    mqtt_tls_context = build_mqtt_ssl_context(os.getenv('MQTT_TLS_CA_FILE', '/run/secrets/mqtt_tls_ca_certificate'))
+    await client.connect(
+        os.getenv('MQTT_HOST', 'localhost'),
+        int(os.getenv('MQTT_PORT', '8883')),
+        ssl=mqtt_tls_context,
+    )
     client.subscribe(TELEMETRY_TOPIC, qos=1)
     client.subscribe(HEARTBEAT_TOPIC, qos=1)
     application.state.mqtt_client = client

@@ -18,7 +18,8 @@ Xây dựng chức năng **Quản lý Thiết bị (Device Registry)** và **Xá
 2. **Quản lý Credential & Kiểm tra kết nối trên Web UI**:
    - Người dùng có thể mở hộp thoại **Manage Credentials** để xem/copy Access Token, sinh token mới (**Rotate / Regenerate**), hoặc thu hồi (**Revoke**). API từ chối request chứa token tùy chỉnh.
    - Hộp thoại **Check Connectivity** sinh sẵn câu lệnh `mosquitto_pub` và đoạn code mẫu `ESP32 (Arduino PubSubClient)` đã điền sẵn `ACCESS_TOKEN`, `PROJECT_ID`, `DEVICE_ID` và topic của thiết bị.
-3. **Xác thực MQTT & Phân quyền Topic tại Broker (`mosquitto-go-auth`)**:
+3. **Xác thực MQTT qua TLS & Phân quyền Topic tại Broker (`mosquitto-go-auth`)**:
+   - Client chỉ kết nối tới listener TLS `8883`; broker không mở cổng MQTT plaintext `1883` hoặc WebSocket `9001`.
    - Thiết bị kết nối tới Mosquitto bằng `username = <ACCESS_TOKEN>`, `password = <ACCESS_TOKEN>`.
    - Plugin `go-auth.so` của Mosquitto truy vấn trực tiếp 2 View `v_mqtt_users` và `v_mqtt_acls` trên PostgreSQL (có cache Redis 5 giây):
      - **Authentication (`v_mqtt_users`)**: Kiểm tra `token_hash` (`SHA-256`) và xác minh `mqtt_password_hash` (`bcrypt`), đồng thời đảm bảo `DeviceCredential`, `Device`, `Project` và `Tenant` đều đang `active`.
@@ -53,7 +54,7 @@ sequenceDiagram
     CP-->>UI: Trả về DeviceResource
     User->>UI: Mở Manage Credentials / Check Connectivity -> Copy Token & Code mẫu
 
-    ESP->>Broker: MQTT CONNECT (username = ACCESS_TOKEN, password = ACCESS_TOKEN)
+    ESP->>Broker: MQTT TLS CONNECT :8883 (username = ACCESS_TOKEN, password = ACCESS_TOKEN)
     Broker->>PG: SELECT mqtt_password_hash FROM v_mqtt_users WHERE token_hash = sha256($1)
     PG-->>Broker: Khớp bcrypt & active -> CONNACK (Accepted)
 
@@ -102,8 +103,8 @@ Các tính năng nâng cao cho môi trường Industrial IoT Production được
 
 | Phase | Nhóm năng lực mở rộng | File đặc tả chi tiết | Trạng thái |
 |---|---|---|---|
-| **Phase 6** | **MQTT Basic mode, Bind `clientId` ↔ `device` & Device Provisioning Bootstrap** | [phase-6-mqtt-basic-clientid-and-provisioning.md](./access_token_progress/phase-6-mqtt-basic-clientid-and-provisioning.md) | `Future Plan` |
-| **Phase 7** | **TLS MQTT `8883`, X.509 (`mTLS`) & Certificate Rotation** | [phase-7-tls-8883-x509-and-cert-rotation.md](./access_token_progress/phase-7-tls-8883-x509-and-cert-rotation.md) | `Future Plan` |
+| **Phase 6** | **MQTT TLS `8883`, MQTT Basic mode, Bind `clientId` ↔ `device` & Device Provisioning Bootstrap** | [phase-6-mqtt-basic-clientid-and-provisioning.md](./access_token_progress/phase-6-mqtt-basic-clientid-and-provisioning.md) | TLS config/client + local checks complete; broker E2E pending; remaining features planned |
+| **Phase 7** | **X.509 (`mTLS`) & Device Certificate Rotation** | [phase-7-tls-8883-x509-and-cert-rotation.md](./access_token_progress/phase-7-tls-8883-x509-and-cert-rotation.md) | `Future Plan` |
 | **Phase 8** | **Message-size Quota, Connection Quota & Rate Limiting per Device** | [phase-8-quotas-and-rate-limiting.md](./access_token_progress/phase-8-quotas-and-rate-limiting.md) | `Future Plan` |
 | **Phase 9** | **Telemetry Schema Validation & Replay/Deduplication Protection** | [phase-9-schema-validation-and-replay-protection.md](./access_token_progress/phase-9-schema-validation-and-replay-protection.md) | `Future Plan` |
 
@@ -116,3 +117,4 @@ Các tính năng nâng cao cho môi trường Industrial IoT Production được
 - [x] **Phase 3**: Mosquitto (`mosquitto-go-auth`) chặn kết nối ẩn danh; thiết bị dùng đúng `ACCESS_TOKEN` chỉ publish/subscribe được vào topic của chính `{project_id}` và `{device_id}` đó; token bị `revoke` hoặc `rotate` mất quyền truy cập sau khi hết TTL cache (5s).
 - [x] **Phase 4**: `telemetry-service` kết nối bằng tài khoản nội bộ, nhận gói tin trên `liteboard/+/devices/+/telemetry` và `heartbeat`, cập nhật `last_seen_at` và `connection_state = 'online'`; `simulator` và `Base.ino` gửi dữ liệu thành công bằng `ACCESS_TOKEN`.
 - [x] **Phase 5**: Giao diện Nuxt UI (`/devices` và `/admin/devices`) cho phép CRUD Device, gắn Equipment Asset, Copy/Rotate/Revoke Access Token và hiển thị lệnh `mosquitto_pub` / code `ESP32` trong hộp thoại Check Connectivity.
+- [ ] **Phase 6 — TLS server-auth**: Cấu hình chỉ dùng `8883`, xác minh CA/hostname và test cục bộ đã qua; chưa nghiệm thu kết nối broker end-to-end hoặc xác nhận `1883`/`9001` bị từ chối runtime.

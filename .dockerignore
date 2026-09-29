@@ -21,3 +21,6 @@ telemetry-service/.venv
 vuestic-admin
 **/__pycache__
 *.log
+infrastructure/mosquitto/certs
+simulator/Esp32/Base/device_config.h
+simulator/Esp32/Base/mqtt_ca_cert.h

@@ -8,3 +8,7 @@ simulator/.venv/
 vuestic-admin
 .pnpm-store/
 infrastructure/mosquitto/passwords
+infrastructure/mosquitto/certs/
+simulator/Esp32/Base/mqtt_ca_cert.h
+simulator/Esp32/Base/device_config.h
+web/public/mqtt/ca.crt

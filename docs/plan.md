@@ -700,7 +700,7 @@ The development plan is not production-ready only because the platform starts wi
 
 ### Security
 
-- TLS for MQTT, preferably on port 8883, and TLS for HTTP/WebSocket traffic.
+- MQTT clients use TLS on port 8883 only; the broker must not expose plaintext MQTT on 1883. HTTP/WebSocket traffic also requires TLS in production.
 - Broker ACL scoped to the project and Device; Device credentials can be revoked and rotated. Anonymous access is development-only.
 - Secrets supplied through environment or secret management and never committed to Git.
 - API rate limiting, MQTT connection/message limits and maximum payload size.

@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 
 from gmqtt import Client as MQTTClient
 
+from app.mqtt_tls import build_mqtt_ssl_context
+
 
 async def main() -> None:
     project_id = os.getenv('PROJECT_ID', '')
@@ -20,7 +22,12 @@ async def main() -> None:
     client_id = f"sim-{device_id[:8]}"
     client = MQTTClient(client_id)
     client.set_auth_credentials(access_token, access_token)
-    await client.connect(os.getenv('MQTT_HOST', 'localhost'), int(os.getenv('MQTT_PORT', '1883')))
+    mqtt_tls_context = build_mqtt_ssl_context(os.getenv('MQTT_TLS_CA_FILE', '/run/secrets/mqtt_tls_ca_certificate'))
+    await client.connect(
+        os.getenv('MQTT_HOST', 'localhost'),
+        int(os.getenv('MQTT_PORT', '8883')),
+        ssl=mqtt_tls_context,
+    )
     topic = f"liteboard/{project_id}/devices/{device_id}/telemetry"
     interval_seconds = int(os.getenv('SIMULATOR_INTERVAL_SECONDS', '5'))
 

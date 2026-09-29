@@ -12,7 +12,7 @@ The repository is organized as a monorepo containing the modular backend, modern
 
 ```text
 LiteBoardv2/
-├── backend/               # Laravel 11/12 Control-Plane API (Modular Monolith)
+├── backend/               # Laravel 13 Control-Plane API (Modular Monolith)
 │   ├── app/               # Host-level providers & infrastructure tooling
 │   ├── database/          # Forward-only database migrations & seeders (PostgreSQL)
 │   ├── modules/           # Domain business modules
@@ -28,8 +28,8 @@ LiteBoardv2/
 │   │   └── types/         # Zod schemas and TypeScript data contracts
 │   └── package.json       # Frontend dependencies (Nuxt, VueFlow, Tailwind v4)
 │
-├── telemetry-service/     # FastAPI / Python telemetry ingestion service
-│   ├── app/               # Ingestion logic consuming MQTT telemetry
+├── telemetry-service/     # FastAPI / Python MQTT subscriber and presence service
+│   ├── app/               # Validates messages and updates Device presence
 │   └── Dockerfile
 │
 ├── simulator/             # IoT device simulator for testing telemetry streams
@@ -61,8 +61,9 @@ LiteBoardv2/
 
 ## Documentation
 
-For the complete architectural design, technology stack, implementation details, and development roadmap of the project, refer to:
+Start with the project map and local setup guide, then use the detailed references:
 
+- **[docs/README.md](docs/README.md)** — Architecture, environment keys, ports, and local setup.
 - **[docs/plan.md](docs/plan.md)** — Master Project Plan & System Specifications.
 - **[infrastructure/mosquitto/README.md](infrastructure/mosquitto/README.md)** — Mosquitto MQTT Broker (`mosquitto-go-auth`) Setup, Authentication & Operations Guide.
 
@@ -70,60 +71,9 @@ For the complete architectural design, technology stack, implementation details,
 
 ## Getting Started
 
-### 1. Running with Docker Compose (Recommended)
-
-Start the complete stack in Docker (PostgreSQL, Redis, Mosquitto, Backend API, Web App, Telemetry Service):
-
-```powershell
-# Copy environment configuration
-Copy-Item .env.example .env
-
-# Build and start all services
-docker compose --profile containerized-frontend up -d --build
-```
-
-#### Service Endpoints & Health Checks:
-- **Web Dashboard**: [http://localhost:3000](http://localhost:3000)
-- **Backend API**: [http://localhost:8800/api/health](http://localhost:8800/api/health)
-- **Telemetry Service**: [http://localhost:8100/health](http://localhost:8100/health)
-- **MQTT Broker**: `mqtt://localhost:1883` (WebSocket: `ws://localhost:9001`) — see [Mosquitto Setup Guide](infrastructure/mosquitto/README.md)
-
-Check container readiness with `docker compose ps`; the backend, web app, and telemetry service report `healthy` after startup.
-
-#### Run the IoT Device Simulator:
-```powershell
-docker compose --profile tools run --rm simulator
-```
+Use the step-by-step [local setup guide](docs/README.md). It covers the Laravel key, MQTT TLS certificates, environment files, ports, Docker startup, simulator, and the optional host-local workflow.
 
 ---
-
-### 2. Running Locally for Development
-
-For active development, run PostgreSQL, Redis, and Mosquitto in Docker, with Laravel and Nuxt in local terminals. Nuxt uses port `3000`:
-
-```powershell
-docker compose up -d postgres redis mosquitto
-```
-
-#### Backend (Laravel)
-```powershell
-cd backend
-composer install
-php artisan migrate
-php artisan serve --port=8800
-```
-API runs at `http://localhost:8800`.
-
-#### Frontend (Nuxt 4)
-```powershell
-cd web
-pnpm install
-pnpm dev
-```
-Dashboard runs at `http://localhost:3000`.
-
----
-
 ## Quality Checks & Testing
 
 Before committing code, ensure all quality gates pass:

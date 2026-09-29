@@ -37,6 +37,7 @@ const deleteLoading = ref(false)
 const deletingDevice = ref<Device | null>(null)
 const credentialsOpen = ref(false)
 const credentialsDevice = ref<Device | null>(null)
+const mqttGuideOpen = ref(false)
 
 const connectionStateFilter = ref<DeviceConnectionState | 'all'>('all')
 const projectFilter = ref<string | null>(null)
@@ -411,6 +412,13 @@ const errorMessage = computed(() => {
             icon="i-lucide-plus"
             @click="openCreate"
           />
+          <UButton
+            icon="i-lucide-info"
+            color="neutral"
+            variant="ghost"
+            aria-label="MQTT connection guide"
+            @click="mqttGuideOpen = true"
+          />
         </template>
       </UDashboardNavbar>
     </template>
@@ -468,6 +476,55 @@ const errorMessage = computed(() => {
         :can-manage="canManageActiveTenant"
         @updated="refresh"
       />
+
+      <UModal
+        v-model:open="mqttGuideOpen"
+        title="Connect a device over MQTT TLS"
+        description="Use the broker CA certificate to verify the LiteBoard MQTT server."
+      >
+        <template #body>
+          <div class="space-y-5">
+            <UAlert
+              color="primary"
+              variant="subtle"
+              title="TLS server verification"
+              description="Devices connect to port 8883 and verify the broker with this public CA certificate. Device certificates and private keys are not required."
+            />
+
+            <ol class="list-inside list-decimal space-y-2 text-sm text-muted">
+              <li>Connect to the broker hostname on port 8883 using MQTT over TLS.</li>
+              <li>Use the device Access Token as both MQTT username and password.</li>
+              <li>Publish telemetry to liteboard/&lt;PROJECT_ID&gt;/devices/&lt;DEVICE_ID&gt;/telemetry.</li>
+              <li>Configure the client to trust the CA certificate below and verify the broker hostname.</li>
+            </ol>
+
+            <div class="space-y-2 rounded-lg border border-default p-4">
+              <div>
+                <p class="font-medium text-highlighted">
+                  Public broker CA certificate
+                </p>
+                <p class="text-sm text-muted">
+                  This is the CA certificate used to verify the broker, not a device private key.
+                </p>
+              </div>
+              <UButton
+                href="/mqtt/ca.crt"
+                download="liteboard-mqtt-ca.crt"
+                label="Download CA certificate"
+                icon="i-lucide-download"
+                color="neutral"
+                variant="outline"
+              />
+              <p class="break-all text-xs text-muted">
+                Direct link:
+                <a class="text-primary underline" href="/mqtt/ca.crt">
+                  /mqtt/ca.crt
+                </a>
+              </p>
+            </div>
+          </div>
+        </template>
+      </UModal>
 
       <ConfirmDeleteModal
         v-model:open="deleteOpen"

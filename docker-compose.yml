@@ -1,5 +1,6 @@
 services:
   postgres:
+    profiles: ['application']
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-liteboard}
@@ -30,17 +31,18 @@ services:
   mosquitto:
     image: iegomez/mosquitto-go-auth:latest
     environment:
-      MQTT_PG_HOST: ${MQTT_PG_HOST:-postgres}
-      MQTT_PG_PORT: ${POSTGRES_PORT:-5432}
+      MQTT_PG_HOST: ${MQTT_PG_HOST:-host.docker.internal}
+      MQTT_PG_PORT: ${MQTT_PG_PORT:-5432}
       MQTT_PG_DB: ${POSTGRES_DB:-liteboard}
       MQTT_PG_USER: ${POSTGRES_USER:-liteboard}
       MQTT_PG_PASSWORD: ${POSTGRES_PASSWORD:-liteboard}
       MQTT_REDIS_HOST: ${MQTT_REDIS_HOST:-redis}
-      MQTT_REDIS_PORT: ${REDIS_PORT:-6379}
+      MQTT_REDIS_PORT: ${MQTT_REDIS_PORT:-6379}
       MQTT_INTERNAL_USERNAME: ${MQTT_INTERNAL_USERNAME:-telemetry-service}
       MQTT_INTERNAL_PASSWORD: ${MQTT_INTERNAL_PASSWORD:-telemetry-service-secret}
       MQTT_HEALTHCHECK_USERNAME: ${MQTT_HEALTHCHECK_USERNAME:-healthcheck}
       MQTT_HEALTHCHECK_PASSWORD: ${MQTT_HEALTHCHECK_PASSWORD:-healthcheck-secret}
+      MQTT_TLS_HOSTNAME: ${MQTT_TLS_HOSTNAME:-mqtt.local}
     command:
       - /bin/sh
       - -c
@@ -62,27 +64,33 @@ services:
         chmod 0644 /tmp/mosquitto.conf
         exec /usr/sbin/mosquitto -c /tmp/mosquitto.conf
     ports:
-      - '${MQTT_PORT:-1883}:1883'
-      - '${MQTT_WS_PORT:-9001}:9001'
+      - '8883:8883'
     volumes:
       - ./infrastructure/mosquitto/mosquitto.conf:/etc/mosquitto/mosquitto.conf.template:ro
       - ./infrastructure/mosquitto/acls:/etc/mosquitto/auth/acls:ro
       - liteboard-mosquitto-data:/mosquitto/data
       - liteboard-mosquitto-log:/mosquitto/log
+    secrets:
+      - mqtt_server_certificate
+      - mqtt_server_private_key
+      - mqtt_tls_ca_certificate
+    networks:
+      default:
+        aliases:
+          - ${MQTT_TLS_HOSTNAME:-mqtt.local}
     healthcheck:
       test:
         - CMD-SHELL
-        - 'mosquitto_pub -h 127.0.0.1 -u "$$MQTT_HEALTHCHECK_USERNAME" -P "$$MQTT_HEALTHCHECK_PASSWORD" -t healthcheck -n'
+        - 'mosquitto_pub --cafile /run/secrets/mqtt_tls_ca_certificate -h "$$MQTT_TLS_HOSTNAME" -p 8883 -u "$$MQTT_HEALTHCHECK_USERNAME" -P "$$MQTT_HEALTHCHECK_PASSWORD" -t healthcheck -n'
       interval: 5s
       timeout: 3s
       retries: 10
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
 
   backend:
+    profiles: ['application']
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -127,12 +135,13 @@ services:
     build:
       context: telemetry-service
     environment:
-      MQTT_HOST: mosquitto
-      MQTT_PORT: 1883
+      MQTT_HOST: ${MQTT_TLS_HOSTNAME:-mqtt.local}
+      MQTT_PORT: 8883
+      MQTT_TLS_CA_FILE: /run/secrets/mqtt_tls_ca_certificate
       MQTT_USERNAME: ${MQTT_INTERNAL_USERNAME:-telemetry-service}
       MQTT_PASSWORD: ${MQTT_INTERNAL_PASSWORD:-telemetry-service-secret}
-      DB_HOST: ${MQTT_PG_HOST:-postgres}
-      DB_PORT: ${POSTGRES_PORT:-5432}
+      DB_HOST: ${MQTT_PG_HOST:-host.docker.internal}
+      DB_PORT: ${MQTT_PG_PORT:-5432}
       DB_DATABASE: ${POSTGRES_DB:-liteboard}
       DB_USERNAME: ${POSTGRES_USER:-liteboard}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-liteboard}
@@ -151,13 +160,17 @@ services:
     depends_on:
       mosquitto:
         condition: service_healthy
+    secrets:
+      - mqtt_tls_ca_certificate
 
   frontend:
-    profiles: ['containerized-frontend']
+    profiles: ['application', 'containerized-frontend']
     build:
       context: web
     environment:
       NUXT_LARAVEL_API_BASE: http://backend:8800
+    volumes:
+      - ${MQTT_TLS_CA_SOURCE:-./infrastructure/mosquitto/certs/ca.crt}:/app/public/mqtt/ca.crt:ro
     ports:
       - '${FRONTEND_PORT:-3000}:3000'
     healthcheck:
@@ -178,8 +191,9 @@ services:
     build:
       context: simulator
     environment:
-      MQTT_HOST: mosquitto
-      MQTT_PORT: 1883
+      MQTT_HOST: ${MQTT_TLS_HOSTNAME:-mqtt.local}
+      MQTT_PORT: 8883
+      MQTT_TLS_CA_FILE: /run/secrets/mqtt_tls_ca_certificate
       PROJECT_ID: ${SIMULATOR_PROJECT_ID:-}
       DEVICE_ID: ${SIMULATOR_DEVICE_ID:-}
       DEVICE_ACCESS_TOKEN: ${SIMULATOR_DEVICE_ACCESS_TOKEN:-}
@@ -187,9 +201,19 @@ services:
     depends_on:
       mosquitto:
         condition: service_healthy
+    secrets:
+      - mqtt_tls_ca_certificate
 
 volumes:
   liteboard-postgres:
   liteboard-redis:
   liteboard-mosquitto-data:
   liteboard-mosquitto-log:
+
+secrets:
+  mqtt_server_certificate:
+    file: ${MQTT_TLS_CERT_FILE:-./infrastructure/mosquitto/certs/broker/server.crt}
+  mqtt_server_private_key:
+    file: ${MQTT_TLS_KEY_FILE:-./infrastructure/mosquitto/certs/broker/server.key}
+  mqtt_tls_ca_certificate:
+    file: ${MQTT_TLS_CA_SOURCE:-./infrastructure/mosquitto/certs/ca.crt}

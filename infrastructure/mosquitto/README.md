@@ -9,11 +9,15 @@ This directory contains the configuration for the **Eclipse Mosquitto MQTT Broke
 ```text
 infrastructure/mosquitto/
 ├── mosquitto.conf    # Template configuration (uses __MQTT_*__ placeholders, zero hardcoded secrets)
+├── generate-dev-certs.ps1 # Creates ignored local development CA and broker certificate
+├── certs/            # Generated certificate/key files; ignored by Git
 ├── acls              # Static Access Control List (ACL) for internal system accounts
 └── README.md         # Setup and operations guide
 ```
 
 > **Security Note**: This directory **does not** store a static `passwords` file in Git. Passwords for internal accounts (`telemetry-service`, `healthcheck`) are automatically hashed using `/mosquitto/pw` (Bcrypt) from environment variables in `.env` into `/tmp/mosquitto-passwords` when the container starts up.
+
+The broker exposes only MQTT over TLS on `8883`. It does not listen or publish ports `1883` or `9001`. MQTT clients verify the server certificate and hostname; this Phase 6 setup does not require client certificates (mTLS).
 
 ---
 
@@ -60,6 +64,7 @@ POSTGRES_DB=liteboard
 POSTGRES_USER=liteboard
 POSTGRES_PASSWORD=your-strong-db-password
 POSTGRES_PORT=5432
+MQTT_PG_PORT=5432
 
 # Point Mosquitto to the Docker postgres container
 MQTT_PG_HOST=postgres
@@ -69,6 +74,14 @@ MQTT_INTERNAL_USERNAME=telemetry-service
 MQTT_INTERNAL_PASSWORD=change-me-telemetry-service-password
 MQTT_HEALTHCHECK_USERNAME=healthcheck
 MQTT_HEALTHCHECK_PASSWORD=change-me-healthcheck-password
+
+# Must match the broker certificate SAN. Use a publicly resolvable hostname in production.
+MQTT_TLS_HOSTNAME=mqtt.local
+
+# Production can point these at certificate files stored outside the repository.
+MQTT_TLS_CERT_FILE=./infrastructure/mosquitto/certs/broker/server.crt
+MQTT_TLS_KEY_FILE=./infrastructure/mosquitto/certs/broker/server.key
+MQTT_TLS_CA_SOURCE=./infrastructure/mosquitto/certs/ca.crt
 ```
 
 #### Scenario B — Local Hybrid Development (PostgreSQL running natively on the host machine)
@@ -78,7 +91,7 @@ If your `backend/.env` connects to a PostgreSQL instance installed on your host 
 POSTGRES_DB=liteboard
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=<your-host-postgres-password>
-POSTGRES_PORT=5432
+MQTT_PG_PORT=5432
 
 # Route Mosquitto container traffic to the host machine's PostgreSQL
 MQTT_PG_HOST=host.docker.internal
@@ -89,6 +102,8 @@ MQTT_HEALTHCHECK_USERNAME=healthcheck
 MQTT_HEALTHCHECK_PASSWORD=healthcheck-local-secret
 ```
 
+`POSTGRES_PORT` controls only the port published on the host. `MQTT_PG_PORT` is the port Mosquitto and `telemetry-service` use to reach their configured database host. With PostgreSQL in Compose, keep `MQTT_PG_PORT=5432`; changing the host mapping does not change the container port.
+
 ### Step 3: Run Database Migrations
 
 Ensure your database has the `devices`, `device_credentials` tables and the `v_mqtt_users`, `v_mqtt_acls` SQL views:
@@ -98,7 +113,28 @@ cd backend
 php artisan migrate
 ```
 
-### Step 4: Start Mosquitto & Redis
+### Step 4: Generate Development Certificates
+
+From the project root, generate a local development CA, broker certificate and an ESP32 CA header:
+The script requires OpenSSL 1.1.1 or newer.
+
+```powershell
+.\infrastructure\mosquitto\generate-dev-certs.ps1
+```
+
+The generated public CA certificate is also exposed by the web app at `/mqtt/ca.crt` so device setup can download the exact CA certificate used by the local broker. This is the CA certificate only; the CA private key stays outside the web app and firmware.
+
+If the local PowerShell execution policy blocks this unsigned local script, run it with a process-scoped bypass (this does not change the machine policy):
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\infrastructure\mosquitto\generate-dev-certs.ps1
+```
+
+The default certificate SAN covers `mqtt.local`, the Docker hostname `mosquitto`, `localhost`, and the sample ESP32 broker IP. If the device connects using a different DNS name or IP, pass it with `-DnsName` or `-IpAddress` when generating the certificates. The script refuses to overwrite existing certificates.
+
+The generated CA private key stays on the development machine and is not mounted into containers or copied to firmware. Only the public CA certificate is supplied to clients. Do not use the development CA/private key in production.
+
+### Step 5: Start Mosquitto & Redis
 
 From the project root:
 
@@ -124,9 +160,9 @@ level=info msg="redisCache activated"
 
 ## 4. Testing & Verification
 
-### 4.1. Verify Anonymous Connections Are Blocked (Expected: Refused)
+### 4.1. Verify TLS and Anonymous Authentication Is Blocked (Expected: Refused)
 ```powershell
-docker compose exec -T mosquitto mosquitto_pub -h 127.0.0.1 -t test -m "hello"
+docker compose exec -T mosquitto mosquitto_pub --cafile /run/secrets/mqtt_tls_ca_certificate -h mqtt.local -p 8883 -t test -m "hello"
 # Result: Connection error: Connection Refused: not authorised.
 ```
 
@@ -135,7 +171,7 @@ After registering a device in LiteBoard and obtaining its `ACCESS_TOKEN`, `PROJE
 
 ```powershell
 docker compose exec -T mosquitto mosquitto_pub `
-  -h 127.0.0.1 -p 1883 -q 1 `
+  --cafile /run/secrets/mqtt_tls_ca_certificate -h mqtt.local -p 8883 -q 1 `
   -u "<ACCESS_TOKEN>" -P "<ACCESS_TOKEN>" `
   -t "liteboard/<PROJECT_ID>/devices/<DEVICE_ID>/telemetry" `
   -m '{"temperature": 26.5}'
@@ -144,7 +180,7 @@ docker compose exec -T mosquitto mosquitto_pub `
 ### 4.3. Test Internal Telemetry Listener
 ```powershell
 docker compose exec -T mosquitto mosquitto_sub `
-  -h 127.0.0.1 -p 1883 `
+  --cafile /run/secrets/mqtt_tls_ca_certificate -h mqtt.local -p 8883 `
   -u "telemetry-service" -P "<MQTT_INTERNAL_PASSWORD>" `
   -t "liteboard/#" -v
 ```
@@ -155,3 +191,7 @@ docker compose exec -T mosquitto mosquitto_sub `
   * Resolution: Check `MQTT_PG_HOST`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` in `.env` to ensure they match `backend/.env`, then run `docker compose up -d --force-recreate mosquitto`.
 * **Changes in `.env` not reflected in Mosquitto**:
   * Resolution: Run `docker compose up -d --force-recreate mosquitto` to reload environment variables and regenerate `/tmp/mosquitto-passwords`.
+* **Mosquitto cannot read its TLS certificate or key**:
+  * Resolution: Run the development certificate script, or set the production certificate file variables to readable files outside the repository, then recreate the broker.
+* **TLS hostname verification fails**:
+  * Resolution: Make `MQTT_TLS_HOSTNAME`/the device host match a DNS name or IP in the server certificate SAN. Never disable hostname verification to work around a mismatch.

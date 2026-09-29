@@ -11,6 +11,8 @@
 
 Chuyển đổi Mosquitto Broker từ chế độ mở (`allow_anonymous true`) sang chế độ xác thực và phân quyền chặt chẽ theo từng thiết bị bằng plugin **`iegomez/mosquitto-go-auth`** kết nối trực tiếp vào PostgreSQL Views (`v_mqtt_users`, `v_mqtt_acls`) và sử dụng Redis làm bộ nhớ đệm (cache).
 
+> Trạng thái vận hành hiện tại: cấu hình Mosquitto/Compose chỉ khai báo listener và port mapping TLS `8883`; mọi client phải dùng CA và hostname đúng. Kiểm tra cấu hình tĩnh đã qua, nhưng chưa xác nhận broker đang chạy hoặc các cổng `1883`/`9001` bị từ chối ở runtime vì Docker Engine hiện không truy cập được.
+
 ---
 
 ## 2. Cơ chế Xác thực Kép (`files` + `postgres`)
@@ -57,15 +59,15 @@ Plugin `mosquitto-go-auth` cho phép chạy song song hai backend theo thứ t�
 
 | Kịch bản | Hành động | Kết quả kỳ vọng |
 |---|---|---|
-| **1. Kết nối ẩn danh** | `mosquitto_pub -h localhost -t test -m "hi"` (không truyền `-u`, `-P`) | Bị từ chối kết nối (`Connection Refused: not authorized`) |
-| **2. Sai Access Token** | Truyền `-u "wrong_token" -P "wrong_token"` | Bị từ chối kết nối |
-| **3. Đúng Access Token, đúng Topic** | Truyền `-u "$TOKEN_A" -P "$TOKEN_A"` publish vào `liteboard/{proj_A}/devices/{dev_A}/telemetry` | Thành công (`QoS 1 PUBACK`) |
-| **4. Giả mạo Topic thiết bị khác** | Truyền `-u "$TOKEN_A" -P "$TOKEN_A"` nhưng publish vào `liteboard/{proj_A}/devices/{dev_B}/telemetry` | Bị chặn bởi ACL (Broker không chuyển tiếp gói tin) |
-| **5. Thu hồi / Đổi Token (Revoke / Rotate)** | Đổi trạng thái credential sang `revoked` trên UI rồi gửi lại gói tin sau 5s | Bị từ chối kết nối / publish |
+| **1. Kết nối ẩn danh** | Kết nối TLS với `--cafile <ca.crt> -h <broker-host> -p 8883`, không truyền `-u`, `-P` | TLS hợp lệ nhưng MQTT CONNECT bị từ chối vì thiếu xác thực |
+| **2. Sai Access Token** | Dùng TLS rồi truyền `-u "wrong_token" -P "wrong_token"` | Bị từ chối kết nối |
+| **3. Đúng Access Token, đúng Topic** | Dùng TLS và `-u "$TOKEN_A" -P "$TOKEN_A"`, publish vào `liteboard/{proj_A}/devices/{dev_A}/telemetry` | Thành công (`QoS 1 PUBACK`) |
+| **4. Giả mạo Topic thiết bị khác** | Dùng TLS và token A nhưng publish vào topic của device B | Bị chặn bởi ACL (Broker không chuyển tiếp gói tin) |
+| **5. Thu hồi / Đổi Token (Revoke / Rotate)** | Đổi trạng thái credential sang `revoked` trên UI rồi gửi lại gói tin sau 5s qua TLS | Bị từ chối kết nối / publish |
 
 ---
 
 ## 5. Checklist Nghiệm thu Phase 3
 
 - [x] Container `mosquitto` khởi động `healthy` cùng `postgres` và `redis`.
-- [x] Vượt qua toàn bộ 5 kịch bản kiểm thử bảo mật Broker ở Mục 4.
+- [x] Vượt qua toàn bộ 5 kịch bản kiểm thử xác thực/ACL Broker ở Mục 4.
