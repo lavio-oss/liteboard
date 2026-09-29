@@ -23,7 +23,6 @@ final class CreateDeviceAction
         $device = $devicePersistenceService->create(
             $project,
             $deviceInput['attributes'],
-            $deviceInput['access_token'],
         );
 
         return $responder->resource(DeviceResource::make($device), Response::HTTP_CREATED);

@@ -35,6 +35,13 @@ const state = reactive<FormState>({
 
 const title = computed(() => props.tenant === null ? 'Add tenant' : 'Edit tenant')
 
+const isActive = computed({
+  get: () => state.status === 'active',
+  set: (val: boolean) => {
+    state.status = val ? 'active' : 'inactive'
+  }
+})
+
 watch(
   () => [props.open, props.tenant],
   () => {
@@ -70,7 +77,7 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
           required
           :error="props.errors.name?.[0]"
         >
-          <UInput v-model="state.name" class="w-full" />
+          <UInput v-model="state.name" class="w-full" placeholder="Enter tenant name" />
         </UFormField>
 
         <UFormField
@@ -79,22 +86,17 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
           required
           :error="props.errors.code?.[0]"
         >
-          <UInput v-model="state.code" class="w-full" />
+          <UInput v-model="state.code" class="w-full" placeholder="Enter tenant code" />
         </UFormField>
 
         <UFormField
           name="status"
           label="Status"
-          required
           :error="props.errors.status?.[0]"
         >
-          <USelect
-            v-model="state.status"
-            :items="[
-              { label: 'Active', value: 'active' },
-              { label: 'Inactive', value: 'inactive' }
-            ]"
-            class="w-full"
+          <USwitch
+            v-model="isActive"
+            :label="isActive ? 'Active' : 'Inactive'"
           />
         </UFormField>
 

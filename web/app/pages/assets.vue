@@ -72,6 +72,8 @@ const canDeleteInSelectedProject = computed(() => {
     || selectedProject.value.role === 'admin'
 })
 
+const viewOpen = ref(false)
+const viewingAsset = ref<Asset | null>(null)
 const formOpen = ref(false)
 const formLoading = ref(false)
 const selectedParentId = ref<string | null>(null)
@@ -189,6 +191,17 @@ function assetTypeLabelFor(assetType: AssetType | undefined): string {
   }
 
   return assetTypeLabels[assetType]
+}
+
+function openView(assetId: string): void {
+  const asset = assets.value.find(item => item.id === assetId)
+
+  if (asset === undefined) {
+    throw new Error('The selected asset is not available.')
+  }
+
+  viewingAsset.value = asset
+  viewOpen.value = true
 }
 
 function openCreate(): void {
@@ -379,7 +392,15 @@ const columns: TableColumn<AdminTableRow>[] = [
     id: 'actions',
     header: '',
     cell: ({ row }) => {
-      const buttons = []
+      const buttons = [
+        h(UButton, {
+          'icon': 'i-lucide-eye',
+          'color': 'neutral',
+          'variant': 'ghost',
+          'aria-label': `View ${row.original.name}`,
+          'onClick': () => openView(row.original.id)
+        })
+      ]
 
       if (canWriteInSelectedProject.value) {
         buttons.push(
@@ -405,7 +426,7 @@ const columns: TableColumn<AdminTableRow>[] = [
         )
       }
 
-      return buttons.length > 0 ? h('div', { class: 'flex justify-end gap-1' }, buttons) : null
+      return h('div', { class: 'flex justify-end gap-1' }, buttons)
     }
   }
 ]
@@ -508,6 +529,15 @@ const errorMessage = computed(() => {
         description="This action cannot be undone. Child assets will remain as root assets."
         :loading="deleteLoading"
         @confirm="deleteSelectedAsset"
+      />
+
+      <AdminAssetDetailModal
+        v-model:open="viewOpen"
+        :asset="viewingAsset"
+        :project-name="selectedProject?.name"
+        :parent-name="viewingAsset ? parentNameFor(viewingAsset.parent_asset_id) : undefined"
+        :can-edit="canWriteInSelectedProject"
+        @edit="(asset) => openEdit(asset.id)"
       />
     </template>
   </UDashboardPanel>

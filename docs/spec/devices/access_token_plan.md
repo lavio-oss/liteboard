@@ -14,10 +14,9 @@ Xây dựng chức năng **Quản lý Thiết bị (Device Registry)** và **Xá
 1. **Khởi tạo Device & Cấp Access Token (Control Plane)**:
    - Người dùng có quyền (`Platform Admin`, `Tenant Owner/Admin`, hoặc `Project Admin/Engineer`) tạo một `Device` thuộc một `Project` (có thể liên kết tùy chọn với 1 `Asset` có `asset_type = 'equipment'` trong cùng Project).
    - Trong cùng một transaction tạo `Device`, hệ thống tự động tạo bản ghi `DeviceCredential` (`credential_type = 'access_token'`):
-     - Mặc định tự sinh chuỗi ngẫu nhiên **20 ký tự** `[a-z0-9]` (ví dụ: `0bszem6ntw2bi0d28q1a`).
-     - Hoặc nhận chuỗi `access_token` tùy chỉnh do người dùng nhập (`16..64` ký tự `[A-Za-z0-9_-]`).
+     - Luôn tự sinh chuỗi ngẫu nhiên **20 ký tự** từ bảng `0123456789abcdefghijklmnopqrstuvwxyz` bằng CSPRNG; entropy lý thuyết khoảng **103,4 bit** (ví dụ: `0bszem6ntw2bi0d28q1a`).
 2. **Quản lý Credential & Kiểm tra kết nối trên Web UI**:
-   - Người dùng có thể mở hộp thoại **Manage Credentials** để xem lại Access Token, bấm **Copy Access Token**, đổi token mới (**Rotate / Regenerate**), nhập token tùy chỉnh, hoặc thu hồi (**Revoke**).
+   - Người dùng có thể mở hộp thoại **Manage Credentials** để xem/copy Access Token, sinh token mới (**Rotate / Regenerate**), hoặc thu hồi (**Revoke**). API từ chối request chứa token tùy chỉnh.
    - Hộp thoại **Check Connectivity** sinh sẵn câu lệnh `mosquitto_pub` và đoạn code mẫu `ESP32 (Arduino PubSubClient)` đã điền sẵn `ACCESS_TOKEN`, `PROJECT_ID`, `DEVICE_ID` và topic của thiết bị.
 3. **Xác thực MQTT & Phân quyền Topic tại Broker (`mosquitto-go-auth`)**:
    - Thiết bị kết nối tới Mosquitto bằng `username = <ACCESS_TOKEN>`, `password = <ACCESS_TOKEN>`.

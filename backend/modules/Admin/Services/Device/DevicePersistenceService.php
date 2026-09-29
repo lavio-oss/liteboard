@@ -20,11 +20,11 @@ final class DevicePersistenceService
      *     status?: string
      * }  $attributes
      */
-    public function create(Project $project, array $attributes, ?string $accessToken): Device
+    public function create(Project $project, array $attributes): Device
     {
-        return DB::transaction(function () use ($project, $attributes, $accessToken): Device {
+        return DB::transaction(function () use ($project, $attributes): Device {
             $device = $project->devices()->create($attributes);
-            $this->deviceCredentialService->issueForDevice($device, $accessToken);
+            $this->deviceCredentialService->issueForDevice($device);
 
             return $device->refresh()->load('credential');
         });

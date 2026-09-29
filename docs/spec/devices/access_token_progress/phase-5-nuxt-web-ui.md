@@ -11,8 +11,8 @@
 
 Xây dựng giao diện quản lý Thiết bị (`Devices`) trên ứng dụng Nuxt 4 (`web/`), mang lại trải nghiệm trực quan như ThingsBoard:
 1. Tạo, sửa, xóa `Device` trong phạm vi `Project` và gắn với `Equipment Asset`.
-2. Cho phép nhập `Access Token` tùy chỉnh ngay khi tạo hoặc để hệ thống tự sinh.
-3. Cung cấp nút **Copy Access Token**, hộp thoại **Manage Credentials** (Xem / Đổi token tùy chỉnh / Rotate token ngẫu nhiên mới / Revoke token).
+2. Để backend tự sinh Access Token khi tạo thiết bị và khi rotate.
+3. Cung cấp nút **Copy Access Token**, hộp thoại **Manage Credentials** (Xem / Rotate token / Revoke hoặc kích hoạt lại).
 4. Cung cấp hộp thoại **Check Connectivity** hiển thị trạng thái kết nối (`online`/`offline`, `last_seen_at`) kèm câu lệnh `mosquitto_pub` và code mẫu `ESP32` điền sẵn thông tin của thiết bị.
 
 ---
@@ -83,7 +83,7 @@ export const deviceCredentialSchema = z.object({
 1. **Quản lý Access Token**:
    - Hiển thị chuỗi `access_token` (có nút ẩn/hiện và nút **Copy**).
    - Nút **Rotate token**: gọi `POST .../credentials/rotate` để sinh token 20 ký tự mới ngay lập tức.
-   - Cho phép nhập `access_token` tùy chỉnh (16–64 ký tự) và chuyển trạng thái `active` / `revoked` qua `PUT .../credentials`.
+   - Chỉ chuyển trạng thái `active` / `revoked` qua `PUT .../credentials`; không có giao diện nhập token tùy chỉnh.
 2. **Kiểm tra Kết nối kiểu ThingsBoard (MQTT Topics & Quick Test)**:
    - Hiển thị trạng thái kết nối thực tế của thiết bị (`connection_state`).
    - Hiển thị danh sách đầy đủ `mqtt_topics` (`telemetry`, `heartbeat`, `attributes`, `command`, `command_ack`) kèm nút Copy.

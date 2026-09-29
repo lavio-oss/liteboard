@@ -115,42 +115,53 @@ it('creates a device with an auto-generated access token and populates mqtt view
     ]);
 });
 
-it('creates a device with a custom access token and rejects duplicate tokens', function (): void {
+it('rejects custom access tokens when creating devices or updating credentials', function (): void {
     $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
     $tenant->users()->attach($owner, ['role' => 'owner']);
     $project = Project::factory()->for($tenant)->create();
 
-    $customToken = '0bszem6ntw2bi0d28q1a';
-
-    $createResponse = $this->actingAs($owner)->postJson(
+    $this->actingAs($owner)->postJson(
         "/api/tenants/$tenant->id/projects/$project->id/devices",
         [
             'name' => 'Custom Token Device',
             'code' => 'custom-token-01',
-            'access_token' => $customToken,
+            'access_token' => 'user_selected_token_123',
         ],
-    );
-
-    $createResponse->assertCreated();
-    $deviceId = (string) $createResponse->json('data.id');
+    )->assertUnprocessable()->assertJsonValidationErrors(['access_token']);
 
     $this->actingAs($owner)
-        ->getJson("/api/tenants/$tenant->id/projects/$project->id/devices/$deviceId/credentials")
-        ->assertOk()
-        ->assertJsonPath('data.access_token', $customToken);
-
-    $this->actingAs($owner)
-        ->postJson(
-            "/api/tenants/$tenant->id/projects/$project->id/devices",
-            [
-                'name' => 'Duplicate Token Device',
-                'code' => 'duplicate-token-02',
-                'access_token' => $customToken,
-            ],
-        )
+        ->postJson("/api/tenants/$tenant->id/projects/$project->id/devices", [
+            'name' => 'Null Token Device',
+            'code' => 'null-token-01',
+            'access_token' => null,
+        ])
         ->assertUnprocessable()
         ->assertJsonValidationErrors(['access_token']);
+
+    $this->actingAs($owner)
+        ->postJson("/api/tenants/$tenant->id/projects/$project->id/devices", [
+            'name' => 'Generated Token Device',
+            'code' => 'generated-token-01',
+        ])
+        ->assertCreated()
+        ->assertJsonMissingPath('data.access_token');
+
+    $device = Device::query()->where('code', 'generated-token-01')->firstOrFail();
+    $credential = $device->credential()->firstOrFail();
+    $originalTokenHash = $credential->token_hash;
+
+    $this->actingAs($owner)
+        ->putJson("/api/tenants/$tenant->id/projects/$project->id/devices/$device->id/credentials", [
+            'access_token' => 'custom_token_20_chars',
+            'status' => DeviceCredentialStatus::Revoked->value,
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['access_token']);
+
+    $credential->refresh();
+    expect($credential->token_hash)->toBe($originalTokenHash);
+    expect($credential->status)->toBe(DeviceCredentialStatus::Active);
 });
 
 it('validates equipment asset association and nulls reference when equipment is deleted', function (): void {
@@ -314,20 +325,15 @@ it('rotates, updates, and revokes device credentials while keeping mqtt views sy
     expect(DB::table('v_mqtt_users')->where('token_hash', $rotatedHash)->exists())->toBeFalse();
     expect(DB::table('v_mqtt_acls')->where('token_hash', $rotatedHash)->exists())->toBeFalse();
 
-    $customToken = 'new_custom_token_2026';
-    $customHash = hash('sha256', $customToken);
-
     $this->actingAs($owner)
         ->putJson("/api/tenants/$tenant->id/projects/$project->id/devices/$device->id/credentials", [
-            'access_token' => $customToken,
             'status' => DeviceCredentialStatus::Active->value,
         ])
         ->assertOk()
-        ->assertJsonPath('data.access_token', $customToken)
         ->assertJsonPath('data.status', DeviceCredentialStatus::Active->value)
         ->assertJsonPath('data.revoked_at', null);
 
-    expect(DB::table('v_mqtt_users')->where('token_hash', $customHash)->exists())->toBeTrue();
+    expect(DB::table('v_mqtt_users')->where('token_hash', $rotatedHash)->exists())->toBeTrue();
 
     $this->actingAs($owner)
         ->patchJson("/api/tenants/$tenant->id/projects/$project->id/devices/$device->id", [
@@ -336,7 +342,7 @@ it('rotates, updates, and revokes device credentials while keeping mqtt views sy
         ->assertOk()
         ->assertJsonPath('data.status', DeviceStatus::Inactive->value);
 
-    expect(DB::table('v_mqtt_users')->where('token_hash', $customHash)->exists())->toBeFalse();
+    expect(DB::table('v_mqtt_users')->where('token_hash', $rotatedHash)->exists())->toBeFalse();
 });
 
 it('isolates devices across tenants and projects and supports tenant-level filtering', function (): void {

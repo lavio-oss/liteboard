@@ -17,14 +17,14 @@ final class DeviceCredentialService
 
     private const int DEFAULT_TOKEN_LENGTH = 20;
 
-    public function generateAccessToken(int $length = self::DEFAULT_TOKEN_LENGTH): string
+    public function generateAccessToken(): string
     {
         $alphabetLength = strlen(self::TOKEN_ALPHABET);
 
         for ($attempt = 0; $attempt < 10; $attempt++) {
             $token = '';
 
-            for ($index = 0; $index < $length; $index++) {
+            for ($index = 0; $index < self::DEFAULT_TOKEN_LENGTH; $index++) {
                 $token .= self::TOKEN_ALPHABET[random_int(0, $alphabetLength - 1)];
             }
 
@@ -46,9 +46,9 @@ final class DeviceCredentialService
         return str_replace('$2y$', '$2a$', Hash::make($plainToken));
     }
 
-    public function issueForDevice(Device $device, ?string $customToken = null): DeviceCredential
+    public function issueForDevice(Device $device): DeviceCredential
     {
-        $plainToken = $customToken ?? $this->generateAccessToken();
+        $plainToken = $this->generateAccessToken();
 
         return $device->credential()->create([
             'credential_type' => DeviceCredentialType::AccessToken->value,
@@ -63,28 +63,16 @@ final class DeviceCredentialService
 
     public function updateCredential(
         Device $device,
-        ?string $customToken,
-        ?DeviceCredentialStatus $status,
+        DeviceCredentialStatus $status,
     ): DeviceCredential {
-        return DB::transaction(function () use ($device, $customToken, $status): DeviceCredential {
+        return DB::transaction(function () use ($device, $status): DeviceCredential {
             $credential = $device->credential()->firstOrFail();
             $now = CarbonImmutable::now();
 
-            if ($customToken !== null) {
-                $credential->fill([
-                    'token_hash' => $this->hashToken($customToken),
-                    'mqtt_password_hash' => $this->hashMqttPassword($customToken),
-                    'encrypted_token' => $customToken,
-                    'rotated_at' => $now,
-                ]);
-            }
-
-            if ($status !== null) {
-                $credential->fill([
-                    'status' => $status->value,
-                    'revoked_at' => $status === DeviceCredentialStatus::Revoked ? $now : null,
-                ]);
-            }
+            $credential->fill([
+                'status' => $status->value,
+                'revoked_at' => $status === DeviceCredentialStatus::Revoked ? $now : null,
+            ]);
 
             $credential->save();
 

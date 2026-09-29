@@ -158,8 +158,7 @@ export interface DeviceInput {
 }
 
 export interface DeviceCredentialInput {
-  access_token?: string | null
-  status?: DeviceCredentialStatus
+  status: DeviceCredentialStatus
 }
 
 export interface ProjectUserInput {

@@ -21,11 +21,9 @@ final class UpdateDeviceCredentialAction
         DeviceCredentialService $deviceCredentialService,
         Responder $responder,
     ): Response {
-        $credentialInput = $request->credentialInput();
         $credential = $deviceCredentialService->updateCredential(
             $device,
-            $credentialInput['access_token'],
-            $credentialInput['status'],
+            $request->credentialStatus(),
         );
         $credential->setRelation('device', $device);
 

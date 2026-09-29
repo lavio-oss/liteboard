@@ -9,7 +9,7 @@
 
 ## 1. Mục tiêu của Phase 2
 
-Xây dựng đầy đủ SubModule `Device` trong `backend/modules/Admin/` theo kiến trúc **Action-Domain-Responder (ADR)**, cung cấp REST API quản lý vòng đời thiết bị, liên kết với Equipment Asset, và quản lý Access Token (xem, copy, nhập token tùy chỉnh, rotate, revoke).
+Xây dựng đầy đủ SubModule `Device` trong `backend/modules/Admin/` theo kiến trúc **Action-Domain-Responder (ADR)**, cung cấp REST API quản lý vòng đời thiết bị, liên kết với Equipment Asset, và quản lý Access Token (xem, copy, rotate, revoke). Access Token chỉ do hệ thống sinh; request không được phép cung cấp token.
 
 ---
 
@@ -98,22 +98,20 @@ POST   /api/tenants/{tenant}/projects/{project}/devices/{device}/credentials/rot
     "code": "kiln-sensor-01",
     "description": "ESP32 sensor node",
     "equipment_asset_id": "019c0000-0000-7000-8000-000000000010",
-    "status": "active",
-    "access_token": "0bszem6ntw2bi0d28q1a"
+    "status": "active"
   }
   ```
   - `equipment_asset_id`: `nullable`, `uuid`, phải thuộc cùng `{project}` và có `asset_type = 'equipment'`.
-  - `access_token`: `sometimes`, `nullable`, `string`, `min:16`, `max:64`, `regex:/^[A-Za-z0-9_-]+$/`. Nếu không gửi hoặc gửi `null`, `DeviceCredentialService` tự sinh chuỗi 20 ký tự `[a-z0-9]`. Kiểm tra không trùng `token_hash` trong `withValidator()`.
+  - `access_token` không thuộc request contract; nếu có mặt trong request, kể cả giá trị `null`, API trả `422`.
   - `tenant_id`, `project_id`: `prohibited`.
 
 - **`PUT /api/tenants/{tenant}/projects/{project}/devices/{device}/credentials` (`UpdateDeviceCredentialRequest`)**:
   ```json
   {
-    "access_token": "custom_token_20_chars",
     "status": "active"
   }
   ```
-  - Cho phép cập nhật `access_token` tùy chỉnh và/hoặc đổi `status` (`active` | `revoked`).
+  - Chỉ cập nhật `status` (`active` | `revoked`); request phải từ chối trường `access_token` nếu được gửi.
 
 - **`POST /api/tenants/{tenant}/projects/{project}/devices/{device}/credentials/rotate` (`RotateDeviceCredentialRequest`)**:
   - Body rỗng; hệ thống tự động sinh một `access_token` 20 ký tự mới, cập nhật `token_hash`, `mqtt_password_hash`, `encrypted_token`, `rotated_at = CarbonImmutable::now()`, `status = 'active'`, `revoked_at = null`.
@@ -171,6 +169,7 @@ POST   /api/tenants/{tenant}/projects/{project}/devices/{device}/credentials/rot
 
 - **Sinh Token ngẫu nhiên**:
   - Bảng ký tự: `0123456789abcdefghijklmnopqrstuvwxyz` (36 ký tự, độ dài 20 → $36^{20}$ tổ hợp).
+  - Chọn độc lập từng ký tự bằng `random_int`, bộ sinh ngẫu nhiên an toàn bằng CSPRNG. Entropy lý thuyết của token là `20 × log₂(36) ≈ 103,4 bit`.
   - Kiểm tra không trùng `token_hash` trong bảng `device_credentials`.
 - **Tạo bộ băm & mã hóa**:
   - `token_hash`: `hash('sha256', $plainToken)`
@@ -182,7 +181,7 @@ POST   /api/tenants/{tenant}/projects/{project}/devices/{device}/credentials/rot
 ## 6. Checklist Nghiệm thu Phase 2
 
 - [x] Viết đầy đủ Feature Tests trong `backend/tests/Feature/DeviceAuthorizationAndCredentialTest.php`:
-  - [x] Tạo Device tự sinh Access Token 20 ký tự và tạo Device với Access Token tùy chỉnh.
+  - [x] Tạo Device luôn tự sinh Access Token 20 ký tự; request có trường `access_token` bị từ chối ở API tạo và cập nhật credential.
   - [x] Gắn Device với Asset loại `equipment` thành công; từ chối (`422`) nếu Asset thuộc Project khác hoặc không phải `equipment`.
   - [x] Kiểm tra role matrix: `admin`/`engineer` xem và rotate/revoke được Access Token; `operator`/`viewer` chỉ xem được Device nhưng bị chặn (`403`) khi truy cập `/credentials`.
   - [x] Kiểm tra cross-tenant và cross-project trả về `404`.
