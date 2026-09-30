@@ -1,124 +1,197 @@
-# Phase 6: MQTT TLS, MQTT Basic Credentials, Ràng buộc `clientId` & Device Provisioning Bootstrap
+# Phase 6: Device Provisioning qua HTTPS bằng Access Token
 
-> Thuộc kế hoạch tương lai: [future_device_security_and_ingestion_plan.md](../future_device_security_and_ingestion_plan.md)  
-> Tầng kiến trúc: **Database + Laravel Control Plane + Mosquitto/EMQX ACL + Edge Firmware**  
-> Phụ thuộc: Hoàn thành Phase 1 → Phase 5  
-> Trạng thái: Cấu hình broker, client TLS server-auth và kiểm tra cục bộ đã hoàn tất; nghiệm thu broker end-to-end còn chờ Docker Engine. MQTT Basic, bind `clientId` và provisioning vẫn là kế hoạch.
+> Mục tiêu: thiết bị mới tự đăng ký vào đúng Project khi khởi động lần đầu và nhận Access Token để kết nối MQTT.
+> Tham chiếu: mô hình provisioning của ThingsBoard; contract và tenant boundary được điều chỉnh cho LiteBoard.
+> Phạm vi lượt đầu: HTTP/HTTPS bootstrap, tạo Device và cấp Access Token hiện có. MQTT Basic, strict clientId binding và X.509 không thuộc tiêu chí hoàn thành.
+> Phụ thuộc: Laravel Control Plane, PostgreSQL, Mosquitto, simulator và ESP32 firmware.
+> Roadmap: [future_device_security_and_ingestion_plan.md](../future_device_security_and_ingestion_plan.md)
 
----
+## 1. Mục tiêu và tham chiếu ThingsBoard
 
-## 1. Mục tiêu của Phase 6
+Phase này giải quyết bước onboarding đang thiếu: hiện quản trị viên phải tạo Device trước, sau đó cấu hình token vào firmware. Sau Phase 6, một thiết bị chưa đăng ký có thể gửi thông tin enrollment qua HTTPS; Control Plane xác thực profile, tạo Device trong Project đã được gán và trả credential.
 
-Giải quyết các bài toán bảo vệ đường truyền, định danh và cấp phát thiết bị ở quy mô lớn:
-1. **MQTT Basic Credential Mode riêng (`mqtt_basic`)**: Hỗ trợ các thiết bị PLC / Gateway công nghiệp yêu cầu cấu hình `Client ID`, `Username` và `Password` riêng biệt.
-2. **Bind `clientId` ↔ `device`**: Khóa chặt `MQTT Client ID` với bản ghi `Device` để ngăn chặn giả mạo phiên kết nối hoặc hai thiết bị dùng chung `clientId` gây rớt mạng liên tục.
-3. **Device Provisioning Bootstrap**: Cho phép thiết bị mới xuất xưởng tự động đăng ký (Zero-Touch Provisioning) vào đúng `Project` mà không cần nạp tay từng `Access Token` khi flash firmware.
-4. **Bắt buộc MQTT qua TLS**: Mọi client kết nối broker qua listener TLS `8883`; broker không mở listener plaintext `1883` hoặc WebSocket `9001`.
+ThingsBoard dùng Device Profile có provisioning key và secret. Thiết bị gọi HTTP provisioning endpoint; khi request hợp lệ mà chưa có credential được cấp sẵn, nền tảng tạo Device và trả Access Token. HTTP provisioning của ThingsBoard hỗ trợ Access Token; MQTT Basic và X.509 provisioning dùng MQTT transport riêng. Tham khảo [ThingsBoard HTTP Provisioning](https://thingsboard.io/docs/reference/http-api/provisioning/) và [ThingsBoard MQTT Provisioning](https://thingsboard.io/docs/reference/mqtt-api/provisioning/).
 
----
+LiteBoard áp dụng cùng vòng đời nhưng profile thuộc Project vì Device được quản lý theo Project. V1 chỉ cấp Access Token để tái sử dụng credential, broker auth và ACL đang có.
 
-## 2. Thiết kế Kỹ thuật Chi tiết
+## 2. Hiện trạng LiteBoard
 
-### 2.1. MQTT Basic Credential Mode riêng (`credential_type = 'mqtt_basic'`)
+Đối chiếu mã nguồn hiện tại:
 
-#### Mở rộng Schema bảng `device_credentials`
-Bổ sung migration thêm các cột cho chế độ `mqtt_basic`:
-```text
-device_credentials (bổ sung)
-  credential_type   varchar(32) -- 'access_token' | 'mqtt_basic' | 'x509'
-  mqtt_client_id    varchar(128) NULLABLE UNIQUE
-  mqtt_username     varchar(128) NULLABLE UNIQUE
-  token_hash        char(64) NULLABLE UNIQUE  -- NULL nếu chỉ dùng mqtt_basic không có access_token
-```
+- Khi quản trị viên tạo Device, Create Device gọi DevicePersistenceService; service tạo Device và gọi DeviceCredentialService để tự sinh Access Token trong cùng transaction.
+- Mỗi Device có một row credential. Token được lưu dưới dạng SHA-256 hash để tra cứu và ciphertext để người có quyền xem credential.
+- MQTT hiện yêu cầu username bằng Access Token và password cũng bằng Access Token. mosquitto-go-auth tra credential bằng username rồi so khớp password hash.
+- PostgreSQL views chỉ cấp quyền khi Device, Project và Tenant active; topic ACL được dựng theo Device.
+- Simulator và ESP32 hiện phải được cấu hình token đã cấp. Chưa có provisioning profile hoặc bootstrap endpoint.
+- TLS listener 8883 đã được cấu hình trong repository. Lần đối chiếu ngày 2026-10-01 chưa xác nhận broker runtime vì Docker Engine không khả dụng và cổng 8883 không mở.
 
-#### Cập nhật View `v_mqtt_users`
-Hỗ trợ tra cứu đồng thời cả thiết bị dùng `access_token` và thiết bị dùng `mqtt_basic`:
-- Khi `credential_type = 'access_token'`: định danh đăng nhập (`login_key`) là `token_hash`.
-- Khi `credential_type = 'mqtt_basic'`: định danh đăng nhập là ` encode(sha256(convert_to(mqtt_username, 'UTF8')), 'hex')`.
+Các điểm kiểm tra chính: infrastructure/mosquitto/mosquitto.conf, infrastructure/mosquitto/acls, backend/modules/Admin/Services/Device/DevicePersistenceService.php, backend/modules/Admin/Services/Device/DeviceCredentialService.php, backend/database/migrations/2026_09_27_000002_create_device_credentials_table.php, backend/database/migrations/2026_09_27_000003_create_mqtt_views.php, simulator/app/main.py và simulator/Esp32/Base/Base.ino.
 
----
+## 3. Phạm vi Phase 6
 
-### 2.2. Bind `clientId` ↔ `device`
+### Trong phạm vi
 
-#### Vấn đề
-Trong MQTT chuẩn, nếu thiết bị A biết hoặc dùng lại thông tin đăng nhập và đặt `clientId` trùng với thiết bị B đang online, Broker sẽ ngắt kết nối của thiết bị B ngay lập tức (Session Takeover).
+1. Profile provisioning do người có quyền quản lý Device của Project tạo, bật/tắt và rotate secret.
+2. Public HTTPS bootstrap xác thực profile, tạo Device, phát Access Token và trả thông tin MQTT.
+3. Claim chống tạo trùng, retry idempotent, giới hạn số Device theo Project và rate limit.
+4. Simulator và ESP32 mẫu bootstrap một lần, lưu Access Token an toàn rồi kết nối broker bằng TLS.
+5. Test tenant/project isolation, concurrency, retry, credential và broker runtime.
 
-#### Giải pháp
-1. **Quy định `expected_client_id` trên mỗi Device**:
-   - Nếu `mqtt_client_id` được khai báo tường minh: bắt buộc `clientId == mqtt_client_id`.
-   - Nếu dùng `access_token`: khuyến nghị `clientId == device.id` (hoặc `device.code`).
-2. **Kiểm tra tại tầng Broker**:
-   - Với **Mosquitto (`mosquitto-go-auth`)**: Trong `auth_opt_pg_aclquery`, ngoài `$1` (`username`) và `$2` (`rw`), có thể truyền `$c` (`clientid`) hoặc nhúng `%c` trong topic pattern nếu cấu hình theo `clientid`:
-     ```sql
-     SELECT topic
-     FROM v_mqtt_acls
-     WHERE login_hash = encode(sha256(convert_to($1, 'UTF8')), 'hex')
-       AND (expected_client_id IS NULL OR expected_client_id = $3)
-       AND rw = $2
-     ```
-   - Với **EMQX Profile**: EMQX hỗ trợ biến `${clientid}` và `${username}` trực tiếp trong câu lệnh SQL Auth (`WHERE login_hash = sha256(${username}) AND (expected_client_id IS NULL OR expected_client_id = ${clientid})`), từ chối ngay từ bước `CONNECT` nếu `clientId` không khớp!
+### Ngoài phạm vi lượt đầu
 
----
+- MQTT Basic username/password và MQTT provisioning transport.
+- Lưu hoặc ràng buộc clientId với Device; strict binding tại CONNECT.
+- Thay Mosquitto hoặc thêm auth adapter mới.
+- X.509/mTLS, thuộc Phase 7.
+- Thay đổi telemetry ingestion hoặc chuyển xác thực publisher vào telemetry-service.
+- Giới hạn số phiên MQTT đồng thời. Đây là policy riêng; provisioning không làm tăng năng lực kết nối của broker.
 
-### 2.3. Device Provisioning Bootstrap (Zero-Touch Provisioning)
+Access Token tiếp tục là credential mặc định. Không thêm lựa chọn credential_type trong profile V1; mọi thiết bị provisioned sử dụng mode đã vận hành hiện tại.
 
-#### Luồng hoạt động
-```mermaid
-sequenceDiagram
-    autonumber
-    participant ESP as Thiết bị mới (Firmware chung)
-    participant CP as Laravel Control Plane
-    participant DB as PostgreSQL
+## 4. Contract provisioning
 
-    Note over ESP: Nạp sẵn trong Firmware:<br/>PROVISION_KEY + PROVISION_SECRET<br/>(của Project) + Hardware MAC
-    ESP->>CP: POST /api/device-provisioning/bootstrap<br/>{provision_key, provision_secret, hardware_uid, device_name}
-    CP->>DB: Kiểm tra Project Provisioning Profile (active, chưa vượt quota)
-    CP->>DB: Tìm hoặc Tạo mới Device (code = hardware_uid) + DeviceCredential
-    CP-->>ESP: 201 Created: {project_id, device_id, client_id, access_token, mqtt_topics}
-    Note over ESP: Lưu {device_id, access_token} vào NVS/EEPROM<br/>và kết nối MQTT như thiết bị chuẩn
-```
+### 4.1. Profile theo Project
 
-#### Thiết kế Bảng `project_provisioning_profiles`
-```text
-project_provisioning_profiles
-  id                        uuid PRIMARY KEY
-  project_id                uuid NOT NULL UNIQUE FK -> projects.id
-  enabled                   boolean NOT NULL DEFAULT false
-  provision_key             varchar(64) NOT NULL UNIQUE
-  provision_secret_hash     varchar(255) NOT NULL
-  encrypted_provision_secret text NOT NULL
-  max_provisioned_devices   integer NOT NULL DEFAULT 100
-  provisioned_count         integer NOT NULL DEFAULT 0
-  created_at                timestamptz
-  updated_at                timestamptz
-```
+Đề xuất V1 chỉ có một profile active cho mỗi Project; có thể mở rộng nhiều profile sau này nếu cần các dòng firmware hoặc quy trình enrollment khác nhau.
 
-#### Bảo mật cho Provisioning Endpoint
-- Endpoint `POST /api/device-provisioning/bootstrap` áp dụng rate limit nghiêm ngặt theo IP và `provision_key` (ví dụ: tối đa 10 lần/phút).
-- Nếu `hardware_uid` đã từng được provision trước đó:
-  - Mặc định trả về `409 Conflict` (`DEVICE_ALREADY_PROVISIONED`) để chống kẻ tấn công đoán `hardware_uid` (MAC address) nhằm lấy lại `access_token` của thiết bị đang chạy!
-  - Muốn cấp lại (Re-provision), Admin phải bấm **Allow Re-claim** hoặc xóa/reset thiết bị trên Web UI.
+    project_provisioning_profiles
+      id                       uuid PRIMARY KEY
+      project_id               uuid NOT NULL UNIQUE FK -> projects.id
+      enabled                  boolean NOT NULL DEFAULT false
+      provision_key            varchar(64) NOT NULL UNIQUE
+      provision_secret_hash    varchar(255) NOT NULL
+      secret_rotated_at        timestamptz NULL
+      created_at / updated_at
 
-### 2.4. Bảo vệ đường truyền MQTT bằng TLS server-auth
-- Mọi client kết nối broker qua TLS 1.2 trở lên trên cổng `8883`, xác minh CA và hostname/SAN của broker.
-- Mosquitto giữ server certificate/private key; client chỉ nhận CA certificate công khai. Phase này không bật mTLS nên MQTT username/password và ACL hiện có vẫn được giữ.
-- Broker không có listener plaintext `1883` hoặc WebSocket `9001`. PLC cần hỗ trợ MQTT TLS hoặc dùng gateway chuyển đổi giao thức và publish tới `8883` qua TLS.
-- Chứng chỉ development được tạo bởi `infrastructure/mosquitto/generate-dev-certs.ps1`. Production dùng chứng chỉ hợp lệ với hostname broker; private key không đặt trong Git hoặc firmware.
-- Endpoint bootstrap chỉ được đưa vào vận hành khi dùng HTTPS trước khi gửi `provision_secret` hoặc nhận access token. MQTT TLS không mã hóa HTTP request.
+- provision_key là ID để tìm profile, không phải secret.
+- provision_secret được sinh bởi Control Plane. Chỉ lưu hash để xác minh; UI chỉ hiển thị secret khi tạo hoặc rotate.
+- Tắt profile chặn các bootstrap request mới nhưng không revoke Access Token đã cấp.
+- Profile thuộc Project; Tenant xác định từ quan hệ Project, không nhập từ bootstrap request.
 
----
+Profile management API/UI yêu cầu Sanctum, tenant context, route binding và policy tương ứng. V1 không cần lưu credential_type hoặc bản mã hóa của provision_secret.
 
-## 3. Checklist Nghiệm thu Phase 6
+### 4.2. Bootstrap endpoint
 
-- [x] Development CA/server certificate sinh được; SAN hợp lệ và OpenSSL từ chối hostname hoặc CA không tin cậy.
-- [x] Cấu hình Mosquitto chỉ có listener TLS `8883`; Compose chỉ publish `8883` và không khai báo listener/port mapping `1883` hoặc `9001`.
-- [x] `telemetry-service` và simulator có TLS context bắt buộc CA tin cậy, hostname hợp lệ và TLS 1.2 trở lên; test đạt 3/3 cho mỗi service.
-- [x] Mẫu ESP32 dùng `WiFiClientSecure`, CA công khai và cổng `8883`; chưa biên dịch/chạy trên board thật.
-- [ ] End-to-end: broker chỉ nhận TLS `8883`; kết nối `1883`/`9001` thất bại.
-- [ ] End-to-end: `telemetry-service`, simulator, healthcheck và ESP32 kết nối TLS, giữ nguyên Access Token/ACL.
-- [ ] Có thể chọn loại credential `Access Token` hoặc `MQTT Basic` (`Client ID` + `Username` + `Password`) trên Web UI và API.
-- [ ] Thiết bị kết nối sai `clientId` đã gắn với Device bị từ chối quyền truy cập.
-- [ ] Thiết bị mới gọi `POST /api/device-provisioning/bootstrap` với `provision_key` và `provision_secret` hợp lệ sẽ tự động tạo bản ghi `Device` trong Project và nhận về `access_token` một lần duy nhất.
-- [ ] Gọi lại API provisioning lần thứ 2 cho cùng `hardware_uid` bị từ chối (`409 Conflict`) để bảo vệ thiết bị đang hoạt động.
+Đề xuất endpoint HTTPS:
 
-> Giới hạn nghiệm thu hiện tại: `docker compose config --quiet` và kiểm tra chứng chỉ cục bộ đã qua, nhưng chưa chạy broker/client trong Docker vì Docker Engine từ chối truy cập qua named pipe. Do đó chưa xác nhận kết nối TLS/ACL thực tế hoặc việc `1883`/`9001` bị từ chối ở runtime.
+    POST /api/device-provisioning/bootstrap
+
+Request:
+
+    {
+      "provision_key": "<profile-key>",
+      "provision_secret": "<profile-secret>",
+      "device_name": "Pump room sensor 01",
+      "device_code": "FACTORY-SERIAL-001",
+      "request_id": "<stable-uuid-for-this-enrollment>",
+      "firmware_version": "1.0.0"
+    }
+
+- device_code là mã ổn định của thiết bị do nhà sản xuất cấp; dùng ràng buộc unique hiện có của Device theo Project để phát hiện claim trùng. Nếu cần phân biệt mã hiển thị với hardware UID trong tương lai, bổ sung hardware_uid bằng migration riêng.
+- hardware serial/device_code chỉ dùng nhận diện và chống tạo trùng, không phải bằng chứng xác thực. MAC có thể bị giả mạo.
+- Không nhận tenant_id, project_id, access_token, token hash hoặc password trong request.
+- Có thể bổ sung device_type hoặc firmware metadata sau khi chốt data contract; không đưa các giá trị không được xác minh thẳng vào quyền hoặc tenant scope.
+
+Response thành công:
+
+    {
+      "status": "success",
+      "credential_type": "access_token",
+      "device": {
+        "id": "<device-uuid>",
+        "project_id": "<project-uuid>",
+        "name": "Pump room sensor 01",
+        "code": "FACTORY-SERIAL-001"
+      },
+      "credentials": {
+        "access_token": "<generated-token>"
+      },
+      "mqtt": {
+        "host": "<public-broker-host>",
+        "port": 8883,
+        "tls": true,
+        "topics": {
+          "telemetry": "liteboard/<project-id>/devices/<device-id>/telemetry",
+          "heartbeat": "liteboard/<project-id>/devices/<device-id>/heartbeat",
+          "commands": "liteboard/<project-id>/devices/<device-id>/commands",
+          "commands_ack": "liteboard/<project-id>/devices/<device-id>/commands/ack"
+        }
+      }
+    }
+
+Firmware dùng access_token làm cả MQTT username và password theo contract LiteBoard hiện tại. Không đổi contract broker sang ThingsBoard wire format trong Phase 6; ThingsBoard gửi Access Token ở username và để password trống.
+
+### 4.3. Profile secret và enrollment trust
+
+V1 theo mô hình ThingsBoard: provision_key/provision_secret được phân phối cho firmware hoặc lô thiết bị thuộc Project. Secret dùng để cho phép enrollment, không dùng cho MQTT sau khi cấp Access Token.
+
+Vì secret dùng chung có phạm vi ảnh hưởng toàn profile nếu bị trích xuất:
+
+- Chỉ phân phối profile secret qua quy trình firmware/manufacturing được kiểm soát; không nhúng một secret chung cho mọi Project vào firmware công khai.
+- Hỗ trợ disable/rotate profile secret, rate limit theo IP và profile, áp dụng quota Project, audit thao tác quản trị.
+- Không ghi provision_secret, Access Token hoặc credential response vào log.
+- Với production cần mức bảo đảm cao hơn, thiết kế per-device one-time claim code hoặc certificate enrollment ở phase riêng. Không coi device_code/MAC là secret.
+
+## 5. Luồng xử lý
+
+1. Thiết bị lần đầu xác minh CA và hostname/SAN của HTTPS endpoint rồi gửi bootstrap request.
+2. Control Plane tra profile bằng provision_key, xác minh provision_secret_hash, profile enabled, Project và Tenant active.
+3. Control Plane khởi tạo đúng tenant context từ Project; không dùng project_id hoặc tenant_id do thiết bị gửi.
+4. Kiểm tra quota và device_code. Request hợp lệ với Device chưa tồn tại tạo Device và credential Access Token; dùng DevicePersistenceService/DeviceCredentialService hiện có hoặc một domain operation chung để tránh tạo đường cấp token thứ hai.
+5. Ghi Device, credential và provisioning receipt trong transaction. Unique constraint trên Project + device_code và profile + request_id là lớp bảo vệ cuối cho request đồng thời.
+6. Trả Device ID, Access Token, broker endpoint và topic đã dựng từ dữ liệu server.
+7. Firmware lưu credential vào secure storage/NVS, sau đó kết nối MQTT TLS 8883. Các lần reboot sau dùng credential đã lưu, không gửi lại profile secret.
+8. Broker tiếp tục xác thực token và áp dụng per-Device ACL; telemetry-service vẫn là internal subscriber, không xác thực publisher thay broker.
+
+Không mở MQTT plaintext 1883 hoặc WebSocket 9001. Bootstrap phải chạy qua HTTPS với kiểm tra CA/hostname; TLS của broker không bảo vệ request HTTP.
+
+## 6. Idempotency, claim và quota
+
+- Thiết bị giữ nguyên request_id cho đến khi nhận được kết quả bootstrap thành công; request retry phải giữ nguyên profile và device_code.
+- Cùng profile + request_id + device_code trong cửa sổ retry trả lại cùng Device và cùng Access Token nếu credential vẫn active, chưa rotate.
+- Cùng request_id nhưng payload/profile khác trả 409 IDEMPOTENCY_KEY_REUSED.
+- device_code đã tồn tại trong Project nhưng thuộc một request khác trả 409 DEVICE_ALREADY_PROVISIONED; không trả lại credential hiện có. Re-claim chỉ qua thao tác admin có audit và rotate credential.
+- Lưu provisioning receipt liên kết profile, request_id, device_code, Device ID, hash token lúc cấp và thời điểm hết hạn. Khi retry, chỉ giải mã encrypted_token hiện có nếu hash vẫn khớp snapshot và credential active; nếu token đã rotate/revoke, trả lỗi xác định, không tiết lộ token cũ.
+- Quota phải áp dụng chung cho tạo Device qua UI/API và bootstrap. Repository migrations hiện chưa khai báo projects.max_devices_quota; trước rollout, kiểm tra active schema bằng lệnh db:table và phối hợp với Phase 8 để có một quota source of truth. Không duy trì provisioned_count thứ hai trong profile nếu nó có thể lệch với số Device thực tế.
+- Quota check và claim/create phải an toàn khi nhiều request cùng lúc; dùng transaction/locking cùng các unique constraint trong database, không chỉ dựa vào validation trước khi insert.
+
+## 7. Tenant isolation và quyền
+
+- Device, credential và provisioning profile là tenant-owned data thông qua Project.
+- Admin tạo/đổi profile trong Project mình có quyền quản lý; mọi API management dùng policy và tenant context hiện có.
+- Public bootstrap không cần user session, nhưng chỉ có thể resolve đúng một Project qua profile key và secret hợp lệ.
+- Query và transaction bootstrap phải chạy với organization context đúng theo integration multi-tenancy hiện có.
+- Project hoặc Tenant inactive, profile disabled, secret sai/hết hạn, quota cạn hoặc credential revoke đều chặn enrollment/connection theo đúng boundary.
+- Test profile của Project A không thể tạo Device trong Project/Tenant B; body không thể override Project ID.
+
+## 8. Rollout và hạng mục thực hiện
+
+1. **Chốt contract và prerequisites:** Access Token-only; profile theo Project; device_code là serial ổn định; xác định Project quota dùng chung với UI/API.
+2. **Schema forward-only:** thêm provisioning profile, provisioning receipt và các unique constraint cần thiết. Không sửa migration đã chạy, không khai báo down().
+3. **Admin profile management:** tạo, xem trạng thái/quota, disable và rotate secret; authorize theo Project.
+4. **HTTPS bootstrap:** validation, secret verification, tenant context, quota, idempotency, atomic Device + Access Token creation và response contract.
+5. **Clients:** simulator và ESP32 xác minh HTTPS certificate, bootstrap lần đầu, lưu Access Token, tái sử dụng sau reboot, kết nối MQTT TLS 8883 theo contract hiện có.
+6. **Runtime rollout:** chạy broker bằng image/version được pin; xác minh bootstrap + MQTT connect/publish thực tế qua CA/SAN production-equivalent.
+7. **Hạng mục tách riêng:** MQTT Basic/strict clientId binding chỉ bắt đầu khi có yêu cầu; PostgreSQL backend hiện tại của mosquitto-go-auth không cung cấp $3 cho clientId trong ACL SQL query. Phải có proof-of-concept từ chối clientId sai ngay tại CONNECT trước khi cam kết binding.
+
+## 9. Tiêu chí nghiệm thu
+
+- [ ] Device mới chưa tồn tại có thể bootstrap qua HTTPS bằng profile key/secret hợp lệ.
+- [ ] Backend tạo đúng một Device trong Project của profile và cấp một Access Token theo DeviceCredentialService hiện có.
+- [ ] Thiết bị nhận endpoint/topic cần thiết, lưu token bền vững và MQTT TLS 8883 kết nối bằng username=password=Access Token.
+- [ ] Device đã tạo vẫn hoạt động qua luồng Access Token hiện tại; provisioning không đổi contract của client cũ.
+- [ ] Sai secret, profile disabled, Project/Tenant inactive và quota cạn đều bị từ chối; không tạo Device dở dang.
+- [ ] Request đồng thời cho cùng request_id/device_code không tạo trùng Device hoặc vượt quota.
+- [ ] Retry cùng request trả cùng kết quả khi credential vẫn active; replay sau rotate/revoke không tiết lộ credential.
+- [ ] Bootstrap không thể chọn Project/Tenant qua body; cross-Project và cross-Tenant đều bị chặn.
+- [ ] Provision secret và Access Token không xuất hiện trong log; secret chỉ hiển thị khi tạo/rotate; rate limit hoạt động.
+- [ ] MQTT anonymous, token sai, TLS CA/hostname sai và broker plaintext 1883/9001 đều thất bại.
+- [ ] Runtime broker thật được kiểm thử bằng artifact đã pin; docker compose config hoặc unit tests đơn lẻ chưa đủ để đánh dấu Phase 6 hoàn tất.
+
+## 10. Ngoài phạm vi và ghi chú hiện trạng
+
+- MQTT Basic và ThingsBoard MQTT provisioning được tách thành phase sau. Nếu cần hỗ trợ đúng mô hình đó, provisioning dùng MQTT transport và Basic credential sẽ được định nghĩa riêng; HTTP bootstrap Phase 6 chỉ trả Access Token.
+- Strict clientId binding chưa phải acceptance của Phase 6. Client ID hiện không thống nhất giữa Python simulator và ESP32, chưa lưu trong DB, và Access Token hiện không gắn với Client ID ở broker.
+- TLS listener 8883 có cấu hình nhưng runtime chưa được xác nhận ở lần đối chiếu ngày 2026-10-01.
+- mosquitto-go-auth hiện được cấu hình với tag latest chưa pin; pin artifact là điều kiện rollout broker, nhưng không cần đổi auth plugin chỉ để triển khai Access Token bootstrap.
+- ACL nội bộ hiện cấp telemetry-service readwrite trên liteboard/# dù service chỉ cần subscribe/read. Nên theo dõi như hạng mục broker hardening riêng, không trộn với contract provisioning.

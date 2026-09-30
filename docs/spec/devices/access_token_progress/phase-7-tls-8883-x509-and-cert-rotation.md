@@ -9,7 +9,9 @@
 
 ## 1. Mục tiêu
 
-Phase 6 đã tích hợp cấu hình broker và client TLS server-auth trên `8883`; kiểm tra cấu hình/chứng chỉ cục bộ đã qua, còn nghiệm thu broker end-to-end đang chờ Docker Engine. Phase 7 bổ sung xác thực thiết bị bằng chứng chỉ client và quy trình xoay vòng chứng chỉ, trong khi thiết bị Access Token/MQTT Basic tiếp tục dùng TLS server-auth.
+Phase 6 đã tích hợp TLS server-auth trên `8883`. ESP32 đã kết nối broker và gửi telemetry qua TLS; subscriber nội bộ nhận được message trên đúng topic. Cấu hình hiện chỉ mở listener `8883`, chưa có listener mTLS. Phase 7 vẫn là kế hoạch tương lai, bổ sung xác thực thiết bị bằng client certificate và quy trình xoay vòng chứng chỉ, trong khi thiết bị Access Token/MQTT Basic tiếp tục dùng TLS server-auth.
+
+Trong lần rà soát này (2026-10-01), Docker Engine không chạy nên không thể lặp lại kiểm tra runtime. Checklist bên dưới ghi nhận trạng thái đã xác minh gần nhất cùng cấu hình hiện tại.
 
 ## 2. Thiết kế dự kiến
 
@@ -36,4 +38,4 @@ Phase 6 đã tích hợp cấu hình broker và client TLS server-auth trên `88
 - [ ] Broker từ chối client thiếu hoặc dùng client certificate không tin cậy trên listener mTLS.
 - [ ] Quyền truy cập X.509 được ràng buộc đúng Device; chứng chỉ bị revoke không kết nối được.
 - [ ] Thiết bị chuyển từ chứng chỉ cũ sang mới trong grace window; chứng chỉ cũ bị revoke đúng hạn.
-- [ ] Listener Access Token vẫn xác minh server certificate qua TLS; không có MQTT plaintext listener.
+- [x] Baseline Access Token xác minh server certificate qua TLS; cấu hình broker/Compose không mở MQTT plaintext listener (`1883`/`9001`). ESP32 đã kết nối `8883` qua TLS và message đã được broker chuyển tiếp.
