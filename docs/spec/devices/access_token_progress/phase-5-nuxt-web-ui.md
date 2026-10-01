@@ -29,9 +29,8 @@ export const deviceCredentialStatusSchema = z.enum(['active', 'revoked'])
 
 export const deviceMqttTopicsSchema = z.object({
   telemetry: z.string(),
-  attributes: z.string(),
-  command: z.string(),
-  command_ack: z.string(),
+  commands: z.string(),
+  commands_ack: z.string(),
   heartbeat: z.string()
 })
 
@@ -64,7 +63,7 @@ export const deviceCredentialSchema = z.object({
 
 ## 3. Thiết kế Màn hình & Components
 
-### 3.1. Bảng Danh sách Thiết bị (`web/app/pages/devices.vue` & `web/app/pages/admin/devices.vue`)
+### 3.1. Bảng Danh sách Thiết bị (`web/app/pages/devices.vue`)
 - **Bộ lọc (Filters)**:
   - Chọn `Project` (bắt buộc hoặc tất cả Project trong Tenant).
   - Lọc theo `status` (`active` / `inactive`) và `connection_state` (`online` / `offline` / `unstable`).
@@ -86,7 +85,7 @@ export const deviceCredentialSchema = z.object({
    - Chỉ chuyển trạng thái `active` / `revoked` qua `PUT .../credentials`; không có giao diện nhập token tùy chỉnh.
 2. **Kiểm tra Kết nối kiểu ThingsBoard (MQTT Topics & Quick Test)**:
    - Hiển thị trạng thái kết nối thực tế của thiết bị (`connection_state`).
-   - Hiển thị danh sách đầy đủ `mqtt_topics` (`telemetry`, `heartbeat`, `attributes`, `command`, `command_ack`) kèm nút Copy.
+   - Hiển thị danh sách `mqtt_topics` (`telemetry`, `heartbeat`, `commands`, `commands_ack`) kèm nút Copy.
    - Hiển thị đoạn lệnh **Mosquitto CLI (`mosquitto_pub`)** đã điền sẵn `access_token` và topic `mqtt_topics.telemetry` của thiết bị.
    - Hiển thị đoạn code mẫu **ESP32 (Arduino `PubSubClient`)** đã điền sẵn `LB_PROJECT_ID`, `LB_DEVICE_ID`, `LB_ACCESS_TOKEN`, `LB_TELEMETRY_TOPIC`.
 
@@ -99,8 +98,7 @@ export const deviceCredentialSchema = z.object({
 3. **[MODIFY]** [web/app/components/admin/AdminResourceFormModal.vue](../../../../web/app/components/admin/AdminResourceFormModal.vue)
 4. **[NEW]** [web/app/components/admin/DeviceCredentialsModal.vue](../../../../web/app/components/admin/DeviceCredentialsModal.vue)
 5. **[MODIFY]** [web/app/pages/devices.vue](../../../../web/app/pages/devices.vue)
-6. **[NEW]** [web/app/pages/admin/devices.vue](../../../../web/app/pages/admin/devices.vue)
-7. **[MODIFY]** [web/app/layouts/default.vue](../../../../web/app/layouts/default.vue)
+6. **[MODIFY]** [web/app/layouts/default.vue](../../../../web/app/layouts/default.vue)
 
 ---
 

@@ -5,6 +5,9 @@ const open = ref(false)
 const { isAdminWorkspace } = useWorkspaceContext()
 
 const adminLinks = [{
+  label: 'Dashboard',
+  type: 'label' as const
+}, {
   label: 'Home',
   icon: 'i-lucide-house',
   to: '/admin'
@@ -12,6 +15,9 @@ const adminLinks = [{
   label: 'IIoT Tree',
   icon: 'i-lucide-network',
   to: '/admin/iiot-tree'
+}, {
+  label: 'Masterdata',
+  type: 'label' as const
 }, {
   label: 'Tenants',
   icon: 'i-lucide-building-2',

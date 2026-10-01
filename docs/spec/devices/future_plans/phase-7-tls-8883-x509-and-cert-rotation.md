@@ -1,17 +1,15 @@
 # Phase 7: X.509 mTLS & Device Certificate Rotation
 
-> Thuộc kế hoạch tương lai: [future_device_security_and_ingestion_plan.md](../future_device_security_and_ingestion_plan.md)  
+> Trạng thái: Future plan — chưa triển khai.  
+> Thuộc kế hoạch: [future_device_security_and_ingestion_plan.md](./future_device_security_and_ingestion_plan.md)  
 > Tầng kiến trúc: **Mosquitto/EMQX + Laravel Control Plane + Edge Firmware**
-> Phụ thuộc: [Phase 6](./phase-6-mqtt-basic-clientid-and-provisioning.md)  
-> Trạng thái: `Future Plan`
+> Phụ thuộc: MQTT TLS server-auth baseline và Device credential lifecycle hiện có. Phase 6 HTTPS provisioning là một luồng riêng.
 
 ---
 
 ## 1. Mục tiêu
 
-Phase 6 đã tích hợp TLS server-auth trên `8883`. ESP32 đã kết nối broker và gửi telemetry qua TLS; subscriber nội bộ nhận được message trên đúng topic. Cấu hình hiện chỉ mở listener `8883`, chưa có listener mTLS. Phase 7 vẫn là kế hoạch tương lai, bổ sung xác thực thiết bị bằng client certificate và quy trình xoay vòng chứng chỉ, trong khi thiết bị Access Token/MQTT Basic tiếp tục dùng TLS server-auth.
-
-Trong lần rà soát này (2026-10-01), Docker Engine không chạy nên không thể lặp lại kiểm tra runtime. Checklist bên dưới ghi nhận trạng thái đã xác minh gần nhất cùng cấu hình hiện tại.
+Repository có cấu hình TLS server-auth trên `8883` và ví dụ ESP32 dùng TLS. Tuy nhiên, theo [Phase 3](../access_token_progress/phase-3-mqtt-broker-mosquitto-go-auth.md) và [Phase 4](../access_token_progress/phase-4-telemetry-data-plane-and-edge.md), broker runtime end-to-end chưa được xác nhận trong lần rà soát hiện tại. Chưa có listener mTLS. Phase 7 vẫn là kế hoạch tương lai để thêm xác thực client certificate và quy trình rotate.
 
 ## 2. Thiết kế dự kiến
 
@@ -38,4 +36,4 @@ Trong lần rà soát này (2026-10-01), Docker Engine không chạy nên không
 - [ ] Broker từ chối client thiếu hoặc dùng client certificate không tin cậy trên listener mTLS.
 - [ ] Quyền truy cập X.509 được ràng buộc đúng Device; chứng chỉ bị revoke không kết nối được.
 - [ ] Thiết bị chuyển từ chứng chỉ cũ sang mới trong grace window; chứng chỉ cũ bị revoke đúng hạn.
-- [x] Baseline Access Token xác minh server certificate qua TLS; cấu hình broker/Compose không mở MQTT plaintext listener (`1883`/`9001`). ESP32 đã kết nối `8883` qua TLS và message đã được broker chuyển tiếp.
+- [ ] Baseline MQTT TLS server-auth runtime được xác minh bằng broker artifact đã pin, gồm kết nối hợp lệ trên `8883` và từ chối plaintext `1883`/`9001`.

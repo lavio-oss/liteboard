@@ -1,10 +1,11 @@
-# Phase 6: Device Provisioning qua HTTPS bằng Access Token
+# Phase 6: HTTPS Device Provisioning bằng Access Token
 
 > Mục tiêu: thiết bị mới tự đăng ký vào đúng Project khi khởi động lần đầu và nhận Access Token để kết nối MQTT.
 > Tham chiếu: mô hình provisioning của ThingsBoard; contract và tenant boundary được điều chỉnh cho LiteBoard.
 > Phạm vi lượt đầu: HTTP/HTTPS bootstrap, tạo Device và cấp Access Token hiện có. MQTT Basic, strict clientId binding và X.509 không thuộc tiêu chí hoàn thành.
+> Trạng thái: Planned — chưa triển khai.
 > Phụ thuộc: Laravel Control Plane, PostgreSQL, Mosquitto, simulator và ESP32 firmware.
-> Roadmap: [future_device_security_and_ingestion_plan.md](../future_device_security_and_ingestion_plan.md)
+> Roadmap: [Access Token plan](../access_token_plan.md); xem riêng [MQTT Basic plan](../mqtt_basic_progress/mqtt-basic-and-client-id-plan.md) và [future hardening](../future_plans/future_device_security_and_ingestion_plan.md).
 
 ## 1. Mục tiêu và tham chiếu ThingsBoard
 

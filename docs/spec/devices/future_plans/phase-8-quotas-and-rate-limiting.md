@@ -1,9 +1,9 @@
 # Phase 8: Connection Quota, Message-Size Quota & Rate Limiting theo Thiết bị
 
-> Thuộc kế hoạch tương lai: [future_device_security_and_ingestion_plan.md](../future_device_security_and_ingestion_plan.md)  
+> Trạng thái: Future plan — chưa triển khai.  
+> Thuộc kế hoạch: [future_device_security_and_ingestion_plan.md](./future_device_security_and_ingestion_plan.md)  
 > Tầng kiến trúc: **Mosquitto/EMQX Broker + Python Data Plane (`telemetry-service`) + Redis**  
-> Phụ thuộc: [Phase 4](./phase-4-telemetry-data-plane-and-edge.md)  
-> Trạng thái: `Future Plan`
+> Phụ thuộc: [Phase 4](../access_token_progress/phase-4-telemetry-data-plane-and-edge.md)  
 
 ---
 
@@ -55,7 +55,7 @@ device_profiles (các cột quota)
    max_queued_messages 100
    ```
 2. **Ở cấp độ từng Thiết bị & Project/Tenant**:
-   - Mỗi `Device` chỉ được phép duy trì **1 phiên kết nối đồng thời** (khi kết hợp với **Bind `clientId` ↔ `device`** ở Phase 6, MQTT Broker tự động đảm bảo chỉ có đúng 1 kết nối cho mỗi `clientId`).
+   - Chính sách dự kiến: mỗi `Device` chỉ duy trì **1 phiên kết nối đồng thời**. Cần chọn và kiểm chứng cơ chế broker thực thi chính sách này; không giả định client-ID binding thuộc Phase 6 Access Token bootstrap hoặc tự động bảo đảm quota.
    - Giới hạn số lượng `active devices` được phép tạo và kích hoạt trên mỗi `Project` / `Tenant` (`projects.max_devices_quota`): kiểm tra ngay trong `StoreDeviceRequest` và View `v_mqtt_users`.
 
 ---

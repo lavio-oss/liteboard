@@ -1,8 +1,9 @@
-# Đặc tả & Kế hoạch Tổng thể: Đăng ký và Xác thực Thiết bị bằng Access Token (Kiểu ThingsBoard)
+# Access Token: đặc tả, hiện trạng và kế hoạch
 
-> Phiên bản: 2026-09-27  
+> Cập nhật: 2026-10-01
 > Phạm vi: Database, Laravel Control Plane, Mosquitto Broker (`mosquitto-go-auth`), Python Data Plane (`telemetry-service`), Simulator/ESP32 và Nuxt Web UI  
 > Phương án kiến trúc: **Phương án A** — Sử dụng `iegomez/mosquitto-go-auth` đọc trực tiếp PostgreSQL Views (`v_mqtt_users`, `v_mqtt_acls`) kết hợp Redis cache
+> Trạng thái: Access Token CRUD/MQTT baseline đã có; HTTPS provisioning bootstrap chưa triển khai. Xem [mục lục thiết bị](./README.md).
 
 ---
 
@@ -85,28 +86,34 @@ sequenceDiagram
 
 ## 4. Danh sách các Phase Triển khai theo Tầng Kiến trúc
 
-Toàn bộ lộ trình triển khai được chia thành **5 Phase độc lập theo từng tầng kiến trúc** trong thư mục [`docs/spec/devices/access_token_progress/`](./access_token_progress/):
+Các Phase 1–5 có implementation trong repository; trạng thái acceptance runtime được ghi riêng để không đánh đồng code/configuration với broker end-to-end. Tài liệu từng phase nằm trong [`access_token_progress/`](./access_token_progress/):
 
 | Phase | Tầng kiến trúc | File đặc tả chi tiết | Phụ thuộc | Trạng thái |
 |---|---|---|---|---|
 | **Phase 1** | **Database & PostgreSQL Views** (`backend/database/`) | [phase-1-database-and-sql-views.md](./access_token_progress/phase-1-database-and-sql-views.md) | `projects`, `assets` | `Completed` |
 | **Phase 2** | **Laravel Control Plane API** (`backend/modules/Admin/`) | [phase-2-laravel-control-plane.md](./access_token_progress/phase-2-laravel-control-plane.md) | Phase 1 | `Completed` |
-| **Phase 3** | **MQTT Broker Auth & ACL** (`infrastructure/mosquitto/`, `docker-compose.yml`) | [phase-3-mqtt-broker-mosquitto-go-auth.md](./access_token_progress/phase-3-mqtt-broker-mosquitto-go-auth.md) | Phase 1 | `Completed` |
-| **Phase 4** | **Python Data Plane & Simulator/ESP32** (`telemetry-service/`, `simulator/`) | [phase-4-telemetry-data-plane-and-edge.md](./access_token_progress/phase-4-telemetry-data-plane-and-edge.md) | Phase 2, Phase 3 | `Completed` |
+| **Phase 3** | **MQTT Broker Auth & ACL** (`infrastructure/mosquitto/`, `docker-compose.yml`) | [phase-3-mqtt-broker-mosquitto-go-auth.md](./access_token_progress/phase-3-mqtt-broker-mosquitto-go-auth.md) | Phase 1 | Implemented; broker runtime recheck required |
+| **Phase 4** | **Python Data Plane & Simulator/ESP32** (`telemetry-service/`, `simulator/`) | [phase-4-telemetry-data-plane-and-edge.md](./access_token_progress/phase-4-telemetry-data-plane-and-edge.md) | Phase 2, Phase 3 | Core flow implemented; TLS broker E2E pending |
 | **Phase 5** | **Nuxt 4 Web UI** (`web/`) | [phase-5-nuxt-web-ui.md](./access_token_progress/phase-5-nuxt-web-ui.md) | Phase 2 | `Completed` |
 
 ---
 
-## 4.1. Kế hoạch Mở rộng Tương lai (Future Production Hardening — Phase 6 → Phase 9)
+## 4.1. HTTPS Access Token provisioning (planned)
 
-Các tính năng nâng cao cho môi trường Industrial IoT Production được đặc tả chi tiết tại **[future_device_security_and_ingestion_plan.md](./future_device_security_and_ingestion_plan.md)**:
+[Phase 6: HTTPS Access Token provisioning](./access_token_progress/phase-6-https-access-token-provisioning.md) is the next Access Token feature. It adds a Project-scoped provisioning profile and a public HTTPS bootstrap endpoint that creates the Device and issues the existing Access Token credential. It is **not implemented**.
 
-| Phase | Nhóm năng lực mở rộng | File đặc tả chi tiết | Trạng thái |
+The repository also contains TLS server-auth configuration for MQTT `8883`. Track that transport baseline separately: configuration and local certificate checks do not by themselves prove the broker runtime acceptance criteria. Do not conflate it with provisioning.
+
+## 4.2. Separate future tracks
+
+| Track | Scope | Specification | Status |
 |---|---|---|---|
-| **Phase 6** | **MQTT TLS `8883`, MQTT Basic mode, Bind `clientId` ↔ `device` & Device Provisioning Bootstrap** | [phase-6-mqtt-basic-clientid-and-provisioning.md](./access_token_progress/phase-6-mqtt-basic-clientid-and-provisioning.md) | TLS config/client + local checks complete; broker E2E pending; remaining features planned |
-| **Phase 7** | **X.509 (`mTLS`) & Device Certificate Rotation** | [phase-7-tls-8883-x509-and-cert-rotation.md](./access_token_progress/phase-7-tls-8883-x509-and-cert-rotation.md) | `Future Plan` |
-| **Phase 8** | **Message-size Quota, Connection Quota & Rate Limiting per Device** | [phase-8-quotas-and-rate-limiting.md](./access_token_progress/phase-8-quotas-and-rate-limiting.md) | `Future Plan` |
-| **Phase 9** | **Telemetry Schema Validation & Replay/Deduplication Protection** | [phase-9-schema-validation-and-replay-protection.md](./access_token_progress/phase-9-schema-validation-and-replay-protection.md) | `Future Plan` |
+| MQTT Basic | Separate `clientId`/username/password mode and strict client-ID binding | [MQTT Basic plan](./mqtt_basic_progress/mqtt-basic-and-client-id-plan.md) | Future plan; not implemented |
+| Phase 7 | X.509/mTLS and certificate rotation | [Phase 7](./future_plans/phase-7-tls-8883-x509-and-cert-rotation.md) | Future plan |
+| Phase 8 | Message/connection quotas and per-device rate limits | [Phase 8](./future_plans/phase-8-quotas-and-rate-limiting.md) | Future plan |
+| Phase 9 | Telemetry schema validation and replay/deduplication | [Phase 9](./future_plans/phase-9-schema-validation-and-replay-protection.md) | Future plan |
+
+See the [future hardening roadmap](./future_plans/future_device_security_and_ingestion_plan.md) for cross-track dependencies. MQTT Basic is deliberately not assigned to Phase 6 of the Access Token plan.
 
 ---
 
@@ -116,5 +123,6 @@ Các tính năng nâng cao cho môi trường Industrial IoT Production được
 - [x] **Phase 2**: Toàn bộ REST API CRUD Device và Manage Credentials (`show`, `update`, `rotate`) hoạt động đúng contract; pass `composer stan`, `composer test` và `composer pint`.
 - [x] **Phase 3**: Mosquitto (`mosquitto-go-auth`) chặn kết nối ẩn danh; thiết bị dùng đúng `ACCESS_TOKEN` chỉ publish/subscribe được vào topic của chính `{project_id}` và `{device_id}` đó; token bị `revoke` hoặc `rotate` mất quyền truy cập sau khi hết TTL cache (5s).
 - [x] **Phase 4**: `telemetry-service` kết nối bằng tài khoản nội bộ, nhận gói tin trên `liteboard/+/devices/+/telemetry` và `heartbeat`, cập nhật `last_seen_at` và `connection_state = 'online'`; `simulator` và `Base.ino` gửi dữ liệu thành công bằng `ACCESS_TOKEN`.
-- [x] **Phase 5**: Giao diện Nuxt UI (`/devices` và `/admin/devices`) cho phép CRUD Device, gắn Equipment Asset, Copy/Rotate/Revoke Access Token và hiển thị lệnh `mosquitto_pub` / code `ESP32` trong hộp thoại Check Connectivity.
-- [ ] **Phase 6 — TLS server-auth**: Cấu hình chỉ dùng `8883`, xác minh CA/hostname và test cục bộ đã qua; chưa nghiệm thu kết nối broker end-to-end hoặc xác nhận `1883`/`9001` bị từ chối runtime.
+- [x] **Phase 5**: Giao diện Nuxt UI (`/devices`) cho phép CRUD Device, gắn Equipment Asset, Copy/Rotate/Revoke Access Token và hiển thị lệnh `mosquitto_pub` / code `ESP32` trong hộp thoại Check Connectivity.
+- [ ] **HTTPS Access Token bootstrap**: Profile, enrollment, idempotency, quota và simulator/ESP32 bootstrap chưa được triển khai/ nghiệm thu.
+- [ ] **MQTT TLS server-auth runtime**: Xác nhận broker thực tế chấp nhận client hợp lệ qua `8883` và từ chối CA/hostname sai cùng plaintext `1883`/`9001` bằng artifact broker đã pin.
