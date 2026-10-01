@@ -40,7 +40,7 @@ const assetTypeColors: Record<AssetType, 'success' | 'secondary' | 'primary' | '
 <template>
   <UModal
     v-model:open="open"
-    :ui="{ content: 'max-w-lg' }"
+    :ui="{ content: 'max-w-3xl' }"
   >
     <template #title>
       <div class="flex items-center gap-2">

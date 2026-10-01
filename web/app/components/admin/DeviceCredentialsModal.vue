@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
+import { useMqttCaCertificateDownload } from '~/composables/useMqttCaCertificateDownload'
 import type { Device, DeviceCredential } from '~/types/admin'
 
 const props = withDefaults(defineProps<{
@@ -18,6 +19,7 @@ const emit = defineEmits<{
 }>()
 
 const toast = useToast()
+const downloadMqttCaCertificate = useMqttCaCertificateDownload()
 const {
   loadDeviceCredentials,
   rotateDeviceCredentials,
@@ -156,14 +158,21 @@ async function toggleCredentialStatus(): Promise<void> {
 <template>
   <UModal
     v-model:open="open"
-    :ui="{ content: 'max-w-xl' }"
+    :ui="{ content: 'max-w-3xl' }"
   >
     <template #title>
-      <div class="flex items-center gap-2">
-        <span>Device credentials — {{ props.device?.name ?? 'Device' }}</span>
+      <div class="flex min-w-0 items-center gap-3">
+        <div class="min-w-0">
+          <p class="font-semibold text-highlighted">
+            Device credentials
+          </p>
+          <p class="truncate text-sm text-muted">
+            {{ props.device?.name ?? 'Device' }}
+          </p>
+        </div>
         <UBadge
           v-if="credential !== null"
-          class="capitalize"
+          class="ml-auto capitalize"
           :color="credential.status === 'active' ? 'success' : 'error'"
           variant="subtle"
         >
@@ -185,55 +194,84 @@ async function toggleCredentialStatus(): Promise<void> {
         :description="error.message"
       />
 
-      <div v-else-if="credential !== null" class="space-y-5">
-        <UFormField
-          label="Access Token"
-          description="Copy this token to authenticate your device with LiteBoard."
-        >
-          <div class="flex items-center gap-2">
+      <div v-else-if="credential !== null" class="space-y-4">
+        <section class="space-y-3 rounded-lg border border-default p-4">
+          <div>
+            <h3 class="text-sm font-semibold text-highlighted">
+              Access token
+            </h3>
+            <p class="mt-1 text-sm text-muted">
+              Use this token to authenticate the device with LiteBoard.
+            </p>
+          </div>
+          <div class="flex min-w-0 items-center gap-2">
             <UInput
               :model-value="credential.access_token"
               :type="tokenVisible ? 'text' : 'password'"
               readonly
-              class="w-full font-mono"
+              class="min-w-0 flex-1 font-mono"
             />
             <UButton
-              :icon="tokenVisible ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+              :label="tokenVisible ? 'Hide' : 'Show'"
               color="neutral"
               variant="outline"
-              :aria-label="tokenVisible ? 'Hide access token' : 'Show access token'"
+              size="sm"
+              class="shrink-0"
               @click="tokenVisible = !tokenVisible"
             />
             <UButton
               label="Copy"
-              icon="i-lucide-copy"
-              color="primary"
-              variant="subtle"
-              aria-label="Copy access token"
+              color="neutral"
+              variant="outline"
+              size="sm"
+              class="shrink-0"
               @click="copyText(credential.access_token, 'Access token')"
             />
           </div>
-        </UFormField>
+        </section>
 
-        <div class="space-y-2">
-          <div class="flex items-center justify-between">
-            <span class="text-sm font-medium text-highlighted">Firmware Config</span>
+        <section class="space-y-3 rounded-lg border border-default p-4">
+          <div>
+            <h3 class="text-sm font-semibold text-highlighted">
+              TLS CA certificate
+            </h3>
+            <p class="mt-1 text-sm text-muted">
+              Install this public certificate on your device to verify the LiteBoard MQTT broker over TLS (port 8883).
+            </p>
+          </div>
+          <UButton
+            label="Download certificate (.txt)"
+            color="neutral"
+            variant="outline"
+            @click="downloadMqttCaCertificate"
+          />
+        </section>
+
+        <section class="space-y-3 rounded-lg border border-default p-4">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <h3 class="text-sm font-semibold text-highlighted">
+                Firmware config
+              </h3>
+              <p class="mt-1 text-sm text-muted">
+                Device connection values ready to add to your firmware.
+              </p>
+            </div>
             <UButton
               label="Copy config"
-              icon="i-lucide-copy"
               color="neutral"
-              variant="ghost"
-              size="xs"
+              variant="outline"
+              size="sm"
               @click="copyText(firmwareConfig, 'Firmware config')"
             />
           </div>
-          <pre class="overflow-x-auto rounded-lg border border-default bg-elevated/50 p-3 font-mono text-xs text-highlighted">{{ firmwareConfig }}</pre>
-        </div>
+          <pre class="max-h-52 overflow-auto rounded-lg bg-elevated/50 p-3 font-mono text-xs leading-relaxed text-highlighted">{{ firmwareConfig }}</pre>
+        </section>
       </div>
     </template>
 
     <template #footer>
-      <div class="flex w-full items-center justify-between">
+      <div class="flex w-full items-center gap-2">
         <div v-if="credential !== null && props.canManage" class="flex items-center gap-2">
           <UButton
             :label="credential.status === 'active' ? 'Revoke token' : 'Activate token'"
@@ -245,7 +283,6 @@ async function toggleCredentialStatus(): Promise<void> {
           />
           <UButton
             label="Rotate token"
-            icon="i-lucide-refresh-cw"
             color="neutral"
             variant="outline"
             size="sm"
@@ -253,12 +290,12 @@ async function toggleCredentialStatus(): Promise<void> {
             @click="rotateToken"
           />
         </div>
-        <div v-else />
 
         <UButton
           label="Close"
           color="neutral"
           variant="subtle"
+          class="ml-auto"
           @click="open = false"
         />
       </div>

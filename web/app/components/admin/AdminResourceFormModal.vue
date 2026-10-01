@@ -199,7 +199,7 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
   <UModal
     v-model:open="open"
     :title="title"
-    :ui="{ content: isTwoColumnLayout ? 'sm:max-w-4xl' : undefined }"
+    :ui="{ content: isTwoColumnLayout ? 'max-w-3xl' : undefined }"
   >
     <template #body>
       <UForm

@@ -2,6 +2,7 @@
 import type { TableColumn } from '@nuxt/ui'
 import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
+import { useMqttCaCertificateDownload } from '~/composables/useMqttCaCertificateDownload'
 import { useTenantContext } from '~/composables/useTenantContext'
 import type {
   AdminTableRow,
@@ -17,6 +18,7 @@ definePageMeta({
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
 const toast = useToast()
+const downloadMqttCaCertificate = useMqttCaCertificateDownload()
 const { activeTenantId, canManageActiveTenant, loadTenants } = useTenantContext()
 const {
   createDevice,
@@ -38,6 +40,11 @@ const deletingDevice = ref<Device | null>(null)
 const credentialsOpen = ref(false)
 const credentialsDevice = ref<Device | null>(null)
 const mqttGuideOpen = ref(false)
+const mqttGuideTab = ref('tls-ca')
+const mqttGuideTabs = [
+  { label: 'TLS CA certificate', value: 'tls-ca', slot: 'tls-ca' },
+  { label: 'Access token', value: 'access-token', slot: 'access-token' }
+]
 
 const connectionStateFilter = ref<DeviceConnectionState | 'all'>('all')
 const projectFilter = ref<string | null>(null)
@@ -413,10 +420,9 @@ const errorMessage = computed(() => {
             @click="openCreate"
           />
           <UButton
-            icon="i-lucide-info"
+            label="Setup tutorial"
             color="neutral"
-            variant="ghost"
-            aria-label="MQTT connection guide"
+            variant="outline"
             @click="mqttGuideOpen = true"
           />
         </template>
@@ -479,50 +485,129 @@ const errorMessage = computed(() => {
 
       <UModal
         v-model:open="mqttGuideOpen"
+        :ui="{ content: 'max-w-3xl' }"
         title="Connect a device over MQTT TLS"
-        description="Use the broker CA certificate to verify the LiteBoard MQTT server."
+        description="Set up TLS verification and MQTT device authentication."
       >
         <template #body>
-          <div class="space-y-5">
-            <UAlert
-              color="primary"
-              variant="subtle"
-              title="TLS server verification"
-              description="Devices connect to port 8883 and verify the broker with this public CA certificate. Device certificates and private keys are not required."
-            />
-
-            <ol class="list-inside list-decimal space-y-2 text-sm text-muted">
-              <li>Connect to the broker hostname on port 8883 using MQTT over TLS.</li>
-              <li>Use the device Access Token as both MQTT username and password.</li>
-              <li>Publish telemetry to liteboard/&lt;PROJECT_ID&gt;/devices/&lt;DEVICE_ID&gt;/telemetry.</li>
-              <li>Configure the client to trust the CA certificate below and verify the broker hostname.</li>
-            </ol>
-
-            <div class="space-y-2 rounded-lg border border-default p-4">
-              <div>
-                <p class="font-medium text-highlighted">
-                  Public broker CA certificate
-                </p>
+          <UTabs
+            v-model="mqttGuideTab"
+            :items="mqttGuideTabs"
+            variant="link"
+            :ui="{
+              list: 'w-full border-default p-0',
+              trigger: 'flex-1 justify-center rounded-none py-3',
+              content: 'pt-1'
+            }"
+            class="w-full"
+          >
+            <template #tls-ca>
+              <div class="space-y-5 pt-4">
                 <p class="text-sm text-muted">
-                  This is the CA certificate used to verify the broker, not a device private key.
+                  The public CA certificate lets any MQTT client verify the LiteBoard broker. It is not a device key or secret; client certificates are not required.
+                </p>
+
+                <ol class="list-inside list-decimal space-y-3 text-sm text-default">
+                  <li>
+                    Download the CA certificate.
+                    <div class="mt-2">
+                      <UButton
+                        label="Download certificate (.txt)"
+                        color="neutral"
+                        variant="outline"
+                        @click="downloadMqttCaCertificate"
+                      />
+                    </div>
+                  </li>
+                  <li>
+                    Import the PEM content into your MQTT client's trusted CA store. Depending on the platform, this may be a certificate file, a system trust store, or a CA field in the client configuration.
+                  </li>
+                  <li>
+                    Enable certificate and hostname verification. Connect to port <code class="font-mono text-highlighted">8883</code> using a broker hostname listed in the certificate's SAN.
+                  </li>
+                </ol>
+
+                <div class="grid gap-3 rounded-lg border border-default p-4 sm:grid-cols-2">
+                  <div>
+                    <p class="text-xs text-muted">
+                      Protocol
+                    </p>
+                    <p class="mt-1 text-sm font-medium text-highlighted">
+                      MQTT over TLS
+                    </p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-muted">
+                      Port
+                    </p>
+                    <p class="mt-1 text-sm font-medium text-highlighted">
+                      8883
+                    </p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-muted">
+                      Trusted CA
+                    </p>
+                    <p class="mt-1 text-sm font-medium text-highlighted">
+                      Downloaded LiteBoard CA certificate
+                    </p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-muted">
+                      Verification
+                    </p>
+                    <p class="mt-1 text-sm font-medium text-highlighted">
+                      Certificate chain and hostname
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <template #access-token>
+              <div class="space-y-5 pt-4">
+                <ol class="list-inside list-decimal space-y-3 text-sm text-default">
+                  <li>Open the target device's credentials from its row and copy the Access Token.</li>
+                  <li>In your MQTT client, set the Access Token as both the username and password.</li>
+                  <li>Publish to the telemetry topic shown in the device credentials modal.</li>
+                </ol>
+
+                <div class="space-y-2 rounded-lg border border-default p-4">
+                  <p class="text-sm font-medium text-highlighted">
+                    MQTT credentials
+                  </p>
+                  <dl class="grid gap-3 text-sm sm:grid-cols-2">
+                    <div>
+                      <dt class="text-muted">
+                        Username
+                      </dt>
+                      <dd class="mt-1 font-mono text-highlighted">
+                        &lt;ACCESS_TOKEN&gt;
+                      </dd>
+                    </div>
+                    <div>
+                      <dt class="text-muted">
+                        Password
+                      </dt>
+                      <dd class="mt-1 font-mono text-highlighted">
+                        &lt;ACCESS_TOKEN&gt;
+                      </dd>
+                    </div>
+                  </dl>
+                  <div class="border-t border-default pt-3">
+                    <p class="text-muted">
+                      Telemetry topic
+                    </p>
+                    <code class="mt-1 block break-all font-mono text-xs text-highlighted">liteboard/&lt;PROJECT_ID&gt;/devices/&lt;DEVICE_ID&gt;/telemetry</code>
+                  </div>
+                </div>
+
+                <p class="text-sm text-muted">
+                  Keep the Access Token private. Rotate it from the device credentials modal if it is exposed.
                 </p>
               </div>
-              <UButton
-                href="/mqtt/ca.crt"
-                download="liteboard-mqtt-ca.crt"
-                label="Download CA certificate"
-                icon="i-lucide-download"
-                color="neutral"
-                variant="outline"
-              />
-              <p class="break-all text-xs text-muted">
-                Direct link:
-                <a class="text-primary underline" href="/mqtt/ca.crt">
-                  /mqtt/ca.crt
-                </a>
-              </p>
-            </div>
-          </div>
+            </template>
+          </UTabs>
         </template>
       </UModal>
 

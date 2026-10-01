@@ -122,7 +122,7 @@ The script requires OpenSSL 1.1.1 or newer.
 .\infrastructure\mosquitto\generate-dev-certs.ps1
 ```
 
-The generated public CA certificate is also exposed by the web app at `/mqtt/ca.crt` so device setup can download the exact CA certificate used by the local broker. This is the CA certificate only; the CA private key stays outside the web app and firmware.
+The generated public CA certificate can be downloaded from the device connection guide or device credentials modal as `liteboard-mqtt-ca.txt`. The app downloads the exact CA certificate used by the local broker. This is the CA certificate only; the CA private key stays outside the web app and firmware.
 
 If the local PowerShell execution policy blocks this unsigned local script, run it with a process-scoped bypass (this does not change the machine policy):
 

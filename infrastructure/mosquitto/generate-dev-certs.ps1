@@ -28,7 +28,7 @@ $extensionsFile = Join-Path $brokerDirectory 'server.ext'
 $serialFile = Join-Path $certificateDirectory 'ca.srl'
 $firmwareCaHeader = Join-Path $PSScriptRoot '../../simulator/Esp32/Base/mqtt_ca_cert.h'
 $publicCaDirectory = Join-Path $PSScriptRoot '../../web/public/mqtt'
-$publicCaFile = Join-Path $publicCaDirectory 'ca.crt'
+$publicCaFile = Join-Path $publicCaDirectory 'ca.txt'
 
 $existingFiles = @(
     $caKeyFile,
@@ -117,5 +117,5 @@ Copy-Item -LiteralPath $caCertificateFile -Destination $publicCaFile
 Write-Output "Development MQTT certificates created under $certificateDirectory"
 Write-Output "Broker SAN DNS: $($DnsName -join ', ')"
 Write-Output "Broker SAN IP: $($IpAddress -join ', ')"
-Write-Output 'The public CA certificate is available at /mqtt/ca.crt from the web app.'
+Write-Output 'The public CA certificate is available in the device connection guide as liteboard-mqtt-ca.txt.'
 Write-Output 'The CA private key is local-only. Do not copy it into a container or firmware.'

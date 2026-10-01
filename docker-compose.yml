@@ -170,7 +170,7 @@ services:
     environment:
       NUXT_LARAVEL_API_BASE: http://backend:8800
     volumes:
-      - ${MQTT_TLS_CA_SOURCE:-./infrastructure/mosquitto/certs/ca.crt}:/app/public/mqtt/ca.crt:ro
+      - ${MQTT_TLS_CA_SOURCE:-./infrastructure/mosquitto/certs/ca.crt}:/app/public/mqtt/ca.txt:ro
     ports:
       - '${FRONTEND_PORT:-3000}:3000'
     healthcheck:
