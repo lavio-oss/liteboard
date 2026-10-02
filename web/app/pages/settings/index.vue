@@ -3,12 +3,24 @@ import * as z from 'zod'
 import type { FormError, FormSubmitEvent } from '@nuxt/ui'
 import { ApiError, useApi } from '~/composables/useApi'
 import { authUserResponseSchema } from '~/types/auth'
+import { colorPreferenceSchema, neutralColors, primaryColors } from '~/utils/colorTheme'
 
 definePageMeta({
   middleware: 'auth'
 })
 
 const colorMode = useColorMode()
+const appConfig = useAppConfig()
+const primaryColorItems = [...primaryColors]
+const neutralColorItems = [...neutralColors]
+const primaryColor = computed({
+  get: () => colorPreferenceSchema.shape.primary.parse(appConfig.ui.colors.primary),
+  set: value => appConfig.ui.colors.primary = value
+})
+const neutralColor = computed({
+  get: () => colorPreferenceSchema.shape.neutral.parse(appConfig.ui.colors.neutral),
+  set: value => appConfig.ui.colors.neutral = value
+})
 const { user } = useAuth()
 const { timezone, utcLabel, detectBrowserTimezone } = useDateTime()
 const api = useApi()
@@ -243,6 +255,27 @@ async function onSubmit(event: FormSubmitEvent<ProfileSchema>): Promise<void> {
           @click="colorMode.preference = 'system'"
         />
       </div>
+    </div>
+  </UPageCard>
+
+  <UPageCard variant="subtle" class="mt-6">
+    <div class="mb-4">
+      <div class="font-medium text-highlighted">
+        Interface colors
+      </div>
+      <div class="text-sm text-muted">
+        Choose the accent and neutral colors used across the dashboard.
+      </div>
+    </div>
+
+    <div class="grid gap-4 sm:grid-cols-2">
+      <UFormField label="Primary color" description="Used for actions and highlights.">
+        <USelect v-model="primaryColor" :items="primaryColorItems" class="w-full" />
+      </UFormField>
+
+      <UFormField label="Neutral color" description="Used for surfaces, borders, and text.">
+        <USelect v-model="neutralColor" :items="neutralColorItems" class="w-full" />
+      </UFormField>
     </div>
   </UPageCard>
 
