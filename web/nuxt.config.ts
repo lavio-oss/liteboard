@@ -14,6 +14,11 @@ export default defineNuxtConfig({
 
   css: ['~/assets/css/main.css'],
 
+  colorMode: {
+    preference: 'dark',
+    fallback: 'dark'
+  },
+
   runtimeConfig: {
     laravelApiBase: 'http://localhost:8800'
   },

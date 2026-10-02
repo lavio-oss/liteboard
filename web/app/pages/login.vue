@@ -11,6 +11,7 @@ definePageMeta({
 const toast = useToast()
 const { login } = useAuth()
 const isSubmitting = ref(false)
+const brandLogo = useBrandLogo()
 
 const fields: AuthFormField[] = [{
   name: 'email',
@@ -97,11 +98,13 @@ async function onSubmit(event: FormSubmitEvent<Schema>): Promise<void> {
         <template #header>
           <div class="flex items-center justify-center gap-2">
             <img
-              src="/favicon.svg"
+              :src="brandLogo"
               alt=""
               class="size-8"
-            />
-            <h1 class="text-xl font-semibold text-highlighted">LiteBoard</h1>
+            >
+            <h1 class="text-xl font-semibold text-highlighted">
+              LiteBoard
+            </h1>
           </div>
           <p class="mt-2 text-center text-sm text-muted">
             Enter your credentials to access your account.

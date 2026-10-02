@@ -6,6 +6,7 @@ defineProps<{
 }>()
 
 const { isAdminWorkspace, selectWorkspace } = useWorkspaceContext()
+const brandLogo = useBrandLogo()
 
 const workspaces = [{
   label: 'Liteboard',
@@ -37,7 +38,6 @@ const items = computed<DropdownMenuItem[][]>(() => [workspaces.map(workspace => 
   >
     <UButton
       :label="collapsed ? undefined : selectedWorkspace.label"
-      :icon="selectedWorkspace.icon"
       :trailing-icon="collapsed ? undefined : 'i-lucide-chevrons-up-down'"
       color="neutral"
       variant="ghost"
@@ -46,9 +46,14 @@ const items = computed<DropdownMenuItem[][]>(() => [workspaces.map(workspace => 
       class="data-[state=open]:bg-elevated"
       :class="[!collapsed && 'py-2']"
       :ui="{
-        leadingIcon: 'size-5 text-primary',
         trailingIcon: 'text-dimmed'
       }"
-    />
+    >
+      <template #leading>
+        <span class="grid size-6 shrink-0 place-items-center rounded-md bg-primary/10">
+          <img :src="brandLogo" alt="" class="size-4">
+        </span>
+      </template>
+    </UButton>
   </UDropdownMenu>
 </template>
