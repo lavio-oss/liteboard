@@ -236,7 +236,7 @@ const columns: TableColumn<Tenant>[] = [
   },
   {
     id: 'actions',
-    header: '',
+    header: 'Actions',
     cell: ({ row }) => h('div', { class: 'flex justify-end gap-1' }, [
       canUpdate(row.original)
         ? h(UButton, {

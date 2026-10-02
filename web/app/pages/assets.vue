@@ -390,7 +390,7 @@ const columns: TableColumn<AdminTableRow>[] = [
   },
   {
     id: 'actions',
-    header: '',
+    header: 'Actions',
     cell: ({ row }) => {
       const buttons = [
         h(UButton, {

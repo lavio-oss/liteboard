@@ -4,6 +4,11 @@ import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
 import { useTenantContext } from '~/composables/useTenantContext'
 import type { AdminTableRow, Project, ProjectFormInput } from '~/types/admin'
+import {
+  canDeleteProjectData,
+  canManageProjectMembers,
+  canWriteProjectData
+} from '~/utils/projectPermissions'
 
 definePageMeta({
   middleware: 'auth'
@@ -35,6 +40,9 @@ const deleteLoading = ref(false)
 const deletingProject = ref<Project | null>(null)
 const managingProject = ref<Project | null>(null)
 const projectUsersOpen = ref(false)
+const canManageAccounts = computed(() => isPlatformAdmin.value || tenants.value.some(
+  tenant => tenant.id === managingProject.value?.tenant_id && (tenant.role === 'owner' || tenant.role === 'admin')
+))
 
 const { data: response, status, error, refresh } = await useAsyncData('admin-projects', () => {
   return Promise.all(tenants.value.map(tenant => loadProjects(tenant.id)))
@@ -216,33 +224,51 @@ const columns: TableColumn<AdminTableRow>[] = [
   },
   {
     id: 'actions',
-    header: '',
-    cell: ({ row }) => row.original.tenant_id !== undefined
-      && manageableTenantIds.value.has(row.original.tenant_id)
-      ? h('div', { class: 'flex justify-end gap-1' }, [
-          h(UButton, {
-            'icon': 'i-lucide-users',
-            'color': 'neutral',
-            'variant': 'ghost',
-            'aria-label': `Manage users for ${row.original.name}`,
-            'onClick': () => openProjectUsers(row.original.id)
-          }),
-          h(UButton, {
-            'icon': 'i-lucide-pencil',
-            'color': 'neutral',
-            'variant': 'ghost',
-            'aria-label': `Edit ${row.original.name}`,
-            'onClick': () => openEdit(row.original.id)
-          }),
-          h(UButton, {
-            'icon': 'i-lucide-trash-2',
-            'color': 'error',
-            'variant': 'ghost',
-            'aria-label': `Delete ${row.original.name}`,
-            'onClick': () => openDelete(row.original.id)
-          })
-        ])
-      : null
+    header: 'Actions',
+    cell: ({ row }) => {
+      const project = projects.value.find(item => item.id === row.original.id)
+
+      if (project === undefined) {
+        throw new Error('The selected project is not available.')
+      }
+
+      const canManageTenant = manageableTenantIds.value.has(project.tenant_id)
+      const actions: ReturnType<typeof h>[] = []
+
+      if (canManageProjectMembers(project.role, canManageTenant)) {
+        actions.push(h(UButton, {
+          'icon': 'i-lucide-users',
+          'color': 'neutral',
+          'variant': 'ghost',
+          'aria-label': `Manage users for ${project.name}`,
+          'onClick': () => openProjectUsers(project.id)
+        }))
+      }
+
+      if (canWriteProjectData(project.role, canManageTenant)) {
+        actions.push(h(UButton, {
+          'icon': 'i-lucide-pencil',
+          'color': 'neutral',
+          'variant': 'ghost',
+          'aria-label': `Edit ${project.name}`,
+          'onClick': () => openEdit(project.id)
+        }))
+      }
+
+      if (canDeleteProjectData(project.role, canManageTenant)) {
+        actions.push(h(UButton, {
+          'icon': 'i-lucide-trash-2',
+          'color': 'error',
+          'variant': 'ghost',
+          'aria-label': `Delete ${project.name}`,
+          'onClick': () => openDelete(project.id)
+        }))
+      }
+
+      return actions.length > 0
+        ? h('div', { class: 'flex justify-end gap-1' }, actions)
+        : null
+    }
   }
 ]
 
@@ -315,6 +341,7 @@ const errorMessage = computed(() => {
         v-model:open="projectUsersOpen"
         :tenant-id="managingProject?.tenant_id ?? null"
         :project="managingProject"
+        :can-manage-account="canManageAccounts"
         :can-delete-account="isPlatformAdmin"
       />
     </template>

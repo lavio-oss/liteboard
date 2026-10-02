@@ -7,7 +7,7 @@
     "dev": "nuxt dev",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "test": "node --experimental-strip-types --test tests/colorTheme.test.ts",
+    "test": "node --experimental-strip-types --test tests/colorTheme.test.ts tests/projectPermissions.test.ts",
     "lint": "eslint .",
     "typecheck": "nuxt typecheck"
   },

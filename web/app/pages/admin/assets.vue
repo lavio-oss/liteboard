@@ -4,6 +4,7 @@ import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
 import { useTenantContext } from '~/composables/useTenantContext'
 import type { AdminTableRow, Asset, AssetInput, AssetType } from '~/types/admin'
+import { canDeleteProjectData, canWriteProjectData } from '~/utils/projectPermissions'
 
 definePageMeta({
   middleware: 'auth'
@@ -23,7 +24,6 @@ const manageableTenantIds = computed(() => new Set(
     .filter(tenant => isPlatformAdmin.value || tenant.role === 'owner' || tenant.role === 'admin')
     .map(tenant => tenant.id)
 ))
-const canCreate = computed(() => isPlatformAdmin.value || manageableTenantIds.value.size > 0)
 const formOpen = ref(false)
 const formLoading = ref(false)
 const selectedProjectId = ref<string | null>(null)
@@ -81,8 +81,33 @@ const { data: response, status, error, refresh } = await useAsyncData('admin-ass
 
 const assets = computed(() => response.value?.assets ?? [])
 const projects = computed(() => response.value?.projects ?? [])
+function canWriteProject(projectId: string): boolean {
+  const project = projects.value.find(item => item.id === projectId)
+
+  if (project === undefined) {
+    throw new Error('The asset project is not available.')
+  }
+
+  return canWriteProjectData(project.role, manageableTenantIds.value.has(project.tenant_id))
+}
+
+function canDeleteProject(projectId: string): boolean {
+  const project = projects.value.find(item => item.id === projectId)
+
+  if (project === undefined) {
+    throw new Error('The asset project is not available.')
+  }
+
+  return canDeleteProjectData(project.role, manageableTenantIds.value.has(project.tenant_id))
+}
+
+const writableProjects = computed(() => projects.value.filter(project => canWriteProject(project.id)))
+const canCreate = computed(() => writableProjects.value.length > 0)
 const projectOptions = computed(() => [
   ...projects.value.map(project => ({ label: project.name, value: project.id }))
+])
+const writableProjectOptions = computed(() => [
+  ...writableProjects.value.map(project => ({ label: project.name, value: project.id }))
 ])
 const projectFilterOptions = computed(() => [
   { label: 'All projects', value: null },
@@ -384,26 +409,40 @@ const columns: TableColumn<AdminTableRow>[] = [
   },
   {
     id: 'actions',
-    header: '',
-    cell: ({ row }) => row.original.project_id !== undefined
-      && manageableTenantIds.value.has(tenantIdForProject(row.original.project_id))
-      ? h('div', { class: 'flex justify-end gap-1' }, [
-          h(UButton, {
-            'icon': 'i-lucide-pencil',
-            'color': 'neutral',
-            'variant': 'ghost',
-            'aria-label': `Edit ${row.original.name}`,
-            'onClick': () => openEdit(row.original.id)
-          }),
-          h(UButton, {
-            'icon': 'i-lucide-trash-2',
-            'color': 'error',
-            'variant': 'ghost',
-            'aria-label': `Delete ${row.original.name}`,
-            'onClick': () => openDelete(row.original.id)
-          })
-        ])
-      : null
+    header: 'Actions',
+    cell: ({ row }) => {
+      const projectId = row.original.project_id
+
+      if (projectId === undefined) {
+        throw new Error('The asset project is missing.')
+      }
+
+      const actions: ReturnType<typeof h>[] = []
+
+      if (canWriteProject(projectId)) {
+        actions.push(h(UButton, {
+          'icon': 'i-lucide-pencil',
+          'color': 'neutral',
+          'variant': 'ghost',
+          'aria-label': `Edit ${row.original.name}`,
+          'onClick': () => openEdit(row.original.id)
+        }))
+      }
+
+      if (canDeleteProject(projectId)) {
+        actions.push(h(UButton, {
+          'icon': 'i-lucide-trash-2',
+          'color': 'error',
+          'variant': 'ghost',
+          'aria-label': `Delete ${row.original.name}`,
+          'onClick': () => openDelete(row.original.id)
+        }))
+      }
+
+      return actions.length > 0
+        ? h('div', { class: 'flex justify-end gap-1' }, actions)
+        : null
+    }
   }
 ]
 
@@ -481,7 +520,7 @@ const errorMessage = computed(() => {
         v-model:parent-id="selectedParentId"
         resource-type="asset"
         :resource="editingAsset"
-        :project-options="projectOptions"
+        :project-options="writableProjectOptions"
         :parent-options="parentOptions"
         :loading="formLoading"
         @submit-asset="saveAsset"

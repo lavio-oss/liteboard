@@ -22,3 +22,13 @@ test('brand logo color follows the selected primary palette', () => {
   assert.match(greenLogo, /stroke="#00c16a"/)
   assert.notEqual(greenLogo, roseLogo)
 })
+
+test('color preference schema parses valid json cookie payloads', () => {
+  const jsonPayload = JSON.stringify({ primary: 'blue', neutral: 'zinc' })
+  const parsed = colorPreferenceSchema.safeParse(JSON.parse(jsonPayload))
+  assert.equal(parsed.success, true)
+  if (parsed.success) {
+    assert.equal(parsed.data.primary, 'blue')
+    assert.equal(parsed.data.neutral, 'zinc')
+  }
+})

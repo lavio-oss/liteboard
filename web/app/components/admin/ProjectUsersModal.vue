@@ -4,31 +4,28 @@ import { getPaginationRowModel } from '@tanstack/table-core'
 import * as z from 'zod'
 import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
-import type { AvailableProjectUser, Project, ProjectRole, ProjectUser } from '~/types/admin'
+import type { Project, ProjectRole } from '~/types/admin'
 import { projectRoleSchema } from '~/types/admin'
+
+export interface ProjectMemberRow {
+  id: string
+  name: string
+  email: string
+  role: ProjectRole
+  is_assigned: boolean
+}
 
 const props = withDefaults(defineProps<{
   tenantId: string | null
   project: Project | null
+  canManageAccount?: boolean
   canDeleteAccount?: boolean
 }>(), {
+  canManageAccount: false,
   canDeleteAccount: false
 })
 
 const open = defineModel<boolean>('open', { required: true })
-
-type ExistingForm = {
-  user_id: string | undefined
-  role: ProjectRole
-}
-
-type NewAccountForm = {
-  name: string
-  email: string
-  password: string
-  password_confirmation: string
-  role: ProjectRole
-}
 
 type AccountForm = {
   name: string
@@ -37,7 +34,6 @@ type AccountForm = {
   password_confirmation: string
 }
 
-const UAvatar = resolveComponent('UAvatar')
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
 const UCheckbox = resolveComponent('UCheckbox')
@@ -45,7 +41,6 @@ const toast = useToast()
 const table = useTemplateRef('table')
 const {
   attachProjectUser,
-  createProjectUserAccount,
   deleteTenantUser,
   loadAvailableProjectUsers,
   loadProjectUsers,
@@ -54,42 +49,26 @@ const {
   updateTenantUser
 } = useAdmin()
 
-const users = ref<ProjectUser[]>([])
-const availableUsers = ref<AvailableProjectUser[]>([])
+const allUsers = ref<ProjectMemberRow[]>([])
 const loading = ref(false)
 const search = ref('')
-const roleFilter = ref<'all' | ProjectRole>('all')
+const roleFilter = ref<'all' | 'assigned' | 'unassigned' | ProjectRole>('all')
 const columnVisibility = ref()
 const pagination = ref({ pageIndex: 0, pageSize: 10 })
-const rowSelection = ref<Record<string, boolean>>({})
-const addOpen = ref(false)
-const addMode = ref<'existing' | 'new'>('existing')
-const addLoading = ref(false)
+const pendingUserIds = ref<Set<string>>(new Set())
+
 const editRoleOpen = ref(false)
 const editRoleLoading = ref(false)
+const editRoleState = reactive<{ role: ProjectRole }>({
+  role: 'viewer'
+})
+
 const editAccountOpen = ref(false)
 const editAccountLoading = ref(false)
-const removeOpen = ref(false)
-const removeLoading = ref(false)
 const deleteAccountOpen = ref(false)
 const deleteAccountLoading = ref(false)
-const selectedUser = ref<ProjectUser | null>(null)
-const usersToRemove = ref<ProjectUser[]>([])
+const selectedUser = ref<ProjectMemberRow | null>(null)
 
-const existingSchema = z.object({
-  user_id: z.string().uuid('Select a user'),
-  role: projectRoleSchema
-})
-const newAccountSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters').max(255, 'Name is too long'),
-  email: z.string().email('Enter a valid email address'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
-  password_confirmation: z.string().min(8, 'Confirm the password'),
-  role: projectRoleSchema
-}).refine(value => value.password === value.password_confirmation, {
-  message: 'Passwords do not match',
-  path: ['password_confirmation']
-})
 const accountSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(255, 'Name is too long'),
   email: z.string().email('Enter a valid email address'),
@@ -99,50 +78,59 @@ const accountSchema = z.object({
   message: 'Passwords do not match',
   path: ['password_confirmation']
 })
-
-const existingState = reactive<ExistingForm>({
-  user_id: undefined,
-  role: 'viewer'
-})
-const newAccountState = reactive<NewAccountForm>({
-  name: '',
-  email: '',
-  password: '',
-  password_confirmation: '',
-  role: 'viewer'
-})
 const accountState = reactive<AccountForm>({
   name: '',
   email: '',
   password: '',
   password_confirmation: ''
 })
-
 const roleOptions = [
   { label: 'Admin', value: 'admin' as const },
   { label: 'Engineer', value: 'engineer' as const },
   { label: 'Operator', value: 'operator' as const },
   { label: 'Viewer', value: 'viewer' as const }
 ]
-const roleFilterOptions = [{ label: 'All roles', value: 'all' as const }, ...roleOptions]
-const title = computed(() => props.project === null ? 'Project users' : `${props.project.name} users`)
-const filteredUsers = computed(() => {
-  const query = search.value.toLowerCase()
 
-  return users.value.filter((user) => {
+const roleFilterOptions = [
+  { label: 'All users', value: 'all' as const },
+  { label: 'Assigned', value: 'assigned' as const },
+  { label: 'Unassigned', value: 'unassigned' as const },
+  ...roleOptions
+]
+
+const title = computed(() => props.project === null ? 'Project users' : `${props.project.name} users`)
+
+const sortedUsers = computed(() => {
+  return [...allUsers.value].sort((a, b) => {
+    if (a.is_assigned !== b.is_assigned) {
+      return a.is_assigned ? -1 : 1
+    }
+    return a.name.localeCompare(b.name)
+  })
+})
+
+const filteredUsers = computed(() => {
+  const query = search.value.toLowerCase().trim()
+
+  return sortedUsers.value.filter((user) => {
     const matchesSearch = query === ''
       || user.name.toLowerCase().includes(query)
       || user.email.toLowerCase().includes(query)
-    const matchesRole = roleFilter.value === 'all' || user.role === roleFilter.value
 
-    return matchesSearch && matchesRole
+    let matchesFilter = true
+    if (roleFilter.value === 'assigned') {
+      matchesFilter = user.is_assigned
+    } else if (roleFilter.value === 'unassigned') {
+      matchesFilter = !user.is_assigned
+    } else if (roleFilter.value !== 'all') {
+      matchesFilter = user.is_assigned && user.role === roleFilter.value
+    }
+
+    return matchesSearch && matchesFilter
   })
 })
-const selectedUsers = computed(() => users.value.filter(user => rowSelection.value[user.id] === true))
-const availableOptions = computed(() => availableUsers.value.map(user => ({
-  label: `${user.name} (${user.email})`,
-  value: user.id
-})))
+
+const assignedUsers = computed(() => allUsers.value.filter(user => user.is_assigned))
 
 function roleLabel(role: ProjectRole): string {
   return roleOptions.find(option => option.value === role)?.label ?? role
@@ -156,13 +144,28 @@ async function reload(): Promise<void> {
   loading.value = true
 
   try {
-    const [projectUsers, available] = await Promise.all([
+    const [projectUsers, availableUsers] = await Promise.all([
       loadProjectUsers(props.tenantId, props.project.id),
       loadAvailableProjectUsers(props.tenantId, props.project.id)
     ])
-    users.value = projectUsers
-    availableUsers.value = available
-    rowSelection.value = {}
+
+    const rows: ProjectMemberRow[] = availableUsers.map(user => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: 'viewer' as const,
+      is_assigned: false
+    }))
+
+    rows.push(...projectUsers.map(user => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      is_assigned: true
+    })))
+
+    allUsers.value = rows
   } catch (error: unknown) {
     if (!(error instanceof ApiError)) {
       throw error
@@ -174,88 +177,55 @@ async function reload(): Promise<void> {
   }
 }
 
-function resetAddState(): void {
-  existingState.user_id = undefined
-  existingState.role = 'viewer'
-  newAccountState.name = ''
-  newAccountState.email = ''
-  newAccountState.password = ''
-  newAccountState.password_confirmation = ''
-  newAccountState.role = 'viewer'
-}
-
-function openAdd(): void {
-  resetAddState()
-  addMode.value = 'existing'
-  addOpen.value = true
-}
-
-function openRoleEdit(user: ProjectUser): void {
-  selectedUser.value = user
-  editRoleOpen.value = true
-}
-
-function openAccountEdit(user: ProjectUser): void {
-  selectedUser.value = user
-  accountState.name = user.name
-  accountState.email = user.email
-  accountState.password = ''
-  accountState.password_confirmation = ''
-  editAccountOpen.value = true
-}
-
-function openRemove(usersForRemoval: ProjectUser[]): void {
-  usersToRemove.value = usersForRemoval
-  removeOpen.value = true
-}
-
-async function submitExisting(event: FormSubmitEvent<ExistingForm>): Promise<void> {
-  if (props.tenantId === null || props.project === null || event.data.user_id === undefined) {
-    throw new Error('A project and user are required before assignment.')
-  }
-
-  addLoading.value = true
-
-  try {
-    await attachProjectUser(props.tenantId, props.project.id, {
-      user_id: event.data.user_id,
-      role: event.data.role
-    })
-    await reload()
-    addOpen.value = false
-    toast.add({ title: 'User added', description: 'The user has been assigned to the project.', color: 'success' })
-  } catch (error: unknown) {
-    if (!(error instanceof ApiError)) {
-      throw error
-    }
-
-    toast.add({ title: 'Unable to add user', description: error.message, color: 'error' })
-  } finally {
-    addLoading.value = false
-  }
-}
-
-async function submitNewAccount(event: FormSubmitEvent<NewAccountForm>): Promise<void> {
+async function toggleUserAssignment(user: ProjectMemberRow): Promise<void> {
   if (props.tenantId === null || props.project === null) {
-    throw new Error('A project is required before creating a user.')
+    return
   }
 
-  addLoading.value = true
+  const willAssign = !user.is_assigned
+  pendingUserIds.value.add(user.id)
 
   try {
-    await createProjectUserAccount(props.tenantId, props.project.id, event.data)
-    await reload()
-    addOpen.value = false
-    toast.add({ title: 'User created', description: 'The account has been assigned to the project.', color: 'success' })
+    if (willAssign) {
+      await attachProjectUser(props.tenantId, props.project.id, {
+        user_id: user.id,
+        role: user.role
+      })
+      user.is_assigned = true
+      toast.add({
+        title: 'User assigned',
+        description: `${user.name} has been added to ${props.project.name}.`,
+        color: 'success'
+      })
+    } else {
+      await removeProjectUser(props.tenantId, props.project.id, user.id)
+      user.is_assigned = false
+      toast.add({
+        title: 'User removed',
+        description: `${user.name} has been removed from ${props.project.name}.`,
+        color: 'success'
+      })
+    }
+    allUsers.value = [...allUsers.value]
   } catch (error: unknown) {
     if (!(error instanceof ApiError)) {
       throw error
     }
 
-    toast.add({ title: 'Unable to create user', description: error.message, color: 'error' })
+    toast.add({
+      title: willAssign ? 'Unable to assign user' : 'Unable to remove user',
+      description: error.message,
+      color: 'error'
+    })
   } finally {
-    addLoading.value = false
+    pendingUserIds.value.delete(user.id)
   }
+}
+
+function openRoleEdit(user: ProjectMemberRow): void {
+  selectedUser.value = user
+  editRoleState.role = user.role
+  editRoleOpen.value = true
 }
 
 async function submitRole(event: FormSubmitEvent<{ role: ProjectRole }>): Promise<void> {
@@ -267,7 +237,8 @@ async function submitRole(event: FormSubmitEvent<{ role: ProjectRole }>): Promis
 
   try {
     await updateProjectUser(props.tenantId, props.project.id, selectedUser.value.id, event.data.role)
-    await reload()
+    selectedUser.value.role = event.data.role
+    allUsers.value = [...allUsers.value]
     editRoleOpen.value = false
     toast.add({ title: 'Role updated', description: 'The project role has been saved.', color: 'success' })
   } catch (error: unknown) {
@@ -279,6 +250,15 @@ async function submitRole(event: FormSubmitEvent<{ role: ProjectRole }>): Promis
   } finally {
     editRoleLoading.value = false
   }
+}
+
+function openAccountEdit(user: ProjectMemberRow): void {
+  selectedUser.value = user
+  accountState.name = user.name
+  accountState.email = user.email
+  accountState.password = ''
+  accountState.password_confirmation = ''
+  editAccountOpen.value = true
 }
 
 async function submitAccount(event: FormSubmitEvent<AccountForm>): Promise<void> {
@@ -299,7 +279,9 @@ async function submitAccount(event: FormSubmitEvent<AccountForm>): Promise<void>
         }
 
     await updateTenantUser(props.tenantId, selectedUser.value.id, payload)
-    await reload()
+    selectedUser.value.name = event.data.name
+    selectedUser.value.email = event.data.email
+    allUsers.value = [...allUsers.value]
     editAccountOpen.value = false
     toast.add({ title: 'Account updated', description: 'The account has been saved.', color: 'success' })
   } catch (error: unknown) {
@@ -310,29 +292,6 @@ async function submitAccount(event: FormSubmitEvent<AccountForm>): Promise<void>
     toast.add({ title: 'Unable to update account', description: error.message, color: 'error' })
   } finally {
     editAccountLoading.value = false
-  }
-}
-
-async function confirmRemove(): Promise<void> {
-  if (props.tenantId === null || props.project === null || usersToRemove.value.length === 0) {
-    throw new Error('A project user is required before removal.')
-  }
-
-  removeLoading.value = true
-
-  try {
-    await Promise.all(usersToRemove.value.map(user => removeProjectUser(props.tenantId as string, props.project?.id as string, user.id)))
-    await reload()
-    removeOpen.value = false
-    toast.add({ title: 'User removed', description: 'The user has been removed from the project.', color: 'success' })
-  } catch (error: unknown) {
-    if (!(error instanceof ApiError)) {
-      throw error
-    }
-
-    toast.add({ title: 'Unable to remove user', description: error.message, color: 'error' })
-  } finally {
-    removeLoading.value = false
   }
 }
 
@@ -359,30 +318,24 @@ async function confirmDeleteAccount(): Promise<void> {
   }
 }
 
-const columns: TableColumn<ProjectUser>[] = [
+const columns: TableColumn<ProjectMemberRow>[] = [
   {
     id: 'select',
-    header: ({ table }) => h(UCheckbox, {
-      'modelValue': table.getIsSomePageRowsSelected() ? 'indeterminate' : table.getIsAllPageRowsSelected(),
-      'onUpdate:modelValue': (value: boolean | 'indeterminate') => table.toggleAllPageRowsSelected(!!value),
-      'ariaLabel': 'Select all users'
-    }),
-    cell: ({ row }) => h(UCheckbox, {
-      'modelValue': row.getIsSelected(),
-      'onUpdate:modelValue': (value: boolean | 'indeterminate') => row.toggleSelected(!!value),
-      'ariaLabel': `Select ${row.original.name}`
-    })
+    header: () => h('span', { class: 'text-xs font-semibold text-muted' }, 'Member'),
+    cell: ({ row }) => {
+      const isPending = pendingUserIds.value.has(row.original.id)
+      return h(UCheckbox, {
+        'modelValue': row.original.is_assigned,
+        'disabled': isPending || loading.value,
+        'ariaLabel': `${row.original.is_assigned ? 'Remove' : 'Assign'} ${row.original.name}`,
+        'onUpdate:modelValue': () => void toggleUserAssignment(row.original)
+      })
+    }
   },
   {
     accessorKey: 'name',
     header: 'Name',
-    cell: ({ row }) => h('div', { class: 'flex items-center gap-3' }, [
-      h(UAvatar, { text: row.original.name.slice(0, 1).toUpperCase(), size: 'md' }),
-      h('div', undefined, [
-        h('p', { class: 'font-medium text-highlighted' }, row.original.name),
-        h('p', { class: 'text-muted' }, row.original.email)
-      ])
-    ])
+    cell: ({ row }) => h('span', { class: 'font-medium text-highlighted' }, row.original.name)
   },
   {
     accessorKey: 'email',
@@ -401,43 +354,46 @@ const columns: TableColumn<ProjectUser>[] = [
         class: '-mx-2.5',
         onClick: () => column.toggleSorting(column.getIsSorted() === 'asc')
       })
-    }
+    },
+    cell: ({ row }) => h('span', { class: 'text-muted' }, row.original.email)
   },
   {
     accessorKey: 'role',
     header: 'Project role',
-    cell: ({ row }) => h('div', { class: 'flex items-center gap-1.5' }, [
-      h(UBadge, {
-        color: row.original.role === 'admin' ? 'primary' : 'neutral',
-        variant: 'subtle'
-      }, () => roleLabel(row.original.role)),
-      h(UButton, {
-        'icon': 'i-lucide-pencil-line',
-        'color': 'neutral',
-        'variant': 'ghost',
-        'size': 'xs',
-        'aria-label': `Edit role for ${row.original.name}`,
-        'onClick': () => openRoleEdit(row.original)
-      })
-    ])
+    cell: ({ row }) => {
+      if (!row.original.is_assigned) {
+        return h('span', { class: 'text-xs text-muted' }, '—')
+      }
+
+      return h('div', { class: 'flex items-center gap-1.5' }, [
+        h(UBadge, {
+          color: row.original.role === 'admin' ? 'primary' : 'neutral',
+          variant: 'subtle'
+        }, () => roleLabel(row.original.role)),
+        h(UButton, {
+          'icon': 'i-lucide-pencil-line',
+          'color': 'neutral',
+          'variant': 'ghost',
+          'size': 'xs',
+          'aria-label': `Edit role for ${row.original.name}`,
+          'onClick': () => openRoleEdit(row.original)
+        })
+      ])
+    }
   },
   {
     id: 'actions',
+    header: 'Actions',
     cell: ({ row }) => h('div', { class: 'flex justify-end gap-1' }, [
-      h(UButton, {
-        'icon': 'i-lucide-user-pen',
-        'color': 'neutral',
-        'variant': 'ghost',
-        'aria-label': `Edit account for ${row.original.name}`,
-        'onClick': () => openAccountEdit(row.original)
-      }),
-      h(UButton, {
-        'icon': 'i-lucide-user-minus',
-        'color': 'error',
-        'variant': 'ghost',
-        'aria-label': `Remove ${row.original.name} from project`,
-        'onClick': () => openRemove([row.original])
-      }),
+      ...(props.canManageAccount
+        ? [h(UButton, {
+            'icon': 'i-lucide-user-pen',
+            'color': 'neutral',
+            'variant': 'ghost',
+            'aria-label': `Edit account for ${row.original.name}`,
+            'onClick': () => openAccountEdit(row.original)
+          })]
+        : []),
       ...(props.canDeleteAccount
         ? [h(UButton, {
             'icon': 'i-lucide-trash-2',
@@ -482,22 +438,12 @@ watch(
           />
           <div class="flex flex-wrap items-center gap-2">
             <USelect v-model="roleFilter" :items="roleFilterOptions" class="min-w-36" />
-            <UButton
-              v-if="selectedUsers.length > 0"
-              label="Remove selected"
-              color="error"
-              variant="subtle"
-              icon="i-lucide-user-minus"
-              @click="openRemove(selectedUsers)"
-            />
-            <UButton label="Add user" icon="i-lucide-user-plus" @click="openAdd" />
           </div>
         </div>
 
         <UTable
           ref="table"
           v-model:column-visibility="columnVisibility"
-          v-model:row-selection="rowSelection"
           v-model:pagination="pagination"
           :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
           :data="filteredUsers"
@@ -515,7 +461,7 @@ watch(
 
         <div class="flex items-center justify-between gap-3 border-t border-default pt-4">
           <div class="text-sm text-muted">
-            {{ selectedUsers.length }} selected of {{ filteredUsers.length }} user(s).
+            {{ assignedUsers.length }} assigned of {{ filteredUsers.length }} user(s).
           </div>
           <UPagination
             :default-page="pagination.pageIndex + 1"
@@ -528,97 +474,18 @@ watch(
     </template>
   </UModal>
 
-  <UModal v-model:open="addOpen" title="Add project user">
-    <template #body>
-      <div class="flex flex-col gap-4">
-        <USelect
-          v-model="addMode"
-          :items="[
-            { label: 'Existing tenant user', value: 'existing' },
-            { label: 'Create new account', value: 'new' }
-          ]"
-        />
-
-        <UForm
-          v-if="addMode === 'existing'"
-          :schema="existingSchema"
-          :state="existingState"
-          :disabled="addLoading"
-          class="space-y-4"
-          @submit="submitExisting"
-        >
-          <UFormField name="user_id" label="User" required>
-            <USelect
-              v-model="existingState.user_id"
-              :items="availableOptions"
-              class="w-full"
-              placeholder="Select a tenant user"
-            />
-          </UFormField>
-          <UFormField name="role" label="Project role" required>
-            <USelect v-model="existingState.role" :items="roleOptions" class="w-full" />
-          </UFormField>
-          <div class="flex justify-end gap-2">
-            <UButton
-              label="Cancel"
-              color="neutral"
-              variant="subtle"
-              @click="addOpen = false"
-            />
-            <UButton label="Add user" type="submit" :loading="addLoading" />
-          </div>
-        </UForm>
-
-        <UForm
-          v-else
-          :schema="newAccountSchema"
-          :state="newAccountState"
-          :disabled="addLoading"
-          class="space-y-4"
-          @submit="submitNewAccount"
-        >
-          <UFormField name="name" label="Name" required>
-            <UInput v-model="newAccountState.name" class="w-full" />
-          </UFormField>
-          <UFormField name="email" label="Email" required>
-            <UInput v-model="newAccountState.email" type="email" class="w-full" />
-          </UFormField>
-          <UFormField name="password" label="Password" required>
-            <UInput v-model="newAccountState.password" type="password" class="w-full" />
-          </UFormField>
-          <UFormField name="password_confirmation" label="Confirm password" required>
-            <UInput v-model="newAccountState.password_confirmation" type="password" class="w-full" />
-          </UFormField>
-          <UFormField name="role" label="Project role" required>
-            <USelect v-model="newAccountState.role" :items="roleOptions" class="w-full" />
-          </UFormField>
-          <div class="flex justify-end gap-2">
-            <UButton
-              label="Cancel"
-              color="neutral"
-              variant="subtle"
-              @click="addOpen = false"
-            />
-            <UButton label="Create user" type="submit" :loading="addLoading" />
-          </div>
-        </UForm>
-      </div>
-    </template>
-  </UModal>
-
   <UModal v-model:open="editRoleOpen" title="Edit project role">
     <template #body>
       <UForm
         :schema="z.object({ role: projectRoleSchema })"
-        :state="selectedUser ?? { role: 'viewer' }"
+        :state="editRoleState"
         class="space-y-4"
         :disabled="editRoleLoading"
         @submit="submitRole"
       >
         <UFormField name="role" label="Project role" required>
           <USelect
-            v-if="selectedUser !== null"
-            v-model="selectedUser.role"
+            v-model="editRoleState.role"
             :items="roleOptions"
             class="w-full"
           />
@@ -669,14 +536,6 @@ watch(
       </UForm>
     </template>
   </UModal>
-
-  <ConfirmDeleteModal
-    v-model:open="removeOpen"
-    :title="`Remove ${usersToRemove.length} user${usersToRemove.length === 1 ? '' : 's'} from project`"
-    description="The account will remain in the tenant."
-    :loading="removeLoading"
-    @confirm="confirmRemove"
-  />
 
   <ConfirmDeleteModal
     v-model:open="deleteAccountOpen"

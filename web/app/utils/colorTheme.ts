@@ -12,6 +12,8 @@ export const colorPreferenceSchema = z.object({
   neutral: z.enum(neutralColors)
 })
 
+export type ColorPreference = z.infer<typeof colorPreferenceSchema>
+
 export function getBrandLogoDataUri(primaryColor: string): string {
   const color = colorPreferenceSchema.shape.primary.parse(primaryColor)
   const stroke = color === 'green' ? '#00c16a' : colors[color][500]

@@ -4,6 +4,7 @@ import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
 import { useMqttCaCertificateDownload } from '~/composables/useMqttCaCertificateDownload'
 import { useTenantContext } from '~/composables/useTenantContext'
+import { canDeleteProjectData, canWriteProjectData } from '~/utils/projectPermissions'
 import type {
   AdminTableRow,
   Device,
@@ -102,6 +103,33 @@ const projects = computed(() => response.value?.projects ?? [])
 const projectOptions = computed(() => [
   ...projects.value.map(project => ({ label: project.name, value: project.id }))
 ])
+function canWriteProject(projectId: string): boolean {
+  const project = projects.value.find(item => item.id === projectId)
+
+  if (project === undefined) {
+    throw new Error('The device project is not available.')
+  }
+
+  return canWriteProjectData(project.role, canManageActiveTenant.value)
+}
+
+function canDeleteProject(projectId: string): boolean {
+  const project = projects.value.find(item => item.id === projectId)
+
+  if (project === undefined) {
+    throw new Error('The device project is not available.')
+  }
+
+  return canDeleteProjectData(project.role, canManageActiveTenant.value)
+}
+
+const writableProjects = computed(() => projects.value.filter(project => canWriteProject(project.id)))
+const writableProjectOptions = computed(() => [
+  ...writableProjects.value.map(project => ({ label: project.name, value: project.id }))
+])
+const canCreateDevice = computed(() => writableProjects.value.length > 0)
+const canManageCredentials = computed(() => credentialsDevice.value !== null
+  && canWriteProject(credentialsDevice.value.project_id))
 const projectFilterOptions = computed(() => [
   { label: 'All projects', value: null },
   ...projectOptions.value
@@ -168,7 +196,7 @@ function connectionStateLabelFor(connectionState: DeviceConnectionState | undefi
 
 function openCreate(): void {
   editingDevice.value = null
-  selectedProjectId.value = projects.value[0]?.id ?? null
+  selectedProjectId.value = writableProjects.value[0]?.id ?? null
   selectedEquipmentAssetId.value = null
   formOpen.value = true
 }
@@ -364,34 +392,49 @@ const columns: TableColumn<AdminTableRow>[] = [
   },
   {
     id: 'actions',
-    header: '',
-    cell: ({ row }) => h('div', { class: 'flex justify-end gap-1' }, [
-      h(UButton, {
-        'icon': 'i-lucide-key-round',
-        'color': 'neutral',
-        'variant': 'ghost',
-        'aria-label': `Manage credentials for ${row.original.name}`,
-        'onClick': () => openCredentials(row.original.id)
-      }),
-      ...(canManageActiveTenant.value
-        ? [
-            h(UButton, {
-              'icon': 'i-lucide-pencil',
-              'color': 'neutral',
-              'variant': 'ghost',
-              'aria-label': `Edit ${row.original.name}`,
-              'onClick': () => openEdit(row.original.id)
-            }),
-            h(UButton, {
-              'icon': 'i-lucide-trash-2',
-              'color': 'error',
-              'variant': 'ghost',
-              'aria-label': `Delete ${row.original.name}`,
-              'onClick': () => openDelete(row.original.id)
-            })
-          ]
-        : [])
-    ])
+    header: 'Actions',
+    cell: ({ row }) => {
+      const projectId = row.original.project_id
+
+      if (projectId === undefined) {
+        throw new Error('The device project is missing.')
+      }
+
+      const actions: ReturnType<typeof h>[] = []
+
+      if (canWriteProject(projectId)) {
+        actions.push(
+          h(UButton, {
+            'icon': 'i-lucide-key-round',
+            'color': 'neutral',
+            'variant': 'ghost',
+            'aria-label': `Manage credentials for ${row.original.name}`,
+            'onClick': () => openCredentials(row.original.id)
+          }),
+          h(UButton, {
+            'icon': 'i-lucide-pencil',
+            'color': 'neutral',
+            'variant': 'ghost',
+            'aria-label': `Edit ${row.original.name}`,
+            'onClick': () => openEdit(row.original.id)
+          })
+        )
+      }
+
+      if (canDeleteProject(projectId)) {
+        actions.push(h(UButton, {
+          'icon': 'i-lucide-trash-2',
+          'color': 'error',
+          'variant': 'ghost',
+          'aria-label': `Delete ${row.original.name}`,
+          'onClick': () => openDelete(row.original.id)
+        }))
+      }
+
+      return actions.length > 0
+        ? h('div', { class: 'flex justify-end gap-1' }, actions)
+        : null
+    }
   }
 ]
 
@@ -414,7 +457,7 @@ const errorMessage = computed(() => {
 
         <template #right>
           <UButton
-            v-if="canManageActiveTenant"
+            v-if="canCreateDevice"
             label="Add device"
             icon="i-lucide-plus"
             @click="openCreate"
@@ -469,7 +512,7 @@ const errorMessage = computed(() => {
         v-model:equipment-asset-id="selectedEquipmentAssetId"
         resource-type="device"
         :resource="editingDevice"
-        :project-options="projectOptions"
+        :project-options="writableProjectOptions"
         :equipment-asset-options="equipmentAssetOptions"
         :loading="formLoading"
         @submit-device="saveDevice"
@@ -479,7 +522,7 @@ const errorMessage = computed(() => {
         v-model:open="credentialsOpen"
         :tenant-id="activeTenantId"
         :device="credentialsDevice"
-        :can-manage="canManageActiveTenant"
+        :can-manage="canManageCredentials"
         @updated="refresh"
       />
 
