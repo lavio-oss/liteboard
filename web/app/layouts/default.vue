@@ -34,20 +34,6 @@ const adminLinks = [{
   label: 'Users',
   icon: 'i-lucide-users',
   to: '/admin/users'
-}, {
-  label: 'Settings',
-  to: '/settings',
-  icon: 'i-lucide-settings',
-  defaultOpen: true,
-  type: 'trigger' as const,
-  children: [{
-    label: 'General',
-    to: '/settings',
-    exact: true
-  }, {
-    label: 'Security',
-    to: '/settings/security'
-  }]
 }] satisfies NavigationMenuItem[]
 
 const liteboardLinks = [{
@@ -62,20 +48,6 @@ const liteboardLinks = [{
   label: 'Devices',
   icon: 'i-lucide-router',
   to: '/devices'
-}, {
-  label: 'Settings',
-  to: '/settings',
-  icon: 'i-lucide-settings',
-  defaultOpen: true,
-  type: 'trigger' as const,
-  children: [{
-    label: 'General',
-    to: '/settings',
-    exact: true
-  }, {
-    label: 'Security',
-    to: '/settings/security'
-  }]
 }] satisfies NavigationMenuItem[]
 
 const links = computed<NavigationMenuItem[][]>(() => [

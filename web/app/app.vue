@@ -1,6 +1,7 @@
 <script setup lang="ts">
 const colorMode = useColorMode()
 const { isLoading } = useLoadingIndicator({ throttle: 200 })
+const { isScreenLoading } = useScreenLoading()
 const brandLogo = useBrandLogo()
 
 const color = computed(() => colorMode.value === 'dark' ? '#1b1718' : 'white')
@@ -42,7 +43,7 @@ useSeoMeta({
       leave-to-class="opacity-0"
     >
       <div
-        v-if="isLoading"
+        v-if="isLoading || isScreenLoading"
         role="status"
         aria-live="polite"
         class="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-3 bg-default/70 backdrop-blur-sm"

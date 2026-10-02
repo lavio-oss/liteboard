@@ -44,9 +44,14 @@ const { data: response, status, error, refresh } = await useAsyncData('tenants',
   api.request('/api/tenants', tenantCollectionResponseSchema)
 )
 
-function resetFilters(): void {
+const { withScreenLoading } = useScreenLoading()
+
+async function resetFilters(): Promise<void> {
   search.value = ''
   statusFilter.value = 'all'
+  await withScreenLoading(async () => {
+    await refresh()
+  }, 400)
 }
 
 const tenants = computed(() => response.value?.data ?? [])
@@ -340,7 +345,7 @@ const errorMessage = computed(() => {
               />
             </UDropdownMenu>
 
-            <ResetFiltersButton @click="resetFilters" />
+            <ResetFiltersButton :loading="status === 'pending'" @click="resetFilters" />
           </div>
         </div>
 

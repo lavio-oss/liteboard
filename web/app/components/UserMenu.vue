@@ -45,9 +45,17 @@ const items = computed<DropdownMenuItem[][]>(() => ([
     label: authenticatedUser.value.name
   }],
   [{
-    label: 'Profile',
-    icon: 'i-lucide-user',
-    to: '/settings'
+    label: 'Settings',
+    icon: 'i-lucide-settings',
+    children: [{
+      label: 'General',
+      icon: 'i-lucide-user',
+      to: '/settings'
+    }, {
+      label: 'Security',
+      icon: 'i-lucide-shield',
+      to: '/settings/security'
+    }]
   }, {
     label: `Timezone (${utcLabel.value})`,
     icon: 'i-lucide-globe',

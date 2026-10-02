@@ -13,6 +13,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   reset: []
+  reload: []
 }>()
 
 const table = useTemplateRef('table')
@@ -24,11 +25,57 @@ const pagination = ref({
 })
 const search = ref('')
 const statusFilter = ref<'all' | AdminTableRow['status']>('all')
+const isReloading = ref(false)
+const minLoading = ref(false)
+let minLoadingTimer: ReturnType<typeof setTimeout> | undefined
+let loadingStartTime = 0
 
-function resetFilters(): void {
+const { withScreenLoading } = useScreenLoading()
+
+watch(() => props.loading, (loading) => {
+  if (loading) {
+    loadingStartTime = Date.now()
+    minLoading.value = true
+    if (minLoadingTimer) {
+      clearTimeout(minLoadingTimer)
+      minLoadingTimer = undefined
+    }
+  } else if (minLoading.value) {
+    const elapsed = Date.now() - loadingStartTime
+    const remaining = Math.max(0, 400 - elapsed)
+    if (remaining > 0) {
+      if (minLoadingTimer) clearTimeout(minLoadingTimer)
+      minLoadingTimer = setTimeout(() => {
+        minLoading.value = false
+        minLoadingTimer = undefined
+      }, remaining)
+    } else {
+      minLoading.value = false
+    }
+  }
+}, { immediate: true })
+
+onScopeDispose(() => {
+  if (minLoadingTimer) {
+    clearTimeout(minLoadingTimer)
+  }
+})
+
+const effectiveLoading = computed(() => Boolean(props.loading || minLoading.value || isReloading.value))
+
+async function resetFilters(): Promise<void> {
   search.value = ''
   statusFilter.value = 'all'
   emit('reset')
+  emit('reload')
+  isReloading.value = true
+  try {
+    await withScreenLoading(async () => {
+      await refreshNuxtData()
+    }, 400)
+  } finally {
+    isReloading.value = false
+  }
 }
 
 function getColumnKey(column: TableColumn<AdminTableRow>): string {
@@ -108,7 +155,7 @@ watch(filteredData, () => {
         />
       </UDropdownMenu>
 
-      <ResetFiltersButton @click="resetFilters" />
+      <ResetFiltersButton :loading="effectiveLoading" @click="resetFilters" />
     </div>
   </div>
 
@@ -123,7 +170,7 @@ watch(filteredData, () => {
     class="shrink-0"
     :data="filteredData"
     :columns="columns"
-    :loading="loading"
+    :loading="effectiveLoading"
     :ui="{
       base: 'table-auto border-separate border-spacing-0',
       thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',

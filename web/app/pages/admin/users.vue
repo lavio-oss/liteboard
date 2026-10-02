@@ -41,10 +41,15 @@ const roleOptions = [
   { label: 'Member', value: 'member' as const }
 ]
 
-function resetFilters(): void {
+const { withScreenLoading } = useScreenLoading()
+
+async function resetFilters(): Promise<void> {
   search.value = ''
   roleFilter.value = 'all'
   pagination.value.pageIndex = 0
+  await withScreenLoading(async () => {
+    await reload()
+  }, 400)
 }
 
 const filteredUsers = computed(() => {
@@ -61,6 +66,7 @@ const filteredUsers = computed(() => {
 })
 const canManage = canManageActiveTenant
 const canDelete = computed(() => user.value?.system_role === 'platform_admin')
+const userLoading = ref(false)
 
 async function reload(): Promise<void> {
   if (tenantId.value === null || !canManage.value) {
@@ -68,6 +74,7 @@ async function reload(): Promise<void> {
     return
   }
 
+  userLoading.value = true
   try {
     users.value = await loadTenantUsers(tenantId.value)
   } catch (error: unknown) {
@@ -76,6 +83,8 @@ async function reload(): Promise<void> {
     }
 
     toast.add({ title: 'Unable to load users', description: error.message, color: 'error' })
+  } finally {
+    userLoading.value = false
   }
 }
 
@@ -313,7 +322,7 @@ watch(addRequested, (requested) => {
                 />
               </UDropdownMenu>
 
-              <ResetFiltersButton @click="resetFilters" />
+              <ResetFiltersButton :loading="userLoading" @click="resetFilters" />
             </div>
           </div>
 
