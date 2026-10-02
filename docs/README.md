@@ -8,7 +8,7 @@ Tài liệu này là điểm bắt đầu để hiểu các thành phần, biế
 - Thiết bị gửi MQTT qua **TLS cổng `8883`** vào Mosquitto. MQTT plaintext `1883` và WebSocket `9001` không được mở.
 - `telemetry-service/` nhận telemetry từ broker và cập nhật trạng thái online/last-seen của Device. Hiện service **chưa lưu payload telemetry vào bảng lịch sử**.
 - PostgreSQL lưu dữ liệu ứng dụng; Redis được Mosquitto dùng cho cache xác thực/ACL với TTL 5 giây.
-- Hiện thiết bị dùng MQTT Access Token. MQTT Basic, provisioning tự động và mTLS là kế hoạch tương lai.
+- Thiết bị đăng nhập MQTT bằng Access Token. Provisioning HTTPS tự động cấp Access Token là kế hoạch tiếp theo.
 
 ## Các thành phần
 
@@ -186,13 +186,13 @@ Nếu port database/API đã đổi trong `.env` gốc, cập nhật port tươn
 
 - **Đang dùng:** MQTT Access Token, TLS server-auth, ACL theo topic Device.
 - **Đã cấu hình trong repo, chờ nghiệm thu runtime:** mọi client dùng TLS `8883`; Docker broker end-to-end cần được chạy để xác nhận.
-- **Chưa triển khai:** MQTT Basic credential, bind `clientId`, provisioning tự động, mTLS và xoay vòng chứng chỉ thiết bị.
+- **Chưa triển khai:** provisioning HTTPS tự động, quota tài nguyên, kiểm tra telemetry nâng cao và quy trình xoay vòng chứng chỉ máy chủ.
 - **Provisioning:** trước khi gửi `provision_secret` hoặc trả access token, endpoint phải chạy qua HTTPS. MQTT TLS không mã hóa HTTP.
 
 ## Tài liệu chuyên sâu
 
 - [Kế hoạch và kiến trúc tổng thể](./plan.md)
 - [Kiến trúc Access Token và MQTT](./spec/devices/access_token_plan.md)
-- [Tiến độ thiết bị theo phase](./spec/devices/access_token_progress/phase-1-database-and-sql-views.md)
+- [Tiến độ thiết bị theo phase](./spec/devices/access_token_progress/README.md)
 - [Hướng dẫn vận hành Mosquitto/TLS](../infrastructure/mosquitto/README.md)
 - [Quy tắc toàn vẹn data contract](./DATA_CONTRACT_INTEGRITY_RULE.md)

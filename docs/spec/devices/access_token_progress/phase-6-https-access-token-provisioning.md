@@ -2,16 +2,16 @@
 
 > Mục tiêu: thiết bị mới tự đăng ký vào đúng Project khi khởi động lần đầu và nhận Access Token để kết nối MQTT.
 > Tham chiếu: mô hình provisioning của ThingsBoard; contract và tenant boundary được điều chỉnh cho LiteBoard.
-> Phạm vi lượt đầu: HTTP/HTTPS bootstrap, tạo Device và cấp Access Token hiện có. MQTT Basic, strict clientId binding và X.509 không thuộc tiêu chí hoàn thành.
+> Phạm vi: HTTPS bootstrap, tạo Device và cấp Access Token hiện có. Access Token là credential đăng nhập MQTT duy nhất.
 > Trạng thái: Planned — chưa triển khai.
 > Phụ thuộc: Laravel Control Plane, PostgreSQL, Mosquitto, simulator và ESP32 firmware.
-> Roadmap: [Access Token plan](../access_token_plan.md); xem riêng [MQTT Basic plan](../mqtt_basic_progress/mqtt-basic-and-client-id-plan.md) và [future hardening](../future_plans/future_device_security_and_ingestion_plan.md).
+> Roadmap: [Access Token plan](../access_token_plan.md) và [các phase tiếp theo](../future_plans/future_device_security_and_ingestion_plan.md).
 
 ## 1. Mục tiêu và tham chiếu ThingsBoard
 
 Phase này giải quyết bước onboarding đang thiếu: hiện quản trị viên phải tạo Device trước, sau đó cấu hình token vào firmware. Sau Phase 6, một thiết bị chưa đăng ký có thể gửi thông tin enrollment qua HTTPS; Control Plane xác thực profile, tạo Device trong Project đã được gán và trả credential.
 
-ThingsBoard dùng Device Profile có provisioning key và secret. Thiết bị gọi HTTP provisioning endpoint; khi request hợp lệ mà chưa có credential được cấp sẵn, nền tảng tạo Device và trả Access Token. HTTP provisioning của ThingsBoard hỗ trợ Access Token; MQTT Basic và X.509 provisioning dùng MQTT transport riêng. Tham khảo [ThingsBoard HTTP Provisioning](https://thingsboard.io/docs/reference/http-api/provisioning/) và [ThingsBoard MQTT Provisioning](https://thingsboard.io/docs/reference/mqtt-api/provisioning/).
+ThingsBoard dùng Device Profile có provisioning key và secret. Thiết bị gọi HTTP provisioning endpoint; khi request hợp lệ mà chưa có credential được cấp sẵn, nền tảng tạo Device và trả Access Token. LiteBoard tham khảo luồng này cho HTTPS bootstrap. Tham khảo [ThingsBoard HTTP Provisioning](https://thingsboard.io/docs/reference/http-api/provisioning/).
 
 LiteBoard áp dụng cùng vòng đời nhưng profile thuộc Project vì Device được quản lý theo Project. V1 chỉ cấp Access Token để tái sử dụng credential, broker auth và ACL đang có.
 
@@ -40,14 +40,12 @@ Các điểm kiểm tra chính: infrastructure/mosquitto/mosquitto.conf, infrast
 
 ### Ngoài phạm vi lượt đầu
 
-- MQTT Basic username/password và MQTT provisioning transport.
 - Lưu hoặc ràng buộc clientId với Device; strict binding tại CONNECT.
 - Thay Mosquitto hoặc thêm auth adapter mới.
-- X.509/mTLS, thuộc Phase 7.
 - Thay đổi telemetry ingestion hoặc chuyển xác thực publisher vào telemetry-service.
 - Giới hạn số phiên MQTT đồng thời. Đây là policy riêng; provisioning không làm tăng năng lực kết nối của broker.
 
-Access Token tiếp tục là credential mặc định. Không thêm lựa chọn credential_type trong profile V1; mọi thiết bị provisioned sử dụng mode đã vận hành hiện tại.
+Access Token tiếp tục là credential đăng nhập MQTT duy nhất. Không thêm lựa chọn credential_type trong profile V1; mọi thiết bị provisioned sử dụng mode đã vận hành hiện tại.
 
 ## 4. Contract provisioning
 
@@ -131,7 +129,7 @@ Vì secret dùng chung có phạm vi ảnh hưởng toàn profile nếu bị tr�
 - Chỉ phân phối profile secret qua quy trình firmware/manufacturing được kiểm soát; không nhúng một secret chung cho mọi Project vào firmware công khai.
 - Hỗ trợ disable/rotate profile secret, rate limit theo IP và profile, áp dụng quota Project, audit thao tác quản trị.
 - Không ghi provision_secret, Access Token hoặc credential response vào log.
-- Với production cần mức bảo đảm cao hơn, thiết kế per-device one-time claim code hoặc certificate enrollment ở phase riêng. Không coi device_code/MAC là secret.
+- Với production cần mức bảo đảm cao hơn, có thể thiết kế per-device one-time claim code trong một phase riêng. Không coi device_code/MAC là secret.
 
 ## 5. Luồng xử lý
 
@@ -173,7 +171,6 @@ Không mở MQTT plaintext 1883 hoặc WebSocket 9001. Bootstrap phải chạy q
 4. **HTTPS bootstrap:** validation, secret verification, tenant context, quota, idempotency, atomic Device + Access Token creation và response contract.
 5. **Clients:** simulator và ESP32 xác minh HTTPS certificate, bootstrap lần đầu, lưu Access Token, tái sử dụng sau reboot, kết nối MQTT TLS 8883 theo contract hiện có.
 6. **Runtime rollout:** chạy broker bằng image/version được pin; xác minh bootstrap + MQTT connect/publish thực tế qua CA/SAN production-equivalent.
-7. **Hạng mục tách riêng:** MQTT Basic/strict clientId binding chỉ bắt đầu khi có yêu cầu; PostgreSQL backend hiện tại của mosquitto-go-auth không cung cấp $3 cho clientId trong ACL SQL query. Phải có proof-of-concept từ chối clientId sai ngay tại CONNECT trước khi cam kết binding.
 
 ## 9. Tiêu chí nghiệm thu
 
@@ -191,7 +188,6 @@ Không mở MQTT plaintext 1883 hoặc WebSocket 9001. Bootstrap phải chạy q
 
 ## 10. Ngoài phạm vi và ghi chú hiện trạng
 
-- MQTT Basic và ThingsBoard MQTT provisioning được tách thành phase sau. Nếu cần hỗ trợ đúng mô hình đó, provisioning dùng MQTT transport và Basic credential sẽ được định nghĩa riêng; HTTP bootstrap Phase 6 chỉ trả Access Token.
 - Strict clientId binding chưa phải acceptance của Phase 6. Client ID hiện không thống nhất giữa Python simulator và ESP32, chưa lưu trong DB, và Access Token hiện không gắn với Client ID ở broker.
 - TLS listener 8883 có cấu hình nhưng runtime chưa được xác nhận ở lần đối chiếu ngày 2026-10-01.
 - mosquitto-go-auth hiện được cấu hình với tag latest chưa pin; pin artifact là điều kiện rollout broker, nhưng không cần đổi auth plugin chỉ để triển khai Access Token bootstrap.

@@ -1,6 +1,6 @@
 # Access Token: đặc tả, hiện trạng và kế hoạch
 
-> Cập nhật: 2026-10-01
+> Cập nhật: 2026-10-02
 > Phạm vi: Database, Laravel Control Plane, Mosquitto Broker (`mosquitto-go-auth`), Python Data Plane (`telemetry-service`), Simulator/ESP32 và Nuxt Web UI  
 > Phương án kiến trúc: **Phương án A** — Sử dụng `iegomez/mosquitto-go-auth` đọc trực tiếp PostgreSQL Views (`v_mqtt_users`, `v_mqtt_acls`) kết hợp Redis cache
 > Trạng thái: Access Token CRUD/MQTT baseline đã có; HTTPS provisioning bootstrap chưa triển khai. Xem [mục lục thiết bị](./README.md).
@@ -49,7 +49,7 @@ sequenceDiagram
     participant DP as Python Telemetry Service
     participant ESP as ESP32 / Simulator
 
-    User->>UI: Tạo Device (tự sinh hoặc nhập Access Token)
+    User->>UI: Tạo Device (hệ thống tự sinh Access Token)
     UI->>CP: POST /api/tenants/{tenant}/projects/{project}/devices
     CP->>PG: Transaction: INSERT devices & device_credentials
     CP-->>UI: Trả về DeviceResource
@@ -104,16 +104,15 @@ Các Phase 1–5 có implementation trong repository; trạng thái acceptance r
 
 The repository also contains TLS server-auth configuration for MQTT `8883`. Track that transport baseline separately: configuration and local certificate checks do not by themselves prove the broker runtime acceptance criteria. Do not conflate it with provisioning.
 
-## 4.2. Separate future tracks
+## 4.2. Các phase tiếp theo
 
 | Track | Scope | Specification | Status |
 |---|---|---|---|
-| MQTT Basic | Separate `clientId`/username/password mode and strict client-ID binding | [MQTT Basic plan](./mqtt_basic_progress/mqtt-basic-and-client-id-plan.md) | Future plan; not implemented |
-| Phase 7 | X.509/mTLS and certificate rotation | [Phase 7](./future_plans/phase-7-tls-8883-x509-and-cert-rotation.md) | Future plan |
+| Phase 7 | Nghiệm thu MQTT TLS server-auth và xoay vòng chứng chỉ máy chủ | [Phase 7](./future_plans/phase-7-mqtt-tls-server-certificate.md) | Future plan |
 | Phase 8 | Message/connection quotas and per-device rate limits | [Phase 8](./future_plans/phase-8-quotas-and-rate-limiting.md) | Future plan |
 | Phase 9 | Telemetry schema validation and replay/deduplication | [Phase 9](./future_plans/phase-9-schema-validation-and-replay-protection.md) | Future plan |
 
-See the [future hardening roadmap](./future_plans/future_device_security_and_ingestion_plan.md) for cross-track dependencies. MQTT Basic is deliberately not assigned to Phase 6 of the Access Token plan.
+See the [future hardening roadmap](./future_plans/future_device_security_and_ingestion_plan.md) for dependencies. Access Token remains the only Device MQTT credential throughout these phases.
 
 ---
 

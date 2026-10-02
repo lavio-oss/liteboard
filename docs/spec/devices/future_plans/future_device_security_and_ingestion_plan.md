@@ -1,60 +1,48 @@
-# Roadmap tương lai: Bảo mật Device và toàn vẹn Telemetry
+# Roadmap tiếp theo: TLS, quota và toàn vẹn Telemetry
 
-> Cập nhật: 2026-10-01  
-> Trạng thái: Tài liệu kế hoạch. Các hạng mục chưa triển khai trừ khi tài liệu phụ ghi rõ trạng thái khác.  
+> Cập nhật: 2026-10-02
+> Trạng thái: Tài liệu kế hoạch. Chỉ đánh dấu hoàn thành khi có implementation và kiểm tra runtime tương ứng.
 > Điều hướng: [Đặc tả Device](../README.md).
 
-## 1. Hiện trạng và phạm vi
+## 1. Hiện trạng và thứ tự
 
-Quản lý Device bằng Access Token, broker authentication/ACL, luồng telemetry và web UI đã có implementation theo [kế hoạch Access Token](../access_token_plan.md). Cấu hình MQTT TLS server-auth đã có, nhưng cần xác minh broker runtime bằng đúng broker artifact trước khi kết luận đã nghiệm thu.
+Device hiện xác thực MQTT bằng Access Token; broker auth/ACL, luồng telemetry và web UI đã có implementation theo [kế hoạch Access Token](../access_token_plan.md). Cấu hình MQTT TLS server-auth đã có nhưng broker runtime vẫn cần kiểm tra end-to-end. [Phase 6 HTTPS provisioning](../access_token_progress/phase-6-https-access-token-provisioning.md) là bước tiếp theo để Device tự đăng ký trong Project và nhận Access Token; chưa triển khai.
 
-Hạng mục Access Token tiếp theo là [Phase 6: HTTPS bootstrap](../access_token_progress/phase-6-https-access-token-provisioning.md). Hạng mục này tạo Device trong Project của provisioning profile và trả credential Access Token hiện có. Đây không phải MQTT Basic provisioning.
-
-Roadmap này theo dõi các hạng mục riêng hoặc triển khai sau:
-
-| Luồng | Phạm vi | Trạng thái | Đặc tả |
+| Phase | Phạm vi | Trạng thái | Đặc tả |
 |---|---|---|---|
-| MQTT Basic | `clientId`, username, password riêng; có thể thêm ràng buộc client ID và MQTT provisioning | Kế hoạch tương lai, chưa triển khai | [Kế hoạch MQTT Basic](../mqtt_basic_progress/mqtt-basic-and-client-id-plan.md) |
-| Phase 7 | Credential X.509/mTLS và rotate certificate | Kế hoạch tương lai | [Phase 7](./phase-7-tls-8883-x509-and-cert-rotation.md) |
-| Phase 8 | Giới hạn kích thước gói tin, số kết nối và tốc độ gửi theo Device | Kế hoạch tương lai | [Phase 8](./phase-8-quotas-and-rate-limiting.md) |
-| Phase 9 | Kiểm tra schema telemetry và chống replay/deduplication | Kế hoạch tương lai | [Phase 9](./phase-9-schema-validation-and-replay-protection.md) |
+| [Phase 6](../access_token_progress/phase-6-https-access-token-provisioning.md) | HTTPS provisioning theo Project, cấp Access Token | Chưa triển khai | [Progress](../access_token_progress/README.md) |
+| Phase 7 | Nghiệm thu MQTT TLS server-auth và quy trình xoay vòng chứng chỉ máy chủ | Chưa hoàn thành | [Phase 7](./phase-7-mqtt-tls-server-certificate.md) |
+| Phase 8 | Giới hạn kích thước gói tin, số kết nối và tốc độ gửi theo Device | Kế hoạch | [Phase 8](./phase-8-quotas-and-rate-limiting.md) |
+| Phase 9 | Kiểm tra schema telemetry và chống replay/deduplication | Kế hoạch | [Phase 9](./phase-9-schema-validation-and-replay-protection.md) |
 
-Không dùng một số Phase để gộp HTTPS Access Token bootstrap, MQTT Basic và TLS server-auth thành một tính năng. Mỗi luồng có contract và tiêu chí nghiệm thu riêng.
+Kiểm tra TLS runtime phục vụ cả baseline Access Token hiện tại và nghiệm thu Phase 6; không cần đợi Phase 7 để bắt đầu kiểm tra broker. Access Token vẫn là credential đăng nhập MQTT duy nhất của Device.
 
 ## 2. Kiến trúc mục tiêu
 
 ```mermaid
 flowchart LR
     Device[Device / Simulator]
-    Bootstrap[HTTPS Access Token bootstrap]
-    MQTTBasic[Luồng MQTT Basic trong tương lai]
-    Broker[Mosquitto hoặc broker được chọn]
+    Bootstrap[HTTPS provisioning]
     Control[Laravel Control Plane]
-    Telemetry[Telemetry service]
     DB[(PostgreSQL)]
+    Broker[Mosquitto TLS 8883]
+    Telemetry[Telemetry service]
     Redis[(Redis)]
 
     Device -->|đăng ký lần đầu| Bootstrap
     Bootstrap --> Control
-    Control --> DB
-    Device -->|MQTT TLS với credential đã cấp| Broker
-    Broker -->|telemetry hợp lệ| Telemetry
+    Control -->|tạo Device và Access Token| DB
+    Device -->|MQTT TLS bằng Access Token| Broker
+    Broker -->|telemetry/heartbeat| Telemetry
     Telemetry --> DB
-    MQTTBasic -. credential mode riêng .-> Broker
     Redis -. rate limit và dedup khi triển khai .-> Telemetry
 ```
 
-## 3. Các hạng mục
+## 3. Các hạng mục sau provisioning
 
-### MQTT Basic và client-ID binding
+### Phase 7: MQTT TLS server-auth
 
-Credential và broker auth hiện chỉ hỗ trợ Access Token. MQTT Basic trong tương lai cần credential type riêng, vòng đời credential, API/UI, broker authentication và topic ACL theo Device. Cần chứng minh broker/auth artifact đã pin từ chối client ID sai ngay tại CONNECT; việc client ID có mặt khi xét ACL không chứng minh được điều đó.
-
-Chưa quyết định thiết bị MQTT Basic dùng HTTPS bootstrap hay một MQTT provisioning transport riêng. Xem [kế hoạch MQTT Basic](../mqtt_basic_progress/mqtt-basic-and-client-id-plan.md).
-
-### Phase 7: X.509/mTLS
-
-Thêm danh tính certificate và khả năng revoke theo Device, listener mTLS riêng và thời gian chuyển tiếp an toàn khi rotate. Access Token và MQTT Basic dùng server-auth TLS phải tiếp tục hoạt động. Xem [Phase 7](./phase-7-tls-8883-x509-and-cert-rotation.md).
+Kiểm tra broker bằng artifact đã pin, xác minh CA/hostname, từ chối plaintext và chuẩn bị quy trình xoay vòng chứng chỉ máy chủ. Chứng chỉ máy chủ bảo vệ kết nối TLS; Device vẫn đăng nhập bằng Access Token. Xem [Phase 7](./phase-7-mqtt-tls-server-certificate.md).
 
 ### Phase 8: Kiểm soát tài nguyên
 
@@ -66,9 +54,8 @@ Kiểm tra payload theo schema có version, áp dụng chính sách timestamp v�
 
 ## 4. Nguyên tắc dùng chung
 
-- Device, credential, profile và quyền truy cập telemetry là dữ liệu tenant-owned thông qua Project. Dùng integration multi-tenancy hiện có để thiết lập organization context.
-- Không lấy `project_id` hoặc `tenant_id` do thiết bị gửi làm nguồn phân quyền.
-- Giữ tương thích Access Token khi thêm credential mode khác.
-- Không ghi provisioning secret, Access Token, MQTT password hoặc private key vào log.
+- Device, credential, provisioning profile và quyền truy cập telemetry là dữ liệu tenant-owned thông qua Project. Dùng integration multi-tenancy hiện có để thiết lập organization context.
+- Không lấy `project_id` hoặc `tenant_id` do thiết bị gửi làm nguồn phân quyền; cache, jobs, events và API/UI phải giữ đúng Project/Tenant.
+- Không ghi provisioning secret hoặc Access Token vào log.
 - Serial, `device_code` hay MAC dùng để nhận diện thiết bị; chúng không chứng minh thiết bị sở hữu secret.
-- Chỉ đánh dấu một luồng hoàn thành sau khi đạt cả tiêu chí runtime và negative-case trong đặc tả của luồng đó.
+- Chỉ đánh dấu một phase hoàn thành sau khi đạt cả tiêu chí runtime và trường hợp từ chối trong đặc tả của phase đó.
