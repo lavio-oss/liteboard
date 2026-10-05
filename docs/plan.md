@@ -473,10 +473,13 @@ Simulator (optional tools profile)
 - Keep application, database, Redis, and broker secrets separate. Use persistent volumes for state that must survive container restarts.
 - Every service has meaningful health/readiness checks. Broker readiness does not prove telemetry has been ingested or stored.
 - Record the real local startup workflow only after checking it against the repository and Compose paths.
+- For a local ESP32 enrollment smoke test, HTTP is available only when Laravel runs with `APP_ENV=local` and `DEVICE_PROVISIONING_ALLOW_INSECURE_HTTP=true`. The simulator requires HTTPS. Use an HTTPS staging endpoint to verify certificate handling; see the [Access Token provisioning flow](./spec/devices/access_token/README.md#provisioning-device-flow).
 
 ### Production deployment on a Linux host
 
-- Publish HTTP/WebSocket through a TLS reverse proxy and expose MQTT/TLS only when devices require public broker access.
+- Publish HTTP/WebSocket through a TLS reverse proxy. Use a production domain and trusted certificate, forward the original `Host`, client address and HTTPS scheme, and set Laravel `TRUSTED_PROXIES` only to the proxy addresses as seen by Laravel.
+- Point device provisioning URLs at the production HTTPS hostname and provision clients with the CA trust anchor for its certificate chain. Update the simulator CA file, `web/public/provisioning/ca.crt` download, and ESP32 CA header for the deployed endpoint; distribute only public certificates, never CA private keys.
+- Keep Laravel's upstream private to the proxy/network. Configure MQTT TLS and its certificate on Mosquitto independently; changing the HTTP reverse proxy does not move MQTT listener `8883`.
 - Do not expose PostgreSQL, Redis, or internal service ports publicly.
 - Scope broker credentials and ACLs to each Device's project/topic permissions.
 - Define resource limits, log rotation, monitoring, backup schedule, restore procedure, upgrade strategy, and operational ownership.

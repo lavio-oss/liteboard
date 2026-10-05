@@ -1,21 +1,20 @@
 # Roadmap tiếp theo: TLS, quota và toàn vẹn Telemetry
 
-> Cập nhật: 2026-10-02
+> Cập nhật: 2026-10-05
 > Trạng thái: Tài liệu kế hoạch. Chỉ đánh dấu hoàn thành khi có implementation và kiểm tra runtime tương ứng.
 > Điều hướng: [Đặc tả Device](../README.md).
 
 ## 1. Hiện trạng và thứ tự
 
-Device hiện xác thực MQTT bằng Access Token; broker auth/ACL, luồng telemetry và web UI đã có implementation theo [kế hoạch Access Token](../access_token_plan.md). Cấu hình MQTT TLS server-auth đã có nhưng broker runtime vẫn cần kiểm tra end-to-end. [Phase 6 HTTPS provisioning](../access_token_progress/phase-6-https-access-token-provisioning.md) là bước tiếp theo để Device tự đăng ký trong Project và nhận Access Token; chưa triển khai.
+Device hiện xác thực MQTT bằng Access Token; mô hình credential, hai luồng tạo Device và tenant boundary được mô tả trong [tài liệu Access Token](../access_token/README.md). Kế hoạch này chỉ theo dõi các phần hardening tiếp theo, gồm TLS production, quota kết nối/tốc độ và toàn vẹn telemetry.
 
 | Phase | Phạm vi | Trạng thái | Đặc tả |
 |---|---|---|---|
-| [Phase 6](../access_token_progress/phase-6-https-access-token-provisioning.md) | HTTPS provisioning theo Project, cấp Access Token | Chưa triển khai | [Progress](../access_token_progress/README.md) |
-| Phase 7 | Nghiệm thu MQTT TLS server-auth và quy trình xoay vòng chứng chỉ máy chủ | Chưa hoàn thành | [Phase 7](./phase-7-mqtt-tls-server-certificate.md) |
+| Phase 7 | Production-equivalent MQTT TLS server-auth và xoay vòng chứng chỉ máy chủ | Kế hoạch | [Phase 7](./phase-7-mqtt-tls-server-certificate.md) |
 | Phase 8 | Giới hạn kích thước gói tin, số kết nối và tốc độ gửi theo Device | Kế hoạch | [Phase 8](./phase-8-quotas-and-rate-limiting.md) |
 | Phase 9 | Kiểm tra schema telemetry và chống replay/deduplication | Kế hoạch | [Phase 9](./phase-9-schema-validation-and-replay-protection.md) |
 
-Kiểm tra TLS runtime phục vụ cả baseline Access Token hiện tại và nghiệm thu Phase 6; không cần đợi Phase 7 để bắt đầu kiểm tra broker. Access Token vẫn là credential đăng nhập MQTT duy nhất của Device.
+Access Token vẫn là credential đăng nhập MQTT duy nhất của Device. Provisioning chỉ cấp credential đó sau khi gán Device vào Project; việc duyệt mới quyết định Device có được MQTT broker cấp quyền hay không.
 
 ## 2. Kiến trúc mục tiêu
 

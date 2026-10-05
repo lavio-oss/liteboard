@@ -3,7 +3,7 @@
 > Trạng thái: Future plan — chưa triển khai.  
 > Thuộc kế hoạch: [future_device_security_and_ingestion_plan.md](./future_device_security_and_ingestion_plan.md)  
 > Tầng kiến trúc: **Laravel Control Plane (`telemetry_schemas`) + Python Data Plane (`telemetry-service`) + Redis + PostgreSQL**  
-> Phụ thuộc: [Phase 4](../access_token_progress/phase-4-telemetry-data-plane-and-edge.md), [Phase 8](./phase-8-quotas-and-rate-limiting.md)
+> Phụ thuộc: [luồng MQTT Access Token hiện hành](../access_token/README.md#mqtt-authentication), [Phase 8](./phase-8-quotas-and-rate-limiting.md)
 
 ---
 

@@ -8,7 +8,7 @@ Tài liệu này là điểm bắt đầu để hiểu các thành phần, biế
 - Thiết bị gửi MQTT qua **TLS cổng `8883`** vào Mosquitto. MQTT plaintext `1883` và WebSocket `9001` không được mở.
 - `telemetry-service/` nhận telemetry từ broker và cập nhật trạng thái online/last-seen của Device. Hiện service **chưa lưu payload telemetry vào bảng lịch sử**.
 - PostgreSQL lưu dữ liệu ứng dụng; Redis được Mosquitto dùng cho cache xác thực/ACL với TTL 5 giây.
-- Thiết bị đăng nhập MQTT bằng Access Token. Provisioning HTTPS tự động cấp Access Token là kế hoạch tiếp theo.
+- Thiết bị đăng nhập MQTT bằng Access Token. Provisioning tự tạo Device ở trạng thái chờ duyệt; broker chỉ cho Device kết nối sau khi được Project duyệt.
 
 ## Các thành phần
 
@@ -19,6 +19,7 @@ Tài liệu này là điểm bắt đầu để hiểu các thành phần, biế
 | `postgres` — PostgreSQL 16 | Database cho backend, thông tin Device/credential, view xác thực MQTT và trạng thái Device | Luôn cần |
 | `redis` — Redis 7 | Cache auth/ACL của Mosquitto | Luôn cần cho cấu hình broker hiện tại |
 | `mosquitto` — Mosquitto + `mosquitto-go-auth` | MQTT TLS listener, xác thực Access Token và ACL theo Device/topic | Cần khi có thiết bị hoặc simulator gửi MQTT |
+| Reverse proxy (deployment) | Nhận HTTPS provisioning và chuyển tiếp tới Laravel | Dùng Nginx hoặc reverse proxy có certificate hợp lệ khi kiểm thử HTTPS/deploy |
 | `telemetry-service/` — FastAPI + gmqtt | Subscribe telemetry/heartbeat, kiểm tra topic/JSON rồi cập nhật `connection_state` và `last_seen_at` | Cần cho luồng Device presence |
 | `simulator/` | Python publisher để tạo telemetry mẫu; có thêm sketch ESP32 | Chỉ chạy khi cần thử luồng thiết bị |
 
@@ -28,6 +29,8 @@ Tài liệu này là điểm bắt đầu để hiểu các thành phần, biế
 flowchart LR
     Browser[Trình duyệt] --> Web[Nuxt :3000]
     Web -->|REST + session| API[Laravel API :8800]
+    Provisioner[Simulator / ESP32] -->|HTTPS bootstrap :443| Proxy[Nginx / HTTPS endpoint]
+    Proxy -->|Forward HTTPS request| API
     API --> DB[(PostgreSQL :5432)]
 
     Device[Device / simulator] -->|MQTT TLS :8883| Broker[Mosquitto]
@@ -150,6 +153,8 @@ docker compose --profile tools run --rm simulator
 
 Simulator publish mỗi 5 giây qua TLS `8883`. Không commit access token. PLC không hỗ trợ MQTT TLS phải dùng gateway; broker trung tâm không có plaintext listener.
 
+Để thử enrollment lần đầu, simulator cần gọi HTTPS bootstrap và tin cậy CA của endpoint. ESP32 có thể dùng HTTP cho smoke test local khi backend cho phép insecure HTTP ở môi trường `local`; việc đó không kiểm tra TLS. Dùng Nginx hoặc endpoint HTTPS staging để nghiệm thu HTTPS thực tế. MQTT TLS `8883` vẫn do Mosquitto xử lý riêng.
+
 ## Chạy Nuxt/Laravel trực tiếp trên máy host
 
 Chỉ dùng cách này khi đang phát triển phần ứng dụng. Hãy dùng cách này thay cho full stack Docker; không chạy backend trong Docker và backend local cùng lúc trên cổng `8800`.
@@ -184,15 +189,14 @@ Nếu port database/API đã đổi trong `.env` gốc, cập nhật port tươn
 
 ## Trạng thái tính năng thiết bị
 
-- **Đang dùng:** MQTT Access Token, TLS server-auth, ACL theo topic Device.
-- **Đã cấu hình trong repo, chờ nghiệm thu runtime:** mọi client dùng TLS `8883`; Docker broker end-to-end cần được chạy để xác nhận.
-- **Chưa triển khai:** provisioning HTTPS tự động, quota tài nguyên, kiểm tra telemetry nâng cao và quy trình xoay vòng chứng chỉ máy chủ.
-- **Provisioning:** trước khi gửi `provision_secret` hoặc trả access token, endpoint phải chạy qua HTTPS. MQTT TLS không mã hóa HTTP.
+- **Thêm Device thủ công:** backend tạo Device và Access Token; người có quyền lấy cấu hình MQTT từ hộp thoại credentials.
+- **Provisioning:** backend cấp Access Token ngay nhưng giữ Device ở trạng thái `pending`; thao tác approve mở quyền MQTT, còn reject giữ token ngoài auth view.
+- **Hardening tiếp theo:** kiểm tra TLS production, quota kết nối/tốc độ, schema telemetry và quy trình xoay vòng chứng chỉ máy chủ.
+- **Transport provisioning:** trước khi gửi `provision_secret` hoặc trả access token, endpoint phải chạy qua HTTPS. MQTT TLS không mã hóa HTTP.
 
 ## Tài liệu chuyên sâu
 
 - [Kế hoạch và kiến trúc tổng thể](./plan.md)
-- [Kiến trúc Access Token và MQTT](./spec/devices/access_token_plan.md)
-- [Tiến độ thiết bị theo phase](./spec/devices/access_token_progress/README.md)
+- [Access Token: cơ sở và luồng hoạt động](./spec/devices/access_token/README.md)
 - [Hướng dẫn vận hành Mosquitto/TLS](../infrastructure/mosquitto/README.md)
 - [Quy tắc toàn vẹn data contract](./DATA_CONTRACT_INTEGRITY_RULE.md)

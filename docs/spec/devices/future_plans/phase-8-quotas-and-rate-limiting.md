@@ -1,9 +1,11 @@
 # Phase 8: Connection Quota, Message-Size Quota & Rate Limiting theo Thiết bị
 
+> Device-creation quota contract: `projects.max_devices_quota` is shared by manual creation and [Access Token provisioning](../access_token/README.md#provisioning-device-flow), and applies to every existing Device regardless of status or creation path. `null` is unlimited; `0` prevents new Devices. Both create paths and quota updates lock the Project row. Provisioning receipts use `profile_id + request_id` and a 24-hour retry window; that window is separate from the connection/message rate limits described in this plan.
+
 > Trạng thái: Future plan — chưa triển khai.  
 > Thuộc kế hoạch: [future_device_security_and_ingestion_plan.md](./future_device_security_and_ingestion_plan.md)  
 > Tầng kiến trúc: **Mosquitto/EMQX Broker + Python Data Plane (`telemetry-service`) + Redis**  
-> Phụ thuộc: [Phase 4](../access_token_progress/phase-4-telemetry-data-plane-and-edge.md)  
+> Phụ thuộc: [luồng MQTT Access Token hiện hành](../access_token/README.md#mqtt-authentication)
 
 ---
 
@@ -55,8 +57,8 @@ device_profiles (các cột quota)
    max_queued_messages 100
    ```
 2. **Ở cấp độ từng Thiết bị & Project/Tenant**:
-   - Chính sách dự kiến: mỗi `Device` chỉ duy trì **1 phiên kết nối đồng thời**. Cần chọn và kiểm chứng cơ chế broker thực thi chính sách này; không giả định client-ID binding thuộc Phase 6 Access Token bootstrap hoặc tự động bảo đảm quota.
-   - Giới hạn số lượng `active devices` được phép tạo và kích hoạt trên mỗi `Project` / `Tenant` (`projects.max_devices_quota`): kiểm tra ngay trong `StoreDeviceRequest` và View `v_mqtt_users`.
+   - Chính sách dự kiến: mỗi `Device` chỉ duy trì **1 phiên kết nối đồng thời**. Cần chọn và kiểm chứng cơ chế broker thực thi chính sách này; không giả định client-ID binding thuộc luồng Access Token/provisioning hoặc tự động bảo đảm quota.
+   - Giới hạn số Device được tạo trên mỗi Project (`projects.max_devices_quota`): dùng chung cho tạo thủ công và bootstrap provisioning, đếm mọi Device đang tồn tại (không chỉ active) từ các hàng Device thực tế. `null` là không giới hạn; `0` chặn tạo mới. Khóa row Project khi đổi quota hoặc tạo Device để các luồng đồng thời không vượt giới hạn. Đây là quota tạo Device, tách biệt với connection/message quota và không phải điều kiện lọc riêng trong `v_mqtt_users`.
 
 ---
 

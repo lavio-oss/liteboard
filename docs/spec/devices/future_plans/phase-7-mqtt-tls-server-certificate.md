@@ -1,12 +1,12 @@
 # Phase 7: MQTT TLS server-auth và xoay vòng chứng chỉ máy chủ
 
-> Trạng thái: Kế hoạch vận hành — chưa nghiệm thu runtime hoặc quy trình xoay vòng.
+> Trạng thái: Future plan — production-equivalent và quy trình xoay vòng chứng chỉ chưa được nghiệm thu.
 > Thuộc kế hoạch: [future_device_security_and_ingestion_plan.md](./future_device_security_and_ingestion_plan.md)
 > Phụ thuộc: MQTT Access Token auth/ACL hiện có và listener TLS `8883`.
 
 ## 1. Mục tiêu
 
-Repository đã cấu hình listener TLS `8883` và ví dụ client xác minh CA. Cần xác nhận broker chạy thật bằng artifact đã pin, chứng chỉ có SAN khớp host thiết bị sử dụng, và quy trình thay chứng chỉ máy chủ không làm gián đoạn Device quá thời gian cho phép. Đây là TLS server-auth; Access Token vẫn là credential đăng nhập MQTT của Device.
+Broker hiện cấu hình listener TLS `8883` và xác thực Access Token theo [luồng MQTT hiện hành](../access_token/README.md#mqtt-authentication). Phase 7 tập trung kiểm tra cấu hình production-equivalent, phân phối CA và thay chứng chỉ máy chủ mà không làm gián đoạn Device quá thời gian cho phép. Đây là TLS server-auth; Access Token vẫn là credential đăng nhập MQTT của Device.
 
 ## 2. Việc thực hiện
 
@@ -18,7 +18,6 @@ Repository đã cấu hình listener TLS `8883` và ví dụ client xác minh CA
 
 ## 3. Tiêu chí nghiệm thu
 
-- [ ] Broker thật dùng đúng artifact đã pin; client hợp lệ xác minh CA/hostname và kết nối qua `8883`.
-- [ ] Token/CA/hostname sai và plaintext `1883`/`9001` đều thất bại.
+- [ ] Trên cấu hình production-equivalent, xác nhận client hợp lệ dùng CA/hostname production; token/CA/hostname sai và plaintext `1883`/`9001` đều bị từ chối qua topology/firewall thực tế.
 - [ ] Sau khi xoay vòng chứng chỉ máy chủ, client kết nối lại được bằng Access Token và ACL tenant/project vẫn đúng.
 - [ ] Quy trình phân phối trust chain và khôi phục khi xoay vòng thất bại được ghi lại, thử nghiệm và có kết quả.
