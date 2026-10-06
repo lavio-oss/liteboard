@@ -10,25 +10,25 @@ from datetime import datetime, timezone
 from gmqtt import Client as MQTTClient
 
 from app.mqtt_tls import build_mqtt_ssl_context
+from app.provisioning import load_or_enroll, wait_for_approval
 
 
 async def main() -> None:
-    project_id = os.getenv('PROJECT_ID', '')
-    device_id = os.getenv('DEVICE_ID', '')
-    access_token = os.getenv('DEVICE_ACCESS_TOKEN', '')
-    if not project_id or not device_id or not access_token:
-        raise RuntimeError('PROJECT_ID, DEVICE_ID, and DEVICE_ACCESS_TOKEN environment variables are required.')
+    provisioned = await asyncio.to_thread(wait_for_approval, load_or_enroll())
+    project_id = provisioned['device']['project_id']
+    device_id = provisioned['device']['id']
+    access_token = provisioned['credentials']['access_token']
 
     client_id = f"sim-{device_id[:8]}"
     client = MQTTClient(client_id)
     client.set_auth_credentials(access_token, access_token)
     mqtt_tls_context = build_mqtt_ssl_context(os.getenv('MQTT_TLS_CA_FILE', '/run/secrets/mqtt_tls_ca_certificate'))
     await client.connect(
-        os.getenv('MQTT_HOST', 'localhost'),
-        int(os.getenv('MQTT_PORT', '8883')),
+        provisioned['mqtt']['host'],
+        provisioned['mqtt']['port'],
         ssl=mqtt_tls_context,
     )
-    topic = f"liteboard/{project_id}/devices/{device_id}/telemetry"
+    topic = provisioned['mqtt']['topics']['telemetry']
     interval_seconds = int(os.getenv('SIMULATOR_INTERVAL_SECONDS', '5'))
 
     try:

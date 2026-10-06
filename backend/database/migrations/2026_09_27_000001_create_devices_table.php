@@ -23,12 +23,14 @@ return new class extends Migration
             $table->string('code', 64);
             $table->text('description')->nullable();
             $table->string('status', 32)->default('active');
+            $table->string('approval_status', 32)->default('approved');
             $table->string('connection_state', 32)->default('offline');
             $table->timestampTz('last_seen_at')->nullable();
             $table->timestamps();
 
             $table->unique(['project_id', 'code']);
             $table->index(['project_id', 'status']);
+            $table->index(['project_id', 'approval_status']);
             $table->index(['project_id', 'equipment_asset_id']);
         });
     }

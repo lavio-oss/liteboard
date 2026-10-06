@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Modules\Admin\Enums\Device\DeviceApprovalStatus;
 use Modules\Admin\Enums\Device\DeviceConnectionState;
 use Modules\Admin\Enums\Device\DeviceStatus;
 use Modules\Admin\Models\Asset\Asset;
@@ -21,6 +22,7 @@ final class DeviceFactory extends Factory
      *     code: string,
      *     description: string|null,
      *     status: string,
+     *     approval_status: string,
      *     connection_state: string,
      *     last_seen_at: null
      * }
@@ -33,6 +35,7 @@ final class DeviceFactory extends Factory
             'code' => fake()->unique()->slug(2),
             'description' => fake()->optional()->sentence(),
             'status' => DeviceStatus::Active->value,
+            'approval_status' => DeviceApprovalStatus::Approved->value,
             'connection_state' => DeviceConnectionState::Offline->value,
             'last_seen_at' => null,
         ];

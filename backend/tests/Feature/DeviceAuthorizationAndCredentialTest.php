@@ -61,6 +61,7 @@ it('creates a device with an auto-generated access token and populates mqtt view
 
     $device = Device::query()->where('code', 'kiln-sensor-01')->firstOrFail();
     $this->assertTrue(Str::isUuid($device->id, 7));
+    config()->set('device_provisioning.mqtt_host', 'mqtt.liteboard.test');
 
     $response->assertJsonPath(
         'data.mqtt_topics.telemetry',
@@ -76,7 +77,15 @@ it('creates a device with an auto-generated access token and populates mqtt view
         ->assertJsonPath('data.device_id', $device->getKey())
         ->assertJsonPath('data.project_id', $project->getKey())
         ->assertJsonPath('data.credential_type', DeviceCredentialType::AccessToken->value)
-        ->assertJsonPath('data.status', DeviceCredentialStatus::Active->value);
+        ->assertJsonPath('data.status', DeviceCredentialStatus::Active->value)
+        ->assertJsonPath('data.mqtt.host', 'mqtt.liteboard.test')
+        ->assertJsonPath('data.mqtt.port', 8883)
+        ->assertJsonPath('data.mqtt.tls', true)
+        ->assertJsonPath('data.mqtt.topics.telemetry', "liteboard/$project->id/devices/$device->id/telemetry")
+        ->assertJsonPath('data.mqtt.topics.heartbeat', "liteboard/$project->id/devices/$device->id/heartbeat")
+        ->assertJsonPath('data.mqtt.topics.commands', "liteboard/$project->id/devices/$device->id/commands")
+        ->assertJsonPath('data.mqtt.topics.commands_ack', "liteboard/$project->id/devices/$device->id/commands/ack")
+        ->assertJsonPath('data.mqtt_topics.telemetry', "liteboard/$project->id/devices/$device->id/telemetry");
 
     $plainToken = (string) $credentialResponse->json('data.access_token');
     expect($plainToken)->toMatch('/^[0-9a-z]{20}$/');

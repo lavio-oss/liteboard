@@ -1,0 +1,11 @@
+#pragma once
+
+const char *LB_WIFI_SSID = "replace-me";
+const char *LB_WIFI_PASSWORD = "replace-me";
+const char *LB_PROVISION_KEY = "replace-me";
+const char *LB_PROVISION_SECRET = "replace-me";
+const char *LB_DEVICE_NAME = "ESP32 sensor";
+const char *LB_FIRMWARE_VERSION = "1.0.0";
+const char *LB_PROVISIONING_URL = "https://provisioning.example.invalid/api/device-provisioning/bootstrap";
+// Keep empty to use the broker host returned by provisioning. Set a LAN DNS name or IP from the broker certificate SAN for local testing.
+const char *LB_MQTT_HOST_OVERRIDE = "";

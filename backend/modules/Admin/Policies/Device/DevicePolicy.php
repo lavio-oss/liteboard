@@ -2,6 +2,7 @@
 
 namespace Modules\Admin\Policies\Device;
 
+use Modules\Admin\Enums\Device\DeviceApprovalStatus;
 use Modules\Admin\Enums\Project\ProjectRole;
 use Modules\Admin\Models\Device\Device;
 use Modules\Admin\Models\Project\Project;
@@ -32,6 +33,17 @@ final class DevicePolicy
     }
 
     public function manageCredentials(User $user, Device $device): bool
+    {
+        return $device->getAttribute('approval_status') === DeviceApprovalStatus::Approved
+            && $this->projectAllowsWrite($user, $this->projectFor($device));
+    }
+
+    public function approve(User $user, Device $device): bool
+    {
+        return $this->projectAllowsWrite($user, $this->projectFor($device));
+    }
+
+    public function reject(User $user, Device $device): bool
     {
         return $this->projectAllowsWrite($user, $this->projectFor($device));
     }

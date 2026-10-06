@@ -3,11 +3,15 @@ import type { TableColumn } from '@nuxt/ui'
 import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
 import { useMqttCaCertificateDownload } from '~/composables/useMqttCaCertificateDownload'
+import { useProvisioningCaCertificateDownload } from '~/composables/useProvisioningCaCertificateDownload'
 import { useTenantContext } from '~/composables/useTenantContext'
+import DeviceProvisioningModal from '~/components/DeviceProvisioningModal.vue'
 import { canDeleteProjectData, canWriteProjectData } from '~/utils/projectPermissions'
+import { initialProvisioningProjectId } from '~/utils/provisioning'
 import type {
   AdminTableRow,
   Device,
+  DeviceApprovalStatus,
   DeviceConnectionState,
   DeviceInput
 } from '~/types/admin'
@@ -20,10 +24,13 @@ const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
 const toast = useToast()
 const downloadMqttCaCertificate = useMqttCaCertificateDownload()
+const downloadProvisioningCaCertificate = useProvisioningCaCertificateDownload()
 const { activeTenantId, canManageActiveTenant, loadTenants } = useTenantContext()
 const {
   createDevice,
   deleteDevice,
+  approveDevice: submitDeviceApproval,
+  rejectDevice: submitDeviceRejection,
   loadDevices,
   loadTenantHierarchy,
   updateDevice
@@ -38,20 +45,26 @@ const editingDevice = ref<Device | null>(null)
 const deleteOpen = ref(false)
 const deleteLoading = ref(false)
 const deletingDevice = ref<Device | null>(null)
+const approvalActionDeviceId = ref<string | null>(null)
+const rejectionOpen = ref(false)
+const rejectionLoading = ref(false)
+const rejectingDevice = ref<Device | null>(null)
+const rejectionReason = ref('')
 const credentialsOpen = ref(false)
 const credentialsDevice = ref<Device | null>(null)
 const mqttGuideOpen = ref(false)
 const mqttGuideTab = ref('tls-ca')
+const provisioningOpen = ref(false)
+const provisioningProjectId = ref<string | null>(null)
 const mqttGuideTabs = [
   { label: 'TLS CA certificate', value: 'tls-ca', slot: 'tls-ca' },
-  { label: 'Access token', value: 'access-token', slot: 'access-token' }
+  { label: 'Access token', value: 'access-token', slot: 'access-token' },
+  { label: 'HTTPS provisioning', value: 'provisioning', slot: 'provisioning' }
 ]
 
-const connectionStateFilter = ref<DeviceConnectionState | 'all'>('all')
 const projectFilter = ref<string | null>(null)
 
 function resetDeviceFilters(): void {
-  connectionStateFilter.value = 'all'
   projectFilter.value = null
 }
 
@@ -67,13 +80,17 @@ const connectionStateColors: Record<DeviceConnectionState, 'success' | 'neutral'
   unstable: 'warning'
 }
 
-const connectionStateOptions: Array<{ label: string, value: DeviceConnectionState | 'all' }> = [
-  { label: 'All connection states', value: 'all' },
-  ...Object.entries(connectionStateLabels).map(([value, label]) => ({
-    label,
-    value: value as DeviceConnectionState
-  }))
-]
+const approvalStatusLabels: Record<DeviceApprovalStatus, string> = {
+  pending: 'Waiting for approval',
+  approved: 'Approved',
+  rejected: 'Rejected'
+}
+
+const approvalStatusColors: Record<DeviceApprovalStatus, 'warning' | 'success' | 'error'> = {
+  pending: 'warning',
+  approved: 'success',
+  rejected: 'error'
+}
 
 const { data: response, status, error, refresh } = await useAsyncData('tenant-devices', async () => {
   if (activeTenantId.value === null) {
@@ -129,11 +146,20 @@ const writableProjectOptions = computed(() => [
 ])
 const canCreateDevice = computed(() => writableProjects.value.length > 0)
 const canManageCredentials = computed(() => credentialsDevice.value !== null
+  && credentialsDevice.value.approval_status === 'approved'
   && canWriteProject(credentialsDevice.value.project_id))
 const projectFilterOptions = computed(() => [
   { label: 'All projects', value: null },
   ...projectOptions.value
 ])
+
+function openProvisioning(): void {
+  provisioningProjectId.value = initialProvisioningProjectId(
+    projectFilter.value,
+    writableProjects.value.map(project => project.id)
+  )
+  provisioningOpen.value = true
+}
 
 const equipmentAssetOptions = computed(() => [
   { label: 'No equipment asset', value: null },
@@ -159,11 +185,7 @@ watch(selectedProjectId, (projectId) => {
 })
 
 const filteredDevices = computed(() => devices.value.filter((device) => {
-  const matchesConnection = connectionStateFilter.value === 'all'
-    || device.connection_state === connectionStateFilter.value
-  const matchesProject = projectFilter.value === null || device.project_id === projectFilter.value
-
-  return matchesConnection && matchesProject
+  return projectFilter.value === null || device.project_id === projectFilter.value
 }))
 
 const rows = computed<AdminTableRow[]>(() => filteredDevices.value)
@@ -234,6 +256,92 @@ function openCredentials(deviceId: string): void {
 
   credentialsDevice.value = device
   credentialsOpen.value = true
+}
+
+function openRejection(deviceId: string): void {
+  const device = devices.value.find(item => item.id === deviceId)
+
+  if (device === undefined) {
+    throw new Error('The selected device is not available.')
+  }
+
+  rejectingDevice.value = device
+  rejectionReason.value = ''
+  rejectionOpen.value = true
+}
+
+async function approveSelectedDevice(deviceId: string): Promise<void> {
+  if (activeTenantId.value === null) {
+    throw new Error('An active tenant is required before approving a device.')
+  }
+
+  const device = devices.value.find(item => item.id === deviceId)
+
+  if (device === undefined) {
+    throw new Error('The selected device is not available.')
+  }
+
+  approvalActionDeviceId.value = deviceId
+
+  try {
+    await submitDeviceApproval(activeTenantId.value, device.project_id, device.id)
+    await refresh()
+    toast.add({
+      title: 'Device approved',
+      description: 'The device can now connect to LiteBoard over MQTT.',
+      color: 'success'
+    })
+  } catch (requestError: unknown) {
+    if (!(requestError instanceof ApiError)) {
+      throw requestError
+    }
+
+    toast.add({
+      title: 'Unable to approve device',
+      description: requestError.message,
+      color: 'error'
+    })
+  } finally {
+    approvalActionDeviceId.value = null
+  }
+}
+
+async function rejectSelectedDevice(): Promise<void> {
+  if (activeTenantId.value === null || rejectingDevice.value === null) {
+    throw new Error('An active tenant and device are required before rejecting a device.')
+  }
+
+  rejectionLoading.value = true
+
+  try {
+    await submitDeviceRejection(
+      activeTenantId.value,
+      rejectingDevice.value.project_id,
+      rejectingDevice.value.id,
+      rejectionReason.value
+    )
+    await refresh()
+    rejectionOpen.value = false
+    rejectingDevice.value = null
+    rejectionReason.value = ''
+    toast.add({
+      title: 'Device rejected',
+      description: 'The device will stop waiting for approval.',
+      color: 'success'
+    })
+  } catch (requestError: unknown) {
+    if (!(requestError instanceof ApiError)) {
+      throw requestError
+    }
+
+    toast.add({
+      title: 'Unable to reject device',
+      description: requestError.message,
+      color: 'error'
+    })
+  } finally {
+    rejectionLoading.value = false
+  }
 }
 
 async function saveDevice(payload: DeviceInput): Promise<void> {
@@ -347,7 +455,22 @@ const columns: TableColumn<AdminTableRow>[] = [
   {
     id: 'connection_state',
     accessorKey: 'connection_state',
-    header: 'Connection',
+    header: ({ column }) => {
+      const isSorted = column.getIsSorted()
+
+      return h(UButton, {
+        color: 'neutral',
+        variant: 'ghost',
+        label: 'Connection',
+        icon: isSorted
+          ? isSorted === 'asc'
+            ? 'i-lucide-arrow-up-narrow-wide'
+            : 'i-lucide-arrow-down-wide-narrow'
+          : 'i-lucide-arrow-up-down',
+        class: '-mx-2.5',
+        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc')
+      })
+    },
     cell: ({ row }) => {
       const connectionState = row.original.connection_state
 
@@ -377,9 +500,50 @@ const columns: TableColumn<AdminTableRow>[] = [
     }
   },
   {
+    id: 'approval_status',
+    accessorKey: 'approval_status',
+    header: 'Approval',
+    cell: ({ row }) => {
+      const status = row.original.approval_status
+      const reason = row.original.approval_reason
+
+      if (status === undefined || reason === undefined) {
+        throw new Error('The device approval state is missing.')
+      }
+
+      return h('div', { class: 'max-w-64' }, [
+        h(
+          UBadge,
+          {
+            class: 'capitalize',
+            color: approvalStatusColors[status],
+            variant: 'subtle'
+          },
+          () => approvalStatusLabels[status]
+        ),
+        ...(reason === null ? [] : [h('p', { class: 'mt-1 line-clamp-2 text-xs text-muted' }, reason)])
+      ])
+    }
+  },
+  {
     id: 'status',
     accessorKey: 'status',
-    header: 'Status',
+    header: ({ column }) => {
+      const isSorted = column.getIsSorted()
+
+      return h(UButton, {
+        color: 'neutral',
+        variant: 'ghost',
+        label: 'Status',
+        icon: isSorted
+          ? isSorted === 'asc'
+            ? 'i-lucide-arrow-up-narrow-wide'
+            : 'i-lucide-arrow-down-wide-narrow'
+          : 'i-lucide-arrow-up-down',
+        class: '-mx-2.5',
+        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc')
+      })
+    },
     cell: ({ row }) => h(
       UBadge,
       {
@@ -403,22 +567,43 @@ const columns: TableColumn<AdminTableRow>[] = [
       const actions: ReturnType<typeof h>[] = []
 
       if (canWriteProject(projectId)) {
-        actions.push(
-          h(UButton, {
+        if (row.original.approval_status === 'pending') {
+          actions.push(
+            h(UButton, {
+              'icon': 'i-lucide-circle-check',
+              'color': 'success',
+              'variant': 'ghost',
+              'loading': approvalActionDeviceId.value === row.original.id,
+              'aria-label': `Approve ${row.original.name}`,
+              'onClick': () => { void approveSelectedDevice(row.original.id) }
+            }),
+            h(UButton, {
+              'icon': 'i-lucide-ban',
+              'color': 'error',
+              'variant': 'ghost',
+              'aria-label': `Reject ${row.original.name}`,
+              'onClick': () => openRejection(row.original.id)
+            })
+          )
+        }
+
+        if (row.original.approval_status === 'approved') {
+          actions.push(h(UButton, {
             'icon': 'i-lucide-key-round',
             'color': 'neutral',
             'variant': 'ghost',
             'aria-label': `Manage credentials for ${row.original.name}`,
             'onClick': () => openCredentials(row.original.id)
-          }),
-          h(UButton, {
-            'icon': 'i-lucide-pencil',
-            'color': 'neutral',
-            'variant': 'ghost',
-            'aria-label': `Edit ${row.original.name}`,
-            'onClick': () => openEdit(row.original.id)
-          })
-        )
+          }))
+        }
+
+        actions.push(h(UButton, {
+          'icon': 'i-lucide-pencil',
+          'color': 'neutral',
+          'variant': 'ghost',
+          'aria-label': `Edit ${row.original.name}`,
+          'onClick': () => openEdit(row.original.id)
+        }))
       }
 
       if (canDeleteProject(projectId)) {
@@ -463,6 +648,14 @@ const errorMessage = computed(() => {
             @click="openCreate"
           />
           <UButton
+            v-if="writableProjects.length > 0"
+            label="Provision devices"
+            icon="i-lucide-radio-tower"
+            color="neutral"
+            variant="outline"
+            @click="openProvisioning"
+          />
+          <UButton
             label="Setup tutorial"
             color="neutral"
             variant="outline"
@@ -490,12 +683,6 @@ const errorMessage = computed(() => {
           @reset="resetDeviceFilters"
         >
           <template #filters>
-            <USelect
-              v-model="connectionStateFilter"
-              :items="connectionStateOptions"
-              class="min-w-44"
-              :ui="{ trailingIcon: 'group-data-[state=open]:rotate-180 transition-transform duration-200' }"
-            />
             <USelect
               v-model="projectFilter"
               :items="projectFilterOptions"
@@ -527,6 +714,44 @@ const errorMessage = computed(() => {
       />
 
       <UModal
+        v-model:open="rejectionOpen"
+        title="Reject device"
+        description="The device will remain listed and cannot connect. This decision cannot be changed."
+      >
+        <template #body>
+          <div class="space-y-3">
+            <p class="text-sm text-muted">
+              Provide a reason. The device will receive this reason and stop waiting for approval.
+            </p>
+            <UTextarea
+              v-model="rejectionReason"
+              :rows="4"
+              :maxlength="1000"
+              placeholder="Reason for rejection"
+            />
+          </div>
+        </template>
+        <template #footer>
+          <div class="flex justify-end gap-2">
+            <UButton
+              label="Cancel"
+              color="neutral"
+              variant="outline"
+              :disabled="rejectionLoading"
+              @click="rejectionOpen = false"
+            />
+            <UButton
+              label="Reject device"
+              color="error"
+              :disabled="rejectionReason.length < 3"
+              :loading="rejectionLoading"
+              @click="rejectSelectedDevice"
+            />
+          </div>
+        </template>
+      </UModal>
+
+      <UModal
         v-model:open="mqttGuideOpen"
         :ui="{ content: 'max-w-3xl' }"
         title="Connect a device over MQTT TLS"
@@ -547,26 +772,32 @@ const errorMessage = computed(() => {
             <template #tls-ca>
               <div class="space-y-5 pt-4">
                 <p class="text-sm text-muted">
-                  The public CA certificate lets any MQTT client verify the LiteBoard broker. It is not a device key or secret; client certificates are not required.
+                  HTTPS and MQTT use separate certificate authorities. Download each public CA for the matching connection; neither certificate is a device key or secret.
                 </p>
 
                 <ol class="list-inside list-decimal space-y-3 text-sm text-default">
                   <li>
-                    Download the CA certificate.
-                    <div class="mt-2">
+                    Download both public root certificates using the separate buttons.
+                    <div class="mt-2 flex flex-wrap gap-2">
                       <UButton
-                        label="Download certificate (.txt)"
+                        label="Download MQTT CA (.txt)"
                         color="neutral"
                         variant="outline"
                         @click="downloadMqttCaCertificate"
                       />
+                      <UButton
+                        label="Download HTTPS CA (.crt)"
+                        color="neutral"
+                        variant="outline"
+                        @click="downloadProvisioningCaCertificate"
+                      />
                     </div>
                   </li>
                   <li>
-                    Import the PEM content into your MQTT client's trusted CA store. Depending on the platform, this may be a certificate file, a system trust store, or a CA field in the client configuration.
+                    Install the MQTT CA in your MQTT client's trust store and the HTTPS CA in the device's HTTPS trust store. These roots are separate and must not be interchanged.
                   </li>
                   <li>
-                    Enable certificate and hostname verification. Connect to port <code class="font-mono text-highlighted">8883</code> using a broker hostname listed in the certificate's SAN.
+                    Keep certificate and hostname verification enabled for both connections. Use the HTTPS endpoint hostname for provisioning and a broker hostname listed in the MQTT certificate's SAN on port <code class="font-mono text-highlighted">8883</code>.
                   </li>
                 </ol>
 
@@ -589,7 +820,7 @@ const errorMessage = computed(() => {
                   </div>
                   <div>
                     <p class="text-xs text-muted">
-                      Trusted CA
+                      MQTT trusted CA
                     </p>
                     <p class="mt-1 text-sm font-medium text-highlighted">
                       Downloaded LiteBoard CA certificate
@@ -609,10 +840,15 @@ const errorMessage = computed(() => {
 
             <template #access-token>
               <div class="space-y-5 pt-4">
+                <p class="text-sm font-medium text-highlighted">
+                  Manual enrollment checklist
+                </p>
                 <ol class="list-inside list-decimal space-y-3 text-sm text-default">
-                  <li>Open the target device's credentials from its row and copy the Access Token.</li>
-                  <li>In your MQTT client, set the Access Token as both the username and password.</li>
-                  <li>Publish to the telemetry topic shown in the device credentials modal.</li>
+                  <li>Create the device with <strong>Add device</strong>, then open its credentials from the device row.</li>
+                  <li>Install the MQTT CA from the TLS tab and keep certificate-chain and broker-hostname verification enabled.</li>
+                  <li>Use the broker host, port, and TLS status shown in the credentials modal. The MQTT TLS port is <code class="font-mono text-highlighted">8883</code>.</li>
+                  <li>Set the Access Token as both MQTT username and password, then publish telemetry to the topic shown in the credentials modal.</li>
+                  <li>Return to the Devices list and confirm the device reports <strong>Online</strong>.</li>
                 </ol>
 
                 <div class="space-y-2 rounded-lg border border-default p-4">
@@ -650,6 +886,64 @@ const errorMessage = computed(() => {
                 </p>
               </div>
             </template>
+
+            <template #provisioning>
+              <div class="space-y-5 pt-4">
+                <p class="text-sm font-medium text-highlighted">
+                  HTTPS provisioning checklist
+                </p>
+                <ol class="list-inside list-decimal space-y-3 text-sm text-default">
+                  <li>Open <strong>Provision devices</strong> for the target Project and create a provisioning profile.</li>
+                  <li>Copy the provision key and save the secret when it is shown. The secret is available only immediately after creation or rotation.</li>
+                  <li>Enable enrollment after securely configuring the device with its profile key and secret.</li>
+                  <li>Copy the HTTPS bootstrap endpoint from the profile panel. Install the HTTPS CA from the TLS tab and verify the endpoint hostname and certificate before enrollment.</li>
+                  <li>Bootstrap the device once. It is created as waiting for approval, and its firmware saves the returned Access Token and MQTT settings.</li>
+                  <li>Approve the device from this list. Until approval, the broker blocks the token; the firmware checks the decision and waits without repeating bootstrap.</li>
+                  <li>After approval, the device connects to the returned MQTT host on port <code class="font-mono text-highlighted">8883</code> with TLS and hostname verification enabled.</li>
+                  <li>Use the returned Access Token as both MQTT username and password, publish to the returned telemetry topic, and confirm the device reports <strong>Online</strong>.</li>
+                </ol>
+
+                <div class="rounded-lg border border-default p-4">
+                  <p class="text-sm font-medium text-highlighted">
+                    Connection parameters
+                  </p>
+                  <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                    <div>
+                      <dt class="text-muted">
+                        Enrollment transport
+                      </dt><dd class="mt-1 font-medium text-highlighted">
+                        HTTPS with server certificate and hostname verification
+                      </dd>
+                    </div>
+                    <div>
+                      <dt class="text-muted">
+                        MQTT transport
+                      </dt><dd class="mt-1 font-medium text-highlighted">
+                        MQTT over TLS, port 8883
+                      </dd>
+                    </div>
+                    <div>
+                      <dt class="text-muted">
+                        MQTT username and password
+                      </dt><dd class="mt-1 font-mono text-highlighted">
+                        Returned Access Token
+                      </dd>
+                    </div>
+                    <div>
+                      <dt class="text-muted">
+                        Trusted roots
+                      </dt><dd class="mt-1 font-medium text-highlighted">
+                        Separate HTTPS and MQTT CA certificates
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+
+                <p class="text-sm text-muted">
+                  Disabling a profile stops new enrollments but does not revoke tokens already issued. Rotate the profile secret if it is exposed.
+                </p>
+              </div>
+            </template>
           </UTabs>
         </template>
       </UModal>
@@ -660,6 +954,14 @@ const errorMessage = computed(() => {
         description="This action cannot be undone and will revoke its MQTT credentials."
         :loading="deleteLoading"
         @confirm="deleteSelectedDevice"
+      />
+
+      <DeviceProvisioningModal
+        v-if="provisioningOpen"
+        v-model:open="provisioningOpen"
+        :initial-project-id="provisioningProjectId"
+        :projects="writableProjects"
+        :tenant-id="activeTenantId"
       />
     </template>
   </UDashboardPanel>

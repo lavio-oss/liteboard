@@ -2,6 +2,7 @@
 
 namespace Modules\Core\Resources\Tenant;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -26,12 +27,17 @@ final class TenantResource extends JsonResource
             throw new LogicException('The tenant membership pivot role must be a string when present.');
         }
 
+        $createdAt = $this->resource->getAttribute('created_at');
+        $updatedAt = $this->resource->getAttribute('updated_at');
+
         return [
             'id' => (string) $this->getKey(),
             'name' => (string) $this->name,
             'code' => (string) $this->code,
             'status' => (string) $this->status,
             'role' => $role,
+            'created_at' => $createdAt instanceof CarbonInterface ? $createdAt->toISOString() : null,
+            'updated_at' => $updatedAt instanceof CarbonInterface ? $updatedAt->toISOString() : null,
         ];
     }
 }

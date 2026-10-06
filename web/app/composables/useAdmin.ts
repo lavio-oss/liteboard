@@ -8,6 +8,8 @@ import {
   deviceResponseSchema,
   devicesResponseSchema,
   projectResponseSchema,
+  projectProvisioningProfileResponseSchema,
+  projectProvisioningSecretResponseSchema,
   projectsResponseSchema,
   projectUserResponseSchema,
   projectUsersResponseSchema
@@ -22,6 +24,7 @@ import type {
   DeviceCredentialInput,
   DeviceInput,
   Project,
+  ProjectProvisioningProfile,
   ProjectInput,
   ProjectUser,
   ProjectUserAccountInput,
@@ -102,6 +105,59 @@ export function useAdmin() {
     return response.data
   }
 
+  async function loadProjectProvisioningProfile(tenantId: string, projectId: string): Promise<ProjectProvisioningProfile | null> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/provisioning-profile`,
+      projectProvisioningProfileResponseSchema
+    )
+
+    return response.data
+  }
+
+  async function createProjectProvisioningProfile(tenantId: string, projectId: string) {
+    return api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/provisioning-profile`,
+      projectProvisioningSecretResponseSchema,
+      { method: 'POST' }
+    )
+  }
+
+  async function updateProjectProvisioningProfile(
+    tenantId: string,
+    projectId: string,
+    enabled: boolean
+  ): Promise<ProjectProvisioningProfile> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/provisioning-profile`,
+      z.object({ data: projectProvisioningProfileResponseSchema.shape.data.unwrap() }),
+      { body: { enabled }, method: 'PATCH' }
+    )
+
+    return response.data
+  }
+
+  async function rotateProjectProvisioningSecret(tenantId: string, projectId: string) {
+    return api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/provisioning-profile/rotate-secret`,
+      projectProvisioningSecretResponseSchema,
+      { method: 'POST' }
+    )
+  }
+
+  async function updateProjectDeviceQuota(
+    tenantId: string,
+    projectId: string,
+    max_devices_quota: number | null
+  ): Promise<Project> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/device-quota`,
+      projectResponseSchema,
+      { body: { max_devices_quota }, method: 'PUT' }
+    )
+
+    return response.data
+  }
+
   async function deleteProject(tenantId: string, projectId: string): Promise<void> {
     await api.request(
       `/api/tenants/${tenantId}/projects/${projectId}`,
@@ -148,6 +204,31 @@ export function useAdmin() {
       `/api/tenants/${tenantId}/projects/${projectId}/devices`,
       deviceResponseSchema,
       { body: payload, method: 'POST' }
+    )
+
+    return response.data
+  }
+
+  async function approveDevice(tenantId: string, projectId: string, deviceId: string): Promise<Device> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/devices/${deviceId}/approve`,
+      deviceResponseSchema,
+      { method: 'POST' }
+    )
+
+    return response.data
+  }
+
+  async function rejectDevice(
+    tenantId: string,
+    projectId: string,
+    deviceId: string,
+    reason: string
+  ): Promise<Device> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/devices/${deviceId}/reject`,
+      deviceResponseSchema,
+      { body: { reason }, method: 'POST' }
     )
 
     return response.data
@@ -327,10 +408,12 @@ export function useAdmin() {
   }
 
   return {
+    approveDevice,
     attachProjectUser,
     createAsset,
     createDevice,
     createProject,
+    createProjectProvisioningProfile,
     createProjectUserAccount,
     createTenantUser,
     deleteAsset,
@@ -343,15 +426,20 @@ export function useAdmin() {
     loadDevices,
     loadProjectUsers,
     loadProjects,
+    loadProjectProvisioningProfile,
     loadTenantDevices,
     loadTenantHierarchy,
     loadTenantUsers,
     removeProjectUser,
+    rejectDevice,
     rotateDeviceCredentials,
+    rotateProjectProvisioningSecret,
     updateAsset,
     updateDevice,
     updateDeviceCredentials,
     updateProject,
+    updateProjectDeviceQuota,
+    updateProjectProvisioningProfile,
     updateProjectUser,
     updateTenantUser
   }

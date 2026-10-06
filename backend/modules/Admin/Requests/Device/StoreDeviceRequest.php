@@ -36,6 +36,7 @@ final class StoreDeviceRequest extends FormRequest
             'equipment_asset_id' => ['sometimes', 'nullable', 'bail', 'uuid'],
             'status' => ['sometimes', Rule::enum(DeviceStatus::class)],
             'access_token' => ['missing'],
+            'approval_status' => ['prohibited'],
             'tenant_id' => ['prohibited'],
             'project_id' => ['prohibited'],
         ];

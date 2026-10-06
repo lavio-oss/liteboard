@@ -9,10 +9,13 @@ use Illuminate\Database\Eloquent\Factories\Factory as EloquentFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Modules\Admin\Enums\Device\DeviceApprovalStatus;
 use Modules\Admin\Enums\Device\DeviceConnectionState;
 use Modules\Admin\Enums\Device\DeviceStatus;
 use Modules\Admin\Models\Asset\Asset;
+use Modules\Admin\Models\DeviceProvisioning\DeviceProvisioningAudit;
 use Modules\Admin\Models\Project\Project;
 
 #[Fillable([
@@ -21,6 +24,7 @@ use Modules\Admin\Models\Project\Project;
     'code',
     'description',
     'status',
+    'approval_status',
     'connection_state',
     'last_seen_at',
 ])]
@@ -40,6 +44,7 @@ final class Device extends Model
     {
         return [
             'status' => DeviceStatus::class,
+            'approval_status' => DeviceApprovalStatus::class,
             'connection_state' => DeviceConnectionState::class,
             'last_seen_at' => 'immutable_datetime',
         ];
@@ -61,5 +66,18 @@ final class Device extends Model
     public function credential(): HasOne
     {
         return $this->hasOne(DeviceCredential::class);
+    }
+
+    /** @return HasMany<DeviceProvisioningAudit, $this> */
+    public function provisioningAudits(): HasMany
+    {
+        return $this->hasMany(DeviceProvisioningAudit::class);
+    }
+
+    /** @return HasOne<DeviceProvisioningAudit, $this> */
+    public function rejectionAudit(): HasOne
+    {
+        return $this->hasOne(DeviceProvisioningAudit::class)
+            ->where('action', 'device_rejected');
     }
 }

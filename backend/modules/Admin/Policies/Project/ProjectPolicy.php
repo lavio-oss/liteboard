@@ -43,6 +43,17 @@ final class ProjectPolicy
         return $this->tenantAllows($user, $project);
     }
 
+    public function manageProfile(User $user, Project $project): bool
+    {
+        return $this->tenantAllows($user, $project)
+            || $project->hasRole($user, ProjectRole::Admin, ProjectRole::Engineer);
+    }
+
+    public function manageQuota(User $user, Project $project): bool
+    {
+        return $this->tenantAllows($user, $project);
+    }
+
     private function tenantAllows(User $user, Project $project): bool
     {
         return $user->isPlatformAdmin()

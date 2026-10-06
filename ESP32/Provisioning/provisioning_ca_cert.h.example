@@ -1,0 +1,8 @@
+#pragma once
+
+// Copy a public CA certificate trusted by the provisioning HTTPS endpoint here.
+const char *LB_PROVISIONING_CA_CERT = R"CERT(
+-----BEGIN CERTIFICATE-----
+replace-this-with-the-public-provisioning-CA
+-----END CERTIFICATE-----
+)CERT";

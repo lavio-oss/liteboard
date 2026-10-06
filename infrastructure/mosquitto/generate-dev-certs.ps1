@@ -26,7 +26,7 @@ $brokerCsrFile = Join-Path $brokerDirectory 'server.csr'
 $brokerCertificateFile = Join-Path $brokerDirectory 'server.crt'
 $extensionsFile = Join-Path $brokerDirectory 'server.ext'
 $serialFile = Join-Path $certificateDirectory 'ca.srl'
-$firmwareCaHeader = Join-Path $PSScriptRoot '../../simulator/Esp32/Base/mqtt_ca_cert.h'
+$firmwareCaHeader = Join-Path $PSScriptRoot '../../ESP32/AccessToken/mqtt_ca_cert.h'
 $publicCaDirectory = Join-Path $PSScriptRoot '../../web/public/mqtt'
 $publicCaFile = Join-Path $publicCaDirectory 'ca.txt'
 

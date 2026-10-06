@@ -29,7 +29,7 @@ services:
       retries: 10
 
   mosquitto:
-    image: iegomez/mosquitto-go-auth:latest
+    image: iegomez/mosquitto-go-auth@sha256:acd65f8566f22126e3bf3b72fe5bee8a5002ca57695f211b1904013953560c3f
     environment:
       MQTT_PG_HOST: ${MQTT_PG_HOST:-host.docker.internal}
       MQTT_PG_PORT: ${MQTT_PG_PORT:-5432}
@@ -107,12 +107,16 @@ services:
       DB_USERNAME: ${POSTGRES_USER:-liteboard}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-liteboard}
       SESSION_DRIVER: database
-      CACHE_STORE: file
+      CACHE_STORE: redis
       QUEUE_CONNECTION: sync
       SANCTUM_STATEFUL_DOMAINS: localhost:3000
       CORS_ALLOWED_ORIGINS: http://localhost:3000
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      DEVICE_PROVISIONING_MQTT_HOST: ${DEVICE_PROVISIONING_MQTT_HOST:-mqtt.local}
+      DEVICE_PROVISIONING_IP_RATE_LIMIT: ${DEVICE_PROVISIONING_IP_RATE_LIMIT:-30}
+      DEVICE_PROVISIONING_PROFILE_RATE_LIMIT: ${DEVICE_PROVISIONING_PROFILE_RATE_LIMIT:-60}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-127.0.0.1,::1,172.16.0.0/12}
     ports:
       - '${BACKEND_PORT:-8800}:8800'
     healthcheck:
@@ -191,6 +195,15 @@ services:
     build:
       context: simulator
     environment:
+      DEVICE_CONNECTION_MODE: ${SIMULATOR_CONNECTION_MODE:-manual}
+      DEVICE_STATE_FILE: /var/lib/liteboard/device.json
+      DEVICE_PROVISIONING_URL: ${DEVICE_PROVISIONING_URL:-https://provisioning.example.invalid/api/device-provisioning/bootstrap}
+      DEVICE_PROVISIONING_CA_FILE: /run/secrets/device_provisioning_ca_certificate
+      PROVISION_KEY: ${SIMULATOR_PROVISION_KEY:-}
+      PROVISION_SECRET: ${SIMULATOR_PROVISION_SECRET:-}
+      DEVICE_NAME: ${SIMULATOR_DEVICE_NAME:-LiteBoard simulator}
+      DEVICE_CODE: ${SIMULATOR_DEVICE_CODE:-simulator-001}
+      FIRMWARE_VERSION: ${SIMULATOR_FIRMWARE_VERSION:-simulator}
       MQTT_HOST: ${MQTT_TLS_HOSTNAME:-mqtt.local}
       MQTT_PORT: 8883
       MQTT_TLS_CA_FILE: /run/secrets/mqtt_tls_ca_certificate
@@ -198,22 +211,28 @@ services:
       DEVICE_ID: ${SIMULATOR_DEVICE_ID:-}
       DEVICE_ACCESS_TOKEN: ${SIMULATOR_DEVICE_ACCESS_TOKEN:-}
     profiles: ['tools']
+    volumes:
+      - liteboard-simulator-state:/var/lib/liteboard
     depends_on:
       mosquitto:
         condition: service_healthy
     secrets:
       - mqtt_tls_ca_certificate
+      - device_provisioning_ca_certificate
 
 volumes:
   liteboard-postgres:
   liteboard-redis:
   liteboard-mosquitto-data:
   liteboard-mosquitto-log:
+  liteboard-simulator-state:
 
 secrets:
   mqtt_server_certificate:
     file: ${MQTT_TLS_CERT_FILE:-./infrastructure/mosquitto/certs/broker/server.crt}
   mqtt_server_private_key:
     file: ${MQTT_TLS_KEY_FILE:-./infrastructure/mosquitto/certs/broker/server.key}
+  device_provisioning_ca_certificate:
+    file: ${DEVICE_PROVISIONING_CA_FILE:-./infrastructure/provisioning/ca.crt}
   mqtt_tls_ca_certificate:
     file: ${MQTT_TLS_CA_SOURCE:-./infrastructure/mosquitto/certs/ca.crt}

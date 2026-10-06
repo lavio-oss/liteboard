@@ -5,6 +5,7 @@ namespace Modules\Admin\Resources\Device;
 use Carbon\CarbonInterface;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Modules\Admin\Enums\Device\DeviceApprovalStatus;
 use Modules\Admin\Enums\Device\DeviceConnectionState;
 use Modules\Admin\Enums\Device\DeviceCredentialStatus;
 use Modules\Admin\Enums\Device\DeviceCredentialType;
@@ -22,6 +23,7 @@ final class DeviceResource extends JsonResource
         /** @var Device $device */
         $device = $this->resource;
         $status = $device->getAttribute('status');
+        $approvalStatus = $device->getAttribute('approval_status');
         $connectionState = $device->getAttribute('connection_state');
         $lastSeenAt = $device->getAttribute('last_seen_at');
         $createdAt = $device->getAttribute('created_at');
@@ -29,6 +31,25 @@ final class DeviceResource extends JsonResource
 
         if (! $status instanceof DeviceStatus) {
             throw new UnexpectedValueException('The status attribute must be a DeviceStatus.');
+        }
+
+        if (! $approvalStatus instanceof DeviceApprovalStatus) {
+            throw new UnexpectedValueException('The approval_status attribute must be a DeviceApprovalStatus.');
+        }
+
+        $rejectionAudit = $device->relationLoaded('rejectionAudit')
+            ? $device->rejectionAudit
+            : $device->rejectionAudit()->first();
+        $approvalReason = null;
+
+        if ($approvalStatus === DeviceApprovalStatus::Rejected) {
+            $reason = $rejectionAudit?->getAttribute('reason');
+
+            if (! is_string($reason)) {
+                throw new UnexpectedValueException('A rejected device must have an approval reason.');
+            }
+
+            $approvalReason = $reason;
         }
 
         if (! $connectionState instanceof DeviceConnectionState) {
@@ -60,6 +81,8 @@ final class DeviceResource extends JsonResource
             'code' => (string) $device->code,
             'description' => $device->description,
             'status' => $status->value,
+            'approval_status' => $approvalStatus->value,
+            'approval_reason' => $approvalReason,
             'connection_state' => $connectionState->value,
             'credential_type' => $credentialType->value,
             'credential_status' => $credentialStatus->value,

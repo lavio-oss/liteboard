@@ -1,0 +1,8 @@
+#pragma once
+
+// Replace this placeholder with the public MQTT broker CA certificate.
+static const char LB_MQTT_CA_CERT[] = R"LBCA(
+-----BEGIN CERTIFICATE-----
+replace-with-public-mqtt-ca-certificate
+-----END CERTIFICATE-----
+)LBCA";

@@ -41,13 +41,27 @@ final class DeviceCredentialResource extends JsonResource
             throw new UnexpectedValueException('The status attribute must be a DeviceCredentialStatus.');
         }
 
+        $mqttHost = config('device_provisioning.mqtt_host');
+
+        if (! is_string($mqttHost)) {
+            abort(500, 'DEVICE_PROVISIONING_MQTT_HOST is required.');
+        }
+
+        $mqttTopics = app(DeviceCredentialService::class)->mqttTopicsFor($device);
+
         return [
             'device_id' => (string) $device->getKey(),
             'project_id' => (string) $device->getAttribute('project_id'),
             'credential_type' => $credentialType->value,
             'access_token' => (string) $credential->getAttribute('encrypted_token'),
             'status' => $status->value,
-            'mqtt_topics' => app(DeviceCredentialService::class)->mqttTopicsFor($device),
+            'mqtt' => [
+                'host' => $mqttHost,
+                'port' => 8883,
+                'tls' => true,
+                'topics' => $mqttTopics,
+            ],
+            'mqtt_topics' => $mqttTopics,
             'rotated_at' => $rotatedAt instanceof CarbonInterface ? $rotatedAt->toISOString() : null,
             'revoked_at' => $revokedAt instanceof CarbonInterface ? $revokedAt->toISOString() : null,
             'updated_at' => $updatedAt instanceof CarbonInterface ? $updatedAt->toISOString() : null,

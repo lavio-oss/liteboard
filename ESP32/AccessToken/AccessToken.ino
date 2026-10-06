@@ -1,15 +1,9 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
+#include <LiteBoardSetup.h>
 #include "mqtt_ca_cert.h"
 #include "device_config.h"
-
-// Dien thong tin Wi-Fi va cau hinh thiet bi LiteBoard o day.
-const char *WIFI_SSID = "Khanh Hoa";
-const char *WIFI_PASSWORD = "phukhanh";
-
-const char *LB_HOST = "192.168.100.102";
-constexpr uint16_t LB_PORT = 8883;
 
 constexpr unsigned long TELEMETRY_INTERVAL_MS = 5000;
 
@@ -26,13 +20,7 @@ void connectWiFi() {
   }
 
   Serial.print("Connecting to Wi-Fi");
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print('.');
-  }
+  LiteBoardSetup::connectWiFi(LB_WIFI_SSID, LB_WIFI_PASSWORD);
 
   Serial.println();
   Serial.print("Wi-Fi connected, IP: ");
@@ -99,9 +87,8 @@ void setup() {
   snprintf(telemetryTopic, sizeof(telemetryTopic), "%s", LB_TELEMETRY_TOPIC);
 
   connectWiFi();
-  wifiClient.setCACert(LB_MQTT_CA_CERT);
-  mqttClient.setServer(LB_HOST, LB_PORT);
-  mqttClient.setKeepAlive(60);
+  LiteBoardSetup::configureMqttTls(
+      wifiClient, mqttClient, LB_MQTT_CA_CERT, LB_HOST, LB_PORT);
   connectLiteBoard();
 }
 

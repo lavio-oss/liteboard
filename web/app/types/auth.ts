@@ -9,7 +9,9 @@ export const tenantSchema = z.object({
   name: z.string(),
   code: z.string(),
   status: tenantStatusSchema,
-  role: tenantRoleSchema.nullable()
+  role: tenantRoleSchema.nullable(),
+  created_at: z.string().nullable().optional(),
+  updated_at: z.string().nullable().optional()
 })
 
 export const tenantMembershipSchema = tenantSchema.pick({

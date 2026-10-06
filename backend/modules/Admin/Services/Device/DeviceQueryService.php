@@ -68,7 +68,7 @@ final class DeviceQueryService
         int $perPage,
     ): LengthAwarePaginator {
         return $query
-            ->with('credential')
+            ->with(['credential', 'rejectionAudit'])
             ->when($search !== '', static function (Builder $query) use ($search): void {
                 $query->where(static function (Builder $query) use ($search): void {
                     $query->where('name', 'like', "%$search%")

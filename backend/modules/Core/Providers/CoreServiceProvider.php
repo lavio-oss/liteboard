@@ -26,5 +26,10 @@ final class CoreServiceProvider extends ServiceProvider
 
             return Limit::perMinute(5)->by($email.'|'.$request->ip());
         });
+
+        RateLimiter::for('device-provisioning-ip', static function (Request $request): Limit {
+            return Limit::perMinute((int) config('device_provisioning.rate_limits.ip_per_minute', 30))
+                ->by((string) $request->ip());
+        });
     }
 }

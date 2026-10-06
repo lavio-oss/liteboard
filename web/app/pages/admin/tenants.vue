@@ -199,7 +199,22 @@ const columns: TableColumn<Tenant>[] = [
   {
     id: 'status',
     accessorKey: 'status',
-    header: 'Status',
+    header: ({ column }) => {
+      const isSorted = column.getIsSorted()
+
+      return h(UButton, {
+        color: 'neutral',
+        variant: 'ghost',
+        label: 'Status',
+        icon: isSorted
+          ? isSorted === 'asc'
+            ? 'i-lucide-arrow-up-narrow-wide'
+            : 'i-lucide-arrow-down-wide-narrow'
+          : 'i-lucide-arrow-up-down',
+        class: '-mx-2.5',
+        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc')
+      })
+    },
     cell: ({ row }) => h(
       UBadge,
       {
@@ -213,7 +228,22 @@ const columns: TableColumn<Tenant>[] = [
   {
     id: 'role',
     accessorKey: 'role',
-    header: 'Your role',
+    header: ({ column }) => {
+      const isSorted = column.getIsSorted()
+
+      return h(UButton, {
+        color: 'neutral',
+        variant: 'ghost',
+        label: 'Your role',
+        icon: isSorted
+          ? isSorted === 'asc'
+            ? 'i-lucide-arrow-up-narrow-wide'
+            : 'i-lucide-arrow-down-wide-narrow'
+          : 'i-lucide-arrow-up-down',
+        class: '-mx-2.5',
+        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc')
+      })
+    },
     cell: ({ row }) => {
       const role = row.original.role
 
@@ -233,6 +263,29 @@ const columns: TableColumn<Tenant>[] = [
         () => role
       )
     }
+  },
+  {
+    id: 'created_at',
+    accessorKey: 'created_at',
+    header: ({ column }) => {
+      const isSorted = column.getIsSorted()
+
+      return h(UButton, {
+        color: 'neutral',
+        variant: 'ghost',
+        label: 'Created at',
+        icon: isSorted
+          ? isSorted === 'asc'
+            ? 'i-lucide-arrow-up-narrow-wide'
+            : 'i-lucide-arrow-down-wide-narrow'
+          : 'i-lucide-arrow-up-down',
+        class: '-mx-2.5',
+        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc')
+      })
+    },
+    cell: ({ row }) => row.original.created_at
+      ? formatDateTime(row.original.created_at)
+      : '—'
   },
   {
     id: 'actions',
@@ -260,10 +313,19 @@ const columns: TableColumn<Tenant>[] = [
   }
 ]
 
+const columnLabels: Record<string, string> = {
+  sequence: 'No.',
+  name: 'Name',
+  code: 'Code',
+  status: 'Status',
+  role: 'Your role',
+  created_at: 'Created at'
+}
+
 const displayColumns = computed(() => columns
   .filter(column => getColumnKey(column) !== 'actions')
   .map(column => ({
-    label: typeof column.header === 'string' ? column.header : upperFirst(getColumnKey(column)),
+    label: columnLabels[getColumnKey(column)] ?? (typeof column.header === 'string' ? column.header : upperFirst(getColumnKey(column))),
     type: 'checkbox' as const,
     checked: columnVisibility.value?.[getColumnKey(column)] !== false,
     onUpdateChecked(checked: boolean) {

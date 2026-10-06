@@ -9,7 +9,13 @@ vuestic-admin
 .pnpm-store/
 infrastructure/mosquitto/passwords
 infrastructure/mosquitto/certs/
-simulator/Esp32/Base/mqtt_ca_cert.h
-simulator/Esp32/Base/device_config.h
+infrastructure/caddy/root.crt
+infrastructure/provisioning/ca.crt
+/ESP32/AccessToken/device_config.h
+/ESP32/AccessToken/mqtt_ca_cert.h
+/ESP32/Provisioning/provisioning_config.h
+/ESP32/Provisioning/provisioning_ca_cert.h
+simulator/state/*.json
 web/public/mqtt/ca.crt
 web/public/mqtt/ca.txt
+web/public/provisioning/ca.crt

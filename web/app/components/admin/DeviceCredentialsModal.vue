@@ -40,7 +40,10 @@ const firmwareConfig = computed(() => {
   return `const char* LB_PROJECT_ID = "${credential.value.project_id}";
 const char* LB_DEVICE_ID = "${credential.value.device_id}";
 const char* LB_ACCESS_TOKEN = "${credential.value.access_token}";
-const char* LB_TELEMETRY_TOPIC = "${credential.value.mqtt_topics.telemetry}";`
+const char* LB_MQTT_HOST = "${credential.value.mqtt.host}";
+const uint16_t LB_MQTT_PORT = ${credential.value.mqtt.port};
+const bool LB_MQTT_TLS = ${credential.value.mqtt.tls};
+const char* LB_TELEMETRY_TOPIC = "${credential.value.mqtt.topics.telemetry}";`
 })
 
 async function fetchCredentials(): Promise<void> {
@@ -233,6 +236,51 @@ async function toggleCredentialStatus(): Promise<void> {
         <section class="space-y-3 rounded-lg border border-default p-4">
           <div>
             <h3 class="text-sm font-semibold text-highlighted">
+              MQTT connection
+            </h3>
+            <p class="mt-1 text-sm text-muted">
+              Use these broker settings with certificate-chain and hostname verification enabled.
+            </p>
+          </div>
+          <dl class="grid gap-3 text-sm sm:grid-cols-2">
+            <div>
+              <dt class="text-muted">
+                Host
+              </dt>
+              <dd class="mt-1 break-all font-mono text-highlighted">
+                {{ credential.mqtt.host }}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-muted">
+                Port
+              </dt>
+              <dd class="mt-1 font-mono text-highlighted">
+                {{ credential.mqtt.port }}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-muted">
+                Transport
+              </dt>
+              <dd class="mt-1 text-highlighted">
+                {{ credential.mqtt.tls ? 'TLS enabled' : 'TLS disabled' }}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-muted">
+                Telemetry topic
+              </dt>
+              <dd class="mt-1 break-all font-mono text-highlighted">
+                {{ credential.mqtt.topics.telemetry }}
+              </dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="space-y-3 rounded-lg border border-default p-4">
+          <div>
+            <h3 class="text-sm font-semibold text-highlighted">
               TLS CA certificate
             </h3>
             <p class="mt-1 text-sm text-muted">
@@ -240,7 +288,7 @@ async function toggleCredentialStatus(): Promise<void> {
             </p>
           </div>
           <UButton
-            label="Download certificate (.txt)"
+            label="Download MQTT CA (.txt)"
             color="neutral"
             variant="outline"
             @click="downloadMqttCaCertificate"

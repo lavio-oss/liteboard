@@ -1,0 +1,31 @@
+<?php
+
+namespace Modules\Admin\Requests\DeviceProvisioning;
+
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Gate;
+use Modules\Admin\Models\Project\Project;
+use Modules\Core\Models\User\User;
+
+final class UpdateProjectProvisioningRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        $project = $this->route('project');
+        $user = $this->user();
+
+        return $project instanceof Project
+            && $user instanceof User
+            && Gate::forUser($user)->allows('manageProfile', $project);
+    }
+
+    /** @return array<string, array<int, string>> */
+    public function rules(): array
+    {
+        return [
+            'enabled' => ['required', 'boolean'],
+            'tenant_id' => ['prohibited'],
+            'project_id' => ['prohibited'],
+        ];
+    }
+}

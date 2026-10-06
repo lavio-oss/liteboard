@@ -21,6 +21,7 @@ JOIN projects p ON p.id = d.project_id
 JOIN tenants t ON t.id = p.tenant_id
 WHERE dc.status = 'active'
   AND d.status = 'active'
+  AND d.approval_status = 'approved'
   AND p.status = 'active'
   AND t.status = 'active'
 SQL;

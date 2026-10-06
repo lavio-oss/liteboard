@@ -19,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi();
         $middleware->append(HandleCors::class);
+        $middleware->trustProxies(at: env('TRUSTED_PROXIES', '127.0.0.1,::1'));
         $middleware->alias([
             'ability' => CheckForAnyAbility::class,
             'abilities' => CheckAbilities::class,

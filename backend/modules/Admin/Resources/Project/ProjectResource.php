@@ -50,6 +50,8 @@ final class ProjectResource extends JsonResource
             'name' => (string) $project->name,
             'description' => $project->description,
             'status' => (string) $project->status,
+            'max_devices_quota' => $project->getAttribute('max_devices_quota'),
+            'device_count' => $project->devices()->count(),
             'role' => $role,
             'created_at' => $createdAt instanceof CarbonInterface ? $createdAt->toISOString() : null,
             'updated_at' => $updatedAt instanceof CarbonInterface ? $updatedAt->toISOString() : null,

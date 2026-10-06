@@ -40,6 +40,8 @@ const deleteLoading = ref(false)
 const deletingProject = ref<Project | null>(null)
 const managingProject = ref<Project | null>(null)
 const projectUsersOpen = ref(false)
+const provisioningProject = ref<Project | null>(null)
+const provisioningOpen = ref(false)
 const canManageAccounts = computed(() => isPlatformAdmin.value || tenants.value.some(
   tenant => tenant.id === managingProject.value?.tenant_id && (tenant.role === 'owner' || tenant.role === 'admin')
 ))
@@ -90,6 +92,17 @@ function openProjectUsers(projectId: string): void {
 
   managingProject.value = project
   projectUsersOpen.value = true
+}
+
+function openProvisioning(projectId: string): void {
+  const project = projects.value.find(item => item.id === projectId)
+
+  if (project === undefined) {
+    throw new Error('The selected project is not available.')
+  }
+
+  provisioningProject.value = project
+  provisioningOpen.value = true
 }
 
 async function saveProject(payload: ProjectFormInput): Promise<void> {
@@ -205,7 +218,22 @@ const columns: TableColumn<AdminTableRow>[] = [
   {
     id: 'status',
     accessorKey: 'status',
-    header: 'Status',
+    header: ({ column }) => {
+      const isSorted = column.getIsSorted()
+
+      return h(UButton, {
+        color: 'neutral',
+        variant: 'ghost',
+        label: 'Status',
+        icon: isSorted
+          ? isSorted === 'asc'
+            ? 'i-lucide-arrow-up-narrow-wide'
+            : 'i-lucide-arrow-down-wide-narrow'
+          : 'i-lucide-arrow-up-down',
+        class: '-mx-2.5',
+        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc')
+      })
+    },
     cell: ({ row }) => h(
       UBadge,
       {
@@ -219,8 +247,23 @@ const columns: TableColumn<AdminTableRow>[] = [
   {
     id: 'created_at',
     accessorKey: 'created_at',
-    header: 'Created',
-    cell: ({ row }) => formatDateTime(row.original.created_at)
+    header: ({ column }) => {
+      const isSorted = column.getIsSorted()
+
+      return h(UButton, {
+        color: 'neutral',
+        variant: 'ghost',
+        label: 'Created',
+        icon: isSorted
+          ? isSorted === 'asc'
+            ? 'i-lucide-arrow-up-narrow-wide'
+            : 'i-lucide-arrow-down-wide-narrow'
+          : 'i-lucide-arrow-up-down',
+        class: '-mx-2.5',
+        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc')
+      })
+    },
+    cell: ({ row }) => row.original.created_at ? formatDateTime(row.original.created_at) : '—'
   },
   {
     id: 'actions',
@@ -242,6 +285,16 @@ const columns: TableColumn<AdminTableRow>[] = [
           'variant': 'ghost',
           'aria-label': `Manage users for ${project.name}`,
           'onClick': () => openProjectUsers(project.id)
+        }))
+      }
+
+      if (canWriteProjectData(project.role, canManageTenant)) {
+        actions.push(h(UButton, {
+          'icon': 'i-lucide-radio-tower',
+          'color': 'neutral',
+          'variant': 'ghost',
+          'aria-label': `Manage device provisioning for ${project.name}`,
+          'onClick': () => openProvisioning(project.id)
         }))
       }
 
@@ -343,6 +396,15 @@ const errorMessage = computed(() => {
         :project="managingProject"
         :can-manage-account="canManageAccounts"
         :can-delete-account="isPlatformAdmin"
+      />
+
+      <AdminProjectProvisioningModal
+        v-if="provisioningOpen"
+        v-model:open="provisioningOpen"
+        :tenant-id="provisioningProject?.tenant_id ?? null"
+        :project="provisioningProject"
+        :can-manage-quota="provisioningProject !== null && manageableTenantIds.has(provisioningProject.tenant_id)"
+        @updated="refresh"
       />
     </template>
   </UDashboardPanel>

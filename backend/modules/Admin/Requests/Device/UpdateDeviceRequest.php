@@ -35,6 +35,7 @@ final class UpdateDeviceRequest extends FormRequest
             'description' => ['sometimes', 'nullable', 'string', 'max:1000'],
             'equipment_asset_id' => ['sometimes', 'nullable', 'bail', 'uuid'],
             'status' => ['sometimes', Rule::enum(DeviceStatus::class)],
+            'approval_status' => ['prohibited'],
             'tenant_id' => ['prohibited'],
             'project_id' => ['prohibited'],
         ];

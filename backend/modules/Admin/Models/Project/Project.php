@@ -11,13 +11,16 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Modules\Admin\Enums\Project\ProjectRole;
 use Modules\Admin\Models\Asset\Asset;
 use Modules\Admin\Models\Device\Device;
+use Modules\Admin\Models\DeviceProvisioning\DeviceProvisioningAudit;
+use Modules\Admin\Models\DeviceProvisioning\ProjectProvisioningProfile;
 use Modules\Core\Models\Tenant\Tenant;
 use Modules\Core\Models\User\User;
 
-#[Fillable(['name', 'description', 'status'])]
+#[Fillable(['name', 'description', 'status', 'max_devices_quota'])]
 final class Project extends Model
 {
     /** @use HasFactory<ProjectFactory> */
@@ -45,6 +48,18 @@ final class Project extends Model
     public function devices(): HasMany
     {
         return $this->hasMany(Device::class);
+    }
+
+    /** @return HasOne<ProjectProvisioningProfile, $this> */
+    public function provisioningProfile(): HasOne
+    {
+        return $this->hasOne(ProjectProvisioningProfile::class);
+    }
+
+    /** @return HasMany<DeviceProvisioningAudit, $this> */
+    public function provisioningAudits(): HasMany
+    {
+        return $this->hasMany(DeviceProvisioningAudit::class);
     }
 
     /**

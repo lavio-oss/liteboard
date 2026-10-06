@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\DB;
 use Modules\Admin\Models\Device\Device;
 use Modules\Admin\Models\Project\Project;
 use RuntimeException;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 final class DevicePersistenceService
 {
@@ -23,7 +24,14 @@ final class DevicePersistenceService
     public function create(Project $project, array $attributes): Device
     {
         return DB::transaction(function () use ($project, $attributes): Device {
-            $device = $project->devices()->create($attributes);
+            $lockedProject = Project::query()->whereKey($project->getKey())->lockForUpdate()->firstOrFail();
+            $quota = $lockedProject->getAttribute('max_devices_quota');
+
+            if ($quota !== null && $lockedProject->devices()->count() >= (int) $quota) {
+                throw new ConflictHttpException('PROJECT_DEVICE_QUOTA_EXCEEDED');
+            }
+
+            $device = $lockedProject->devices()->create($attributes);
             $this->deviceCredentialService->issueForDevice($device);
 
             return $device->refresh()->load('credential');

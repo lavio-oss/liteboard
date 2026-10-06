@@ -9,6 +9,7 @@ use Modules\Admin\Services\Device\DevicePersistenceService;
 use Modules\Core\Models\Tenant\Tenant;
 use Modules\Core\Shared\Responders\Responder;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 final class CreateDeviceAction
 {
@@ -20,10 +21,18 @@ final class CreateDeviceAction
         Responder $responder,
     ): Response {
         $deviceInput = $request->deviceInput();
-        $device = $devicePersistenceService->create(
-            $project,
-            $deviceInput['attributes'],
-        );
+        try {
+            $device = $devicePersistenceService->create(
+                $project,
+                $deviceInput['attributes'],
+            );
+        } catch (ConflictHttpException $exception) {
+            if ($exception->getMessage() !== 'PROJECT_DEVICE_QUOTA_EXCEEDED') {
+                throw $exception;
+            }
+
+            return $responder->json(['code' => $exception->getMessage()], Response::HTTP_CONFLICT);
+        }
 
         return $responder->resource(DeviceResource::make($device), Response::HTTP_CREATED);
     }

@@ -15,3 +15,4 @@ require base_path('modules/Admin/Routes/project.php');
 require base_path('modules/Admin/Routes/project-user.php');
 require base_path('modules/Admin/Routes/asset.php');
 require base_path('modules/Admin/Routes/device.php');
+require base_path('modules/Admin/Routes/device-provisioning.php');
