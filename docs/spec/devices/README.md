@@ -11,12 +11,13 @@ Device thuộc một Project trong Tenant. MQTT dùng Access Token riêng cho t�
 
 ## Trạng thái triển khai
 
-Theo đối chiếu repo ngày 2026-10-07, Device thủ công, Access Token, MQTT auth/ACL, provisioning, duyệt Device và quota tạo Device theo Project đã có implementation. Mosquitto TLS `8883` được cấu hình cho môi trường local; việc xoay chứng chỉ trên topology production chưa được nghiệm thu. `telemetry-service` hiện chưa lưu telemetry bền vững, kiểm tra schema hoặc khử trùng lặp message ID. Xem [roadmap hardening và ingestion](./future_plans/future_device_security_and_ingestion_plan.md) để biết phần nào đã làm và phần nào còn mở.
+Theo đối chiếu repo ngày 2026-10-07, Device thủ công, Access Token, MQTT auth/ACL, provisioning, duyệt Device và quota tạo Device theo Project đã có implementation. Mosquitto TLS `8883` được cấu hình cho môi trường local; việc xoay chứng chỉ trên topology production chưa được nghiệm thu. `telemetry-service` hiện chưa lưu telemetry bền vững, kiểm tra schema hoặc khử trùng lặp message ID. Xem [roadmap hardening và ingestion](./access_token_dev_plan/future_device_security_and_ingestion_plan.md) để biết phần nào đã làm và phần nào còn mở.
 
 ## Tài liệu
 
 - [Device Access Token: cơ sở và luồng hoạt động](./devices_access_token.md)
-- [Kế hoạch hardening và ingestion](./future_plans/future_device_security_and_ingestion_plan.md)
-- [MQTT TLS server certificate](./future_plans/phase-7-mqtt-tls-server-certificate.md)
-- [Quota và rate limiting](./future_plans/phase-8-quotas-and-rate-limiting.md)
-- [Schema validation và replay protection](./future_plans/phase-9-schema-validation-and-replay-protection.md)
+- [Kế hoạch hardening và ingestion](./access_token_dev_plan/future_device_security_and_ingestion_plan.md)
+- [MQTT TLS server certificate](./access_token_dev_plan/phase-7-mqtt-tls-server-certificate.md)
+- [Quota và rate limiting](./access_token_dev_plan/phase-8-quotas-and-rate-limiting.md)
+- [Schema validation và replay protection](./access_token_dev_plan/phase-9-schema-validation-and-replay-protection.md)
+- [Roadmap telemetry công nghiệp end-to-end](../industrial-telemetry/README.md)

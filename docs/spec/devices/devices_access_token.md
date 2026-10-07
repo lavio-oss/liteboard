@@ -193,7 +193,7 @@ Các điểm triển khai để tra cứu luồng: `backend/modules/Admin/Servic
 
 ## Tài liệu liên quan
 
-- [Kế hoạch hardening và ingestion](./future_plans/future_device_security_and_ingestion_plan.md)
-- [MQTT TLS server certificate](./future_plans/phase-7-mqtt-tls-server-certificate.md)
-- [Quota và rate limiting](./future_plans/phase-8-quotas-and-rate-limiting.md)
-- [Schema validation và replay protection](./future_plans/phase-9-schema-validation-and-replay-protection.md)
+- [Kế hoạch hardening và ingestion](./access_token_dev_plan/future_device_security_and_ingestion_plan.md)
+- [MQTT TLS server certificate](./access_token_dev_plan/phase-7-mqtt-tls-server-certificate.md)
+- [Quota và rate limiting](./access_token_dev_plan/phase-8-quotas-and-rate-limiting.md)
+- [Schema validation và replay protection](./access_token_dev_plan/phase-9-schema-validation-and-replay-protection.md)
