@@ -1,6 +1,6 @@
 # Tài liệu đặc tả Device, xác thực và onboarding
 
-Device thuộc một Project trong Tenant. MQTT dùng Access Token riêng cho từng Device; provisioning là một cách đăng ký Device vào Project và vẫn cấp đúng loại token này. Hai luồng đang có được mô tả tại [Access Token: cơ sở và luồng hoạt động](./access_token/README.md).
+Device thuộc một Project trong Tenant. MQTT dùng Access Token riêng cho từng Device; provisioning là một cách đăng ký Device vào Project và vẫn cấp đúng loại token này. Hai luồng đang có được mô tả tại [Device Access Token: cơ sở và luồng hoạt động](./devices_access_token.md).
 
 ## Ranh giới
 
@@ -9,9 +9,13 @@ Device thuộc một Project trong Tenant. MQTT dùng Access Token riêng cho t�
 - Provisioning profile thuộc Project. Bootstrap tra Tenant/Project từ profile đã xác thực, không tin Tenant/Project ID trong request của thiết bị.
 - Quota tạo Device được dùng chung bởi hai luồng và đếm tất cả Device hiện có trong Project.
 
+## Trạng thái triển khai
+
+Theo đối chiếu repo ngày 2026-10-07, Device thủ công, Access Token, MQTT auth/ACL, provisioning, duyệt Device và quota tạo Device theo Project đã có implementation. Mosquitto TLS `8883` được cấu hình cho môi trường local; việc xoay chứng chỉ trên topology production chưa được nghiệm thu. `telemetry-service` hiện chưa lưu telemetry bền vững, kiểm tra schema hoặc khử trùng lặp message ID. Xem [roadmap hardening và ingestion](./future_plans/future_device_security_and_ingestion_plan.md) để biết phần nào đã làm và phần nào còn mở.
+
 ## Tài liệu
 
-- [Access Token: cơ sở và luồng hoạt động](./access_token/README.md)
+- [Device Access Token: cơ sở và luồng hoạt động](./devices_access_token.md)
 - [Kế hoạch hardening và ingestion](./future_plans/future_device_security_and_ingestion_plan.md)
 - [MQTT TLS server certificate](./future_plans/phase-7-mqtt-tls-server-certificate.md)
 - [Quota và rate limiting](./future_plans/phase-8-quotas-and-rate-limiting.md)

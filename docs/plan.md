@@ -189,22 +189,24 @@ Each stage must have a measurable outcome and a defined failure policy. Business
 
 LiteBoard is a multi-tenant Control Plane and Data Plane platform. Tenant is the isolation boundary; Project is the authorization and ownership boundary for Devices and Assets.
 
-### 6.0 Current implementation status — 2026-09-25
+### 6.0 Current implementation status — 2026-10-07
 
-Implemented in Laravel:
+This is a repository/commit review, not a production-readiness claim. A committed implementation is not considered runtime-accepted until its phase gate has recorded the required evidence.
 
-- Tenant and project management with membership and authorization boundaries.
-- Project-owned Asset hierarchy with Site, Factory, Area, Production Line, Station, and Equipment asset types.
-- Asset hierarchy stored through the project-scoped contains relation.
+Implemented in the control plane and device flows:
 
-Not implemented yet:
+- Tenant/project membership and authorization, plus the project-owned Asset hierarchy.
+- Tenant/project-scoped Device management, Equipment association, per-Device Access Tokens, broker authentication/ACLs, and the device UI.
+- Project-scoped provisioning profiles, bootstrap receipts, approval/rejection and audit history, plus a shared `max_devices_quota` for manual creation and provisioning.
+- Local Mosquitto TLS on port `8883`, with CA verification in the simulator and telemetry service. This does not complete production certificate rotation or production-topology acceptance.
 
-- Device registry and credential lifecycle.
-- Device-to-Equipment association.
-- MQTT authentication and topic authorization.
-- Telemetry schemas, ingestion pipeline, telemetry storage/query, device state, rules, alerts, commands, WebSocket delivery, and data-plane tenant isolation.
+Current Data Plane behavior in `telemetry-service/app/main.py`:
 
-The MQTT service is a smoke skeleton: it connects to Mosquitto, subscribes, and logs message topic and payload size. Local Mosquitto currently allows anonymous access. These facts are starting-state notes, not readiness claims.
+- Connects to the broker over TLS and subscribes to telemetry and heartbeat topics.
+- Parses the topic shape and JSON object, updates presence only when both Device ID and Project ID match an active Device, and logs topic metadata and payload size.
+- Does not persist telemetry, validate a versioned telemetry schema, deduplicate message IDs, record structured rejection outcomes, or expose a telemetry query API.
+
+Still open: durable/queryable telemetry, end-to-end idempotency, schema and timestamp validation, processing outcomes and metrics, offline-state transitions, rules/alerts/commands, WebSocket delivery, and L0 reconciliation. Device and provisioning data are tenant-owned through Project; each next data-plane path must derive and retain that organization context rather than trust topic or payload IDs alone.
 
 ### Core entity distinctions
 
@@ -335,9 +337,11 @@ Every phase is a vertical slice with an observable happy path, at least one fail
 - Keep Mosquitto as the local broker. Add an EMQX profile only for broker compatibility and scale exercises; verify version and license before production recommendations.
 - Record the working local workflow and known blockers. Do not call the platform end-to-end until simulator data is persisted and queryable.
 
-Gate: reproducible service startup and health checks; document any mismatch between Compose and repository layout.
+Status: Compose now points the frontend service at the existing `web/` directory. The earlier `frontend/` versus `web/` mismatch is resolved in configuration. The Phase 0 gate remains open until a reproducible startup and service-health run is recorded.
 
 ### Phase 1 — Tenant-scoped Device Management
+
+Status: the Device management and provisioning implementation is present, with backend feature tests. Keep the failure and tenant-isolation acceptance evidence distinct from the existence of the implementation.
 
 - Keep Tenant → Project → Asset hierarchy as the existing master-data foundation.
 - Add Device identity, profile, credential issue/revocation, status, and optional association to an Equipment Asset.
@@ -356,6 +360,8 @@ Failure exercise: guessed Device IDs, wrong-project topic, revoked credential, c
 Gate: an authorized Device can be created and assigned a topic scope; unauthorized identities cannot publish or access Device data. Record auth failures and connection state.
 
 ### Phase 2 — Secure MQTT ingestion L0
+
+Status: next implementation phase. The current consumer performs basic topic/JSON handling and presence updates, but has no durable telemetry ingest path.
 
 ~~~text
 Simulator → MQTT broker → Python consumer → authenticate / authorize
@@ -473,7 +479,7 @@ Simulator (optional tools profile)
 - Keep application, database, Redis, and broker secrets separate. Use persistent volumes for state that must survive container restarts.
 - Every service has meaningful health/readiness checks. Broker readiness does not prove telemetry has been ingested or stored.
 - Record the real local startup workflow only after checking it against the repository and Compose paths.
-- For a local ESP32 enrollment smoke test, HTTP is available only when Laravel runs with `APP_ENV=local` and `DEVICE_PROVISIONING_ALLOW_INSECURE_HTTP=true`. The simulator requires HTTPS. Use an HTTPS staging endpoint to verify certificate handling; see the [Access Token provisioning flow](./spec/devices/access_token/README.md#provisioning-device-flow).
+- For a local ESP32 enrollment smoke test, HTTP is available only when Laravel runs with `APP_ENV=local` and `DEVICE_PROVISIONING_ALLOW_INSECURE_HTTP=true`. The simulator requires HTTPS. Use an HTTPS staging endpoint to verify certificate handling; see the [Access Token provisioning flow](./spec/devices/devices_access_token.md#provisioning-device-flow).
 
 ### Production deployment on a Linux host
 
@@ -661,7 +667,7 @@ liteboard/
 └── docker-compose.yml
 ~~~
 
-The current Compose frontend service references a frontend build context named frontend, while this checkout contains web. Resolve and verify that mismatch before documenting a successful one-command local startup; this plan records the discrepancy but does not imply it has been fixed.
+The current Compose frontend service uses the `web/` build context, matching this checkout. Verify a clean, reproducible startup and the configured health checks before documenting a successful one-command local workflow; the configuration match alone does not prove the Phase 0 gate.
 
 Recommended supporting documentation:
 

@@ -2,6 +2,8 @@
 
 Tài liệu này mô tả hành vi hiện tại theo contract và mã nguồn LiteBoard: cách Access Token xác thực Device qua MQTT, cách tạo Device thủ công, và cách firmware đăng ký bằng provisioning.
 
+Access Token là credential MQTT duy nhất của Device. Provisioning profile chỉ xác thực quyền đăng ký Device vào Project và truy vấn trạng thái duyệt; nó không thay thế Access Token. Device tạo thủ công mặc định đã được duyệt, còn Device provisioning nhận token trước rồi chờ Project admin duyệt trước khi broker cấp quyền MQTT.
+
 ## 1. Các khái niệm và ranh giới
 
 | Khái niệm | Phạm vi | Dùng để làm gì |
@@ -191,7 +193,7 @@ Các điểm triển khai để tra cứu luồng: `backend/modules/Admin/Servic
 
 ## Tài liệu liên quan
 
-- [Kế hoạch hardening và ingestion](../future_plans/future_device_security_and_ingestion_plan.md)
-- [MQTT TLS server certificate](../future_plans/phase-7-mqtt-tls-server-certificate.md)
-- [Quota và rate limiting](../future_plans/phase-8-quotas-and-rate-limiting.md)
-- [Schema validation và replay protection](../future_plans/phase-9-schema-validation-and-replay-protection.md)
+- [Kế hoạch hardening và ingestion](./future_plans/future_device_security_and_ingestion_plan.md)
+- [MQTT TLS server certificate](./future_plans/phase-7-mqtt-tls-server-certificate.md)
+- [Quota và rate limiting](./future_plans/phase-8-quotas-and-rate-limiting.md)
+- [Schema validation và replay protection](./future_plans/phase-9-schema-validation-and-replay-protection.md)

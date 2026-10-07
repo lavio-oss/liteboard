@@ -1,12 +1,12 @@
 # Phase 7: MQTT TLS server-auth và xoay vòng chứng chỉ máy chủ
 
-> Trạng thái: Future plan — production-equivalent và quy trình xoay vòng chứng chỉ chưa được nghiệm thu.
+> Trạng thái: TLS local trên broker, simulator và telemetry service đã được cấu hình; cấu hình production-equivalent, CA/SAN trên endpoint triển khai và quy trình xoay vòng chứng chỉ chưa được nghiệm thu.
 > Thuộc kế hoạch: [future_device_security_and_ingestion_plan.md](./future_device_security_and_ingestion_plan.md)
 > Phụ thuộc: MQTT Access Token auth/ACL hiện có và listener TLS `8883`.
 
 ## 1. Mục tiêu
 
-Broker hiện cấu hình listener TLS `8883` và xác thực Access Token theo [luồng MQTT hiện hành](../access_token/README.md#mqtt-authentication). Phase 7 tập trung kiểm tra cấu hình production-equivalent, phân phối CA và thay chứng chỉ máy chủ mà không làm gián đoạn Device quá thời gian cho phép. Đây là TLS server-auth; Access Token vẫn là credential đăng nhập MQTT của Device.
+Broker hiện cấu hình listener TLS `8883` và xác thực Access Token theo [luồng MQTT hiện hành](../devices_access_token.md#mqtt-authentication). Phase 7 tập trung kiểm tra cấu hình production-equivalent, phân phối CA và thay chứng chỉ máy chủ mà không làm gián đoạn Device quá thời gian cho phép. Đây là TLS server-auth; Access Token vẫn là credential đăng nhập MQTT của Device.
 
 ## 2. Việc thực hiện
 

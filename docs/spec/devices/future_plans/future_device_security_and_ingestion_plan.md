@@ -1,18 +1,20 @@
 # Roadmap tiếp theo: TLS, quota và toàn vẹn Telemetry
 
-> Cập nhật: 2026-10-05
+> Cập nhật: 2026-10-07
 > Trạng thái: Tài liệu kế hoạch. Chỉ đánh dấu hoàn thành khi có implementation và kiểm tra runtime tương ứng.
 > Điều hướng: [Đặc tả Device](../README.md).
 
 ## 1. Hiện trạng và thứ tự
 
-Device hiện xác thực MQTT bằng Access Token; mô hình credential, hai luồng tạo Device và tenant boundary được mô tả trong [tài liệu Access Token](../access_token/README.md). Kế hoạch này chỉ theo dõi các phần hardening tiếp theo, gồm TLS production, quota kết nối/tốc độ và toàn vẹn telemetry.
+Device hiện xác thực MQTT bằng Access Token; mô hình credential, hai luồng tạo Device và tenant boundary được mô tả trong [tài liệu Access Token](../devices_access_token.md). Kế hoạch này chỉ theo dõi các phần hardening tiếp theo, gồm TLS production, quota kết nối/tốc độ và toàn vẹn telemetry.
 
 | Phase | Phạm vi | Trạng thái | Đặc tả |
 |---|---|---|---|
-| Phase 7 | Production-equivalent MQTT TLS server-auth và xoay vòng chứng chỉ máy chủ | Kế hoạch | [Phase 7](./phase-7-mqtt-tls-server-certificate.md) |
-| Phase 8 | Giới hạn kích thước gói tin, số kết nối và tốc độ gửi theo Device | Kế hoạch | [Phase 8](./phase-8-quotas-and-rate-limiting.md) |
-| Phase 9 | Kiểm tra schema telemetry và chống replay/deduplication | Kế hoạch | [Phase 9](./phase-9-schema-validation-and-replay-protection.md) |
+| Phase 7 | Production-equivalent MQTT TLS server-auth và xoay vòng chứng chỉ máy chủ | TLS local đã có; nghiệm thu production còn mở | [Phase 7](./phase-7-mqtt-tls-server-certificate.md) |
+| Phase 8 | Giới hạn kích thước gói tin, số kết nối và tốc độ gửi theo Device | Một phần: quota tạo Device đã có; quota kết nối/tốc độ còn mở | [Phase 8](./phase-8-quotas-and-rate-limiting.md) |
+| Phase 9 | Kiểm tra schema telemetry và chống replay/deduplication | Chưa triển khai | [Phase 9](./phase-9-schema-validation-and-replay-protection.md) |
+
+Provisioning, duyệt Device và quota `projects.max_devices_quota` dùng chung cho tạo thủ công/provisioning đã có implementation. TLS và CA handling cũng đã được cấu hình cho môi trường local. Đây là trạng thái code trong repo; vẫn cần kiểm tra runtime cho từng tiêu chí acceptance bên dưới. Hiện chưa có telemetry persistence/query hoặc replay deduplication trong Data Plane.
 
 Access Token vẫn là credential đăng nhập MQTT duy nhất của Device. Provisioning chỉ cấp credential đó sau khi gán Device vào Project; việc duyệt mới quyết định Device có được MQTT broker cấp quyền hay không.
 

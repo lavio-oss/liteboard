@@ -90,6 +90,9 @@ php artisan test --compact
 
 # Code Styling Formatter
 composer pint
+
+# Run dev server
+php artisan serve --host-0.0.0.0 --port=8800
 ```
 
 ### Frontend Quality Gates

@@ -1,11 +1,11 @@
 # Phase 8: Connection Quota, Message-Size Quota & Rate Limiting theo Thiết bị
 
-> Device-creation quota contract: `projects.max_devices_quota` is shared by manual creation and [Access Token provisioning](../access_token/README.md#provisioning-device-flow), and applies to every existing Device regardless of status or creation path. `null` is unlimited; `0` prevents new Devices. Both create paths and quota updates lock the Project row. Provisioning receipts use `profile_id + request_id` and a 24-hour retry window; that window is separate from the connection/message rate limits described in this plan.
+> Device-creation quota contract: `projects.max_devices_quota` is shared by manual creation and [Access Token provisioning](../devices_access_token.md#provisioning-device-flow), and applies to every existing Device regardless of status or creation path. `null` is unlimited; `0` prevents new Devices. Both create paths and quota updates lock the Project row. Provisioning receipts use `profile_id + request_id` and a 24-hour retry window; that window is separate from the connection/message rate limits described in this plan.
 
-> Trạng thái: Future plan — chưa triển khai.  
+> Trạng thái: Triển khai một phần: quota tạo Device theo Project dùng chung cho tạo thủ công và provisioning đã có. Giới hạn packet, quota kết nối đồng thời và rate limit message/bandwidth theo Device vẫn là kế hoạch.
 > Thuộc kế hoạch: [future_device_security_and_ingestion_plan.md](./future_device_security_and_ingestion_plan.md)  
 > Tầng kiến trúc: **Mosquitto/EMQX Broker + Python Data Plane (`telemetry-service`) + Redis**  
-> Phụ thuộc: [luồng MQTT Access Token hiện hành](../access_token/README.md#mqtt-authentication)
+> Phụ thuộc: [luồng MQTT Access Token hiện hành](../devices_access_token.md#mqtt-authentication)
 
 ---
 

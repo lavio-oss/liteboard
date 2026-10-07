@@ -197,6 +197,6 @@ Nếu port database/API đã đổi trong `.env` gốc, cập nhật port tươn
 ## Tài liệu chuyên sâu
 
 - [Kế hoạch và kiến trúc tổng thể](./plan.md)
-- [Access Token: cơ sở và luồng hoạt động](./spec/devices/access_token/README.md)
+- [Device Access Token: cơ sở và luồng hoạt động](./spec/devices/devices_access_token.md)
 - [Hướng dẫn vận hành Mosquitto/TLS](../infrastructure/mosquitto/README.md)
 - [Quy tắc toàn vẹn data contract](./DATA_CONTRACT_INTEGRITY_RULE.md)
