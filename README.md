@@ -129,7 +129,7 @@ php artisan test --compact
 composer pint
 
 # Run dev server
-php artisan serve --host-0.0.0.0 --port=8800
+php artisan serve --host=0.0.0.0 --port=8800
 ```
 
 ### Frontend Quality Gates

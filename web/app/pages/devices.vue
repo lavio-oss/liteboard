@@ -505,9 +505,8 @@ const columns: TableColumn<AdminTableRow>[] = [
     header: 'Approval',
     cell: ({ row }) => {
       const status = row.original.approval_status
-      const reason = row.original.approval_reason
 
-      if (status === undefined || reason === undefined) {
+      if (status === undefined) {
         throw new Error('The device approval state is missing.')
       }
 
@@ -520,8 +519,7 @@ const columns: TableColumn<AdminTableRow>[] = [
             variant: 'subtle'
           },
           () => approvalStatusLabels[status]
-        ),
-        ...(reason === null ? [] : [h('p', { class: 'mt-1 line-clamp-2 text-xs text-muted' }, reason)])
+        )
       ])
     }
   },

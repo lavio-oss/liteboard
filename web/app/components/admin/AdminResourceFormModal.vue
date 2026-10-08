@@ -295,6 +295,14 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
 
         <template v-else-if="props.resourceType === 'device'">
           <UFormField
+            name="code"
+            label="Code"
+            required
+          >
+            <UInput v-model="state.code" class="w-full" placeholder="Enter device code" />
+          </UFormField>
+
+          <UFormField
             label="Project"
             required
           >
@@ -316,14 +324,6 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
               class="w-full"
               @update:model-value="emit('update:equipment-asset-id', $event)"
             />
-          </UFormField>
-
-          <UFormField
-            name="code"
-            label="Code"
-            required
-          >
-            <UInput v-model="state.code" class="w-full" placeholder="Enter device code" />
           </UFormField>
 
           <UFormField
