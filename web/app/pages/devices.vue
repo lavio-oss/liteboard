@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
 import { useMqttCaCertificateDownload } from '~/composables/useMqttCaCertificateDownload'
@@ -160,6 +160,15 @@ function openProvisioning(): void {
   )
   provisioningOpen.value = true
 }
+
+const addDeviceItems = computed<DropdownMenuItem[][]>(() => [[
+  ...(canCreateDevice.value
+    ? [{ label: 'Create device with Access Token', icon: 'i-lucide-key-round', onSelect: openCreate }]
+    : []),
+  ...(writableProjects.value.length > 0
+    ? [{ label: 'Set up multiple devices', icon: 'i-lucide-radio-tower', onSelect: openProvisioning }]
+    : [])
+]])
 
 const equipmentAssetOptions = computed(() => [
   { label: 'No equipment asset', value: null },
@@ -486,20 +495,6 @@ const columns: TableColumn<AdminTableRow>[] = [
     }
   },
   {
-    id: 'last_seen_at',
-    accessorKey: 'last_seen_at',
-    header: 'Last seen',
-    cell: ({ row }) => {
-      if (row.original.last_seen_at === undefined) {
-        throw new Error('The device last_seen_at value is missing.')
-      }
-
-      return row.original.last_seen_at === null
-        ? '—'
-        : formatDateTime(row.original.last_seen_at)
-    }
-  },
-  {
     id: 'approval_status',
     accessorKey: 'approval_status',
     header: 'Approval',
@@ -640,25 +635,23 @@ const errorMessage = computed(() => {
 
         <template #right>
           <UButton
-            v-if="canCreateDevice"
-            label="Add device"
-            icon="i-lucide-plus"
-            @click="openCreate"
-          />
-          <UButton
-            v-if="writableProjects.length > 0"
-            label="Provision devices"
-            icon="i-lucide-radio-tower"
-            color="neutral"
-            variant="outline"
-            @click="openProvisioning"
-          />
-          <UButton
             label="Setup tutorial"
+            icon="i-lucide-book-open-check"
             color="neutral"
             variant="outline"
             @click="mqttGuideOpen = true"
           />
+          <UDropdownMenu
+            v-if="addDeviceItems[0]?.length"
+            :items="addDeviceItems"
+            :content="{ align: 'end' }"
+          >
+            <UButton
+              label="Add device"
+              icon="i-lucide-plus"
+              trailing-icon="i-lucide-chevron-down"
+            />
+          </UDropdownMenu>
         </template>
       </UDashboardNavbar>
     </template>
