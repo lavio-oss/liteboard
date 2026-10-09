@@ -15,11 +15,13 @@ use Modules\Admin\Enums\Device\DeviceApprovalStatus;
 use Modules\Admin\Enums\Device\DeviceConnectionState;
 use Modules\Admin\Enums\Device\DeviceStatus;
 use Modules\Admin\Models\Asset\Asset;
+use Modules\Admin\Models\DeviceProfile\DeviceProfileVersion;
 use Modules\Admin\Models\DeviceProvisioning\DeviceProvisioningAudit;
 use Modules\Admin\Models\Project\Project;
 
 #[Fillable([
     'equipment_asset_id',
+    'device_profile_version_id',
     'name',
     'code',
     'description',
@@ -60,6 +62,12 @@ final class Device extends Model
     public function equipmentAsset(): BelongsTo
     {
         return $this->belongsTo(Asset::class, 'equipment_asset_id');
+    }
+
+    /** @return BelongsTo<DeviceProfileVersion, $this> */
+    public function profileVersion(): BelongsTo
+    {
+        return $this->belongsTo(DeviceProfileVersion::class, 'device_profile_version_id');
     }
 
     /** @return HasOne<DeviceCredential, $this> */

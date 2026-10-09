@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Modules\Admin\Enums\Project\ProjectRole;
 use Modules\Admin\Models\Asset\Asset;
 use Modules\Admin\Models\Device\Device;
+use Modules\Admin\Models\DeviceProfile\DeviceProfile;
 use Modules\Admin\Models\DeviceProvisioning\DeviceProvisioningAudit;
 use Modules\Admin\Models\DeviceProvisioning\ProjectProvisioningProfile;
 use Modules\Core\Models\Tenant\Tenant;
@@ -48,6 +49,12 @@ final class Project extends Model
     public function devices(): HasMany
     {
         return $this->hasMany(Device::class);
+    }
+
+    /** @return HasMany<DeviceProfile, $this> */
+    public function deviceProfiles(): HasMany
+    {
+        return $this->hasMany(DeviceProfile::class);
     }
 
     /** @return HasOne<ProjectProvisioningProfile, $this> */

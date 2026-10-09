@@ -18,6 +18,7 @@ final class DevicePersistenceService
      *     code: string,
      *     description?: string|null,
      *     equipment_asset_id?: string|null,
+     *     device_profile_version_id?: string|null,
      *     status?: string
      * }  $attributes
      */
@@ -44,6 +45,7 @@ final class DevicePersistenceService
      *     code?: string,
      *     description?: string|null,
      *     equipment_asset_id?: string|null,
+     *     device_profile_version_id?: string|null,
      *     status?: string
      * }  $attributes
      */

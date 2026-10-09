@@ -34,6 +34,7 @@ final class UpdateDeviceRequest extends FormRequest
             'code' => ['sometimes', 'string', 'max:64'],
             'description' => ['sometimes', 'nullable', 'string', 'max:1000'],
             'equipment_asset_id' => ['sometimes', 'nullable', 'bail', 'uuid'],
+            'device_profile_version_id' => ['sometimes', 'nullable', 'bail', 'uuid'],
             'status' => ['sometimes', Rule::enum(DeviceStatus::class)],
             'approval_status' => ['prohibited'],
             'tenant_id' => ['prohibited'],
@@ -47,6 +48,7 @@ final class UpdateDeviceRequest extends FormRequest
      *     code?: string,
      *     description?: string|null,
      *     equipment_asset_id?: string|null,
+     *     device_profile_version_id?: string|null,
      *     status?: string
      * }
      */
@@ -57,6 +59,7 @@ final class UpdateDeviceRequest extends FormRequest
          *     code?: string,
          *     description?: string|null,
          *     equipment_asset_id?: string|null,
+         *     device_profile_version_id?: string|null,
          *     status?: string
          * } $validated
          */
@@ -88,6 +91,13 @@ final class UpdateDeviceRequest extends FormRequest
                         $query
                             ->where('project_id', $project->getKey())
                             ->where('asset_type', AssetType::Equipment->value);
+                    },
+                ),
+            ],
+            'device_profile_version_id' => [
+                Rule::exists('device_profile_versions', 'id')->where(
+                    static function (Builder $query) use ($project): void {
+                        $query->where('project_id', $project->getKey());
                     },
                 ),
             ],

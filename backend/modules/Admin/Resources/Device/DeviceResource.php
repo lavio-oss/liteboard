@@ -77,6 +77,9 @@ final class DeviceResource extends JsonResource
             'equipment_asset_id' => $device->equipment_asset_id === null
                 ? null
                 : (string) $device->equipment_asset_id,
+            'device_profile_version_id' => $device->getAttribute('device_profile_version_id') === null
+                ? null
+                : (string) $device->getAttribute('device_profile_version_id'),
             'name' => (string) $device->name,
             'code' => (string) $device->code,
             'description' => $device->description,

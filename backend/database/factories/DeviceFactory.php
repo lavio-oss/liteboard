@@ -18,6 +18,7 @@ final class DeviceFactory extends Factory
     /**
      * @return array{
      *     equipment_asset_id: string|null,
+     *     device_profile_version_id: string|null,
      *     name: string,
      *     code: string,
      *     description: string|null,
@@ -31,6 +32,7 @@ final class DeviceFactory extends Factory
     {
         return [
             'equipment_asset_id' => null,
+            'device_profile_version_id' => null,
             'name' => fake()->words(3, true),
             'code' => fake()->unique()->slug(2),
             'description' => fake()->optional()->sentence(),
