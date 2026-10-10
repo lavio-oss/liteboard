@@ -31,6 +31,7 @@ const {
   deleteDevice,
   approveDevice: submitDeviceApproval,
   rejectDevice: submitDeviceRejection,
+  loadDeviceProfiles,
   loadDevices,
   loadTenantHierarchy,
   updateDevice
@@ -41,6 +42,7 @@ const formOpen = ref(false)
 const formLoading = ref(false)
 const selectedProjectId = ref<string | null>(null)
 const selectedEquipmentAssetId = ref<string | null>(null)
+const selectedDeviceProfileVersionId = ref<string | null>(null)
 const editingDevice = ref<Device | null>(null)
 const deleteOpen = ref(false)
 const deleteLoading = ref(false)
@@ -96,6 +98,7 @@ const { data: response, status, error, refresh } = await useAsyncData('tenant-de
   if (activeTenantId.value === null) {
     return {
       assets: [],
+      deviceProfiles: [],
       devices: [],
       projects: []
     }
@@ -103,12 +106,14 @@ const { data: response, status, error, refresh } = await useAsyncData('tenant-de
 
   const tenantId = activeTenantId.value
   const hierarchy = await loadTenantHierarchy(tenantId)
-  const deviceLists = await Promise.all(
-    hierarchy.projects.map(project => loadDevices(tenantId, project.id))
-  )
+  const [deviceLists, deviceProfileLists] = await Promise.all([
+    Promise.all(hierarchy.projects.map(project => loadDevices(tenantId, project.id))),
+    Promise.all(hierarchy.projects.map(project => loadDeviceProfiles(tenantId, project.id)))
+  ])
 
   return {
     assets: hierarchy.assets,
+    deviceProfiles: deviceProfileLists.flat(),
     devices: deviceLists.flat(),
     projects: hierarchy.projects
   }
@@ -116,6 +121,8 @@ const { data: response, status, error, refresh } = await useAsyncData('tenant-de
 
 const assets = computed(() => response.value?.assets ?? [])
 const devices = computed(() => response.value?.devices ?? [])
+const selectedProjectDeviceProfiles = computed(() => (response.value?.deviceProfiles ?? [])
+  .filter(profile => profile.project_id === selectedProjectId.value))
 const projects = computed(() => response.value?.projects ?? [])
 const projectOptions = computed(() => [
   ...projects.value.map(project => ({ label: project.name, value: project.id }))
@@ -178,6 +185,12 @@ const equipmentAssetOptions = computed(() => [
 ])
 
 watch(selectedProjectId, (projectId) => {
+  if (!selectedProjectDeviceProfiles.value.some(
+    profile => profile.versions.some(version => version.id === selectedDeviceProfileVersionId.value)
+  )) {
+    selectedDeviceProfileVersionId.value = null
+  }
+
   if (selectedEquipmentAssetId.value === null) {
     return
   }
@@ -229,6 +242,7 @@ function openCreate(): void {
   editingDevice.value = null
   selectedProjectId.value = writableProjects.value[0]?.id ?? null
   selectedEquipmentAssetId.value = null
+  selectedDeviceProfileVersionId.value = null
   formOpen.value = true
 }
 
@@ -242,6 +256,7 @@ function openEdit(deviceId: string): void {
   editingDevice.value = device
   selectedProjectId.value = device.project_id
   selectedEquipmentAssetId.value = device.equipment_asset_id
+  selectedDeviceProfileVersionId.value = device.device_profile_version_id
   formOpen.value = true
 }
 
@@ -497,7 +512,22 @@ const columns: TableColumn<AdminTableRow>[] = [
   {
     id: 'approval_status',
     accessorKey: 'approval_status',
-    header: 'Approval',
+    header: ({ column }) => {
+      const isSorted = column.getIsSorted()
+
+      return h(UButton, {
+        color: 'neutral',
+        variant: 'ghost',
+        label: 'Approval',
+        icon: isSorted
+          ? isSorted === 'asc'
+            ? 'i-lucide-arrow-up-narrow-wide'
+            : 'i-lucide-arrow-down-wide-narrow'
+          : 'i-lucide-arrow-up-down',
+        class: '-mx-2.5',
+        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc')
+      })
+    },
     cell: ({ row }) => {
       const status = row.original.approval_status
 
@@ -688,10 +718,12 @@ const errorMessage = computed(() => {
         v-model:open="formOpen"
         v-model:project-id="selectedProjectId"
         v-model:equipment-asset-id="selectedEquipmentAssetId"
+        v-model:device-profile-version-id="selectedDeviceProfileVersionId"
         resource-type="device"
         :resource="editingDevice"
         :project-options="writableProjectOptions"
         :equipment-asset-options="equipmentAssetOptions"
+        :device-profiles="selectedProjectDeviceProfiles"
         :loading="formLoading"
         @submit-device="saveDevice"
       />

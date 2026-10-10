@@ -204,9 +204,10 @@ Current Data Plane behavior in `telemetry-service/app/main.py`:
 
 - Connects to the broker over TLS and subscribes to telemetry and heartbeat topics.
 - Parses the topic shape and JSON object, updates presence only when both Device ID and Project ID match an active Device, and logs topic metadata and payload size.
-- Does not persist telemetry, validate a versioned telemetry schema, deduplicate message IDs, record structured rejection outcomes, or expose a telemetry query API.
+- Validates telemetry against the Device's assigned profile version (looked up by Device ID and Project ID) and logs an `accepted`/`rejected` outcome with stable reason codes.
+- Does not persist telemetry or rejection outcomes, deduplicate message IDs, or expose a telemetry query API.
 
-Still open: durable/queryable telemetry, end-to-end idempotency, schema and timestamp validation, processing outcomes and metrics, offline-state transitions, rules/alerts/commands, WebSocket delivery, and L0 reconciliation. Device and provisioning data are tenant-owned through Project; each next data-plane path must derive and retain that organization context rather than trust topic or payload IDs alone.
+Still open: durable/queryable telemetry, end-to-end idempotency, timestamp validation, persisted processing outcomes and metrics, offline-state transitions, rules/alerts/commands, WebSocket delivery, and L0 reconciliation. Device and provisioning data are tenant-owned through Project; each next data-plane path must derive and retain that organization context rather than trust topic or payload IDs alone.
 
 ### Core entity distinctions
 

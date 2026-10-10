@@ -7,6 +7,7 @@ import type {
   AssetType,
   Device,
   DeviceInput,
+  DeviceProfile,
   ResourceStatus,
   Project,
   ProjectFormInput
@@ -36,6 +37,7 @@ const props = withDefaults(defineProps<{
   parentOptions?: SelectOption[]
   equipmentAssetId?: string | null
   equipmentAssetOptions?: SelectOption[]
+  deviceProfiles?: DeviceProfile[]
   loading?: boolean
 }>(), {
   resource: null,
@@ -47,10 +49,13 @@ const props = withDefaults(defineProps<{
   parentOptions: () => [],
   equipmentAssetId: null,
   equipmentAssetOptions: () => [],
+  deviceProfiles: () => [],
   loading: false
 })
 
 const open = defineModel<boolean>('open', { required: true })
+const deviceProfileVersionId = defineModel<string | null>('deviceProfileVersionId', { default: null })
+const deviceProfileId = ref<string | null>(null)
 
 const emit = defineEmits<{
   'update:tenant-id': [value: string | null]
@@ -92,6 +97,22 @@ const assetTypeOptions: Array<{ label: string, value: AssetType }> = [
   { label: 'Station', value: 'station' },
   { label: 'Equipment', value: 'equipment' }
 ]
+
+const deviceProfileOptions = computed<SelectOption[]>(() => [
+  { label: 'No profile', value: null },
+  ...props.deviceProfiles.map(profile => ({ label: `${profile.name} (${profile.code})`, value: profile.id }))
+])
+
+const deviceProfileVersionOptions = computed<SelectOption[]>(() => props.deviceProfiles
+  .find(profile => profile.id === deviceProfileId.value)
+  ?.versions
+  .toSorted((a, b) => b.version - a.version)
+  .map(version => ({ label: version.schema_code, value: version.id })) ?? [])
+
+function selectDeviceProfile(profileId: string | null): void {
+  deviceProfileId.value = profileId
+  deviceProfileVersionId.value = deviceProfileVersionOptions.value[0]?.value ?? null
+}
 
 const isTwoColumnLayout = computed(() => props.resourceType === 'asset' || props.resourceType === 'device')
 
@@ -158,6 +179,9 @@ watch(
       ? resource.location ?? ''
       : ''
     state.status = resource === null || resource === undefined ? 'active' : resource.status
+    deviceProfileId.value = props.deviceProfiles.find(
+      profile => profile.versions.some(version => version.id === deviceProfileVersionId.value)
+    )?.id ?? null
   },
   { immediate: true }
 )
@@ -180,6 +204,7 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
       code: data.code,
       description: normalizedDescription,
       equipment_asset_id: props.equipmentAssetId,
+      device_profile_version_id: deviceProfileVersionId.value,
       status: data.status
     })
 
@@ -323,6 +348,33 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
               :items="props.equipmentAssetOptions"
               class="w-full"
               @update:model-value="emit('update:equipment-asset-id', $event)"
+            />
+          </UFormField>
+
+          <UFormField label="Device profile">
+            <template #hint>
+              <ULink to="/device-profiles" class="text-xs">
+                Manage profiles
+              </ULink>
+            </template>
+            <USelect
+              :model-value="deviceProfileId"
+              :items="deviceProfileOptions"
+              class="w-full"
+              @update:model-value="selectDeviceProfile"
+            />
+          </UFormField>
+
+          <UFormField
+            label="Profile version"
+            :help="deviceProfileId !== null && deviceProfileVersionOptions.length === 0 ? 'This profile has no versions yet.' : undefined"
+          >
+            <USelect
+              v-model="deviceProfileVersionId"
+              :items="deviceProfileVersionOptions"
+              class="w-full"
+              placeholder="Select a version"
+              :disabled="deviceProfileId === null || deviceProfileVersionOptions.length === 0"
             />
           </UFormField>
 

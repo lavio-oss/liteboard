@@ -2,9 +2,12 @@ import { z } from 'zod'
 import { tenantRoleSchema } from '~/types/auth'
 import { deviceApprovalSchema } from './deviceApproval'
 import { deviceMqttConnectionSchema, deviceMqttTopicsSchema } from './deviceCredential'
+import type { deviceProfileVersionDefinitionFieldSchema } from './deviceProfileDefinition'
+import { deviceProfileVersionDefinitionSchema } from './deviceProfileDefinition'
 
 export { deviceApprovalStatusSchema } from './deviceApproval'
 export { deviceMqttConnectionSchema, deviceMqttTopicsSchema } from './deviceCredential'
+export { deviceProfileVersionDefinitionFieldSchema, deviceProfileVersionDefinitionSchema } from './deviceProfileDefinition'
 
 export const resourceStatusSchema = z.enum(['active', 'inactive'])
 export const assetTypeSchema = z.enum(['site', 'factory', 'area', 'production_line', 'station', 'equipment'])
@@ -60,6 +63,7 @@ export const assetSchema = resourceBaseSchema.extend({
 export const deviceSchema = resourceBaseSchema.extend({
   project_id: z.string().uuid(),
   equipment_asset_id: z.string().uuid().nullable(),
+  device_profile_version_id: z.string().uuid().nullable(),
   code: z.string(),
   description: z.string().nullable(),
   connection_state: deviceConnectionStateSchema,
@@ -68,6 +72,41 @@ export const deviceSchema = resourceBaseSchema.extend({
   mqtt_topics: deviceMqttTopicsSchema,
   last_seen_at: z.string().nullable()
 }).extend(deviceApprovalSchema.shape)
+
+export const deviceProfileVersionSchema = z.object({
+  id: z.string().uuid(),
+  project_id: z.string().uuid(),
+  device_profile_id: z.string().uuid(),
+  version: z.number().int().positive(),
+  schema_code: z.string(),
+  definition: deviceProfileVersionDefinitionSchema,
+  compatibility_note: z.string().nullable(),
+  created_at: z.string().nullable(),
+  updated_at: z.string().nullable()
+})
+
+export const deviceProfileVersionInputSchema = z.object({
+  schema_code: z.string().min(1).max(64),
+  definition: deviceProfileVersionDefinitionSchema,
+  compatibility_note: z.string().max(1000).nullable()
+})
+
+export const deviceProfileSchema = z.object({
+  id: z.string().uuid(),
+  project_id: z.string().uuid(),
+  code: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  versions: z.array(deviceProfileVersionSchema),
+  created_at: z.string().nullable(),
+  updated_at: z.string().nullable()
+})
+
+export const deviceProfileInputSchema = z.object({
+  code: z.string().min(1, 'Code is required').max(64, 'Code is too long'),
+  name: z.string().min(2, 'Name must be at least 2 characters').max(255, 'Name is too long'),
+  description: z.string().max(1000, 'Description is too long').nullable()
+})
 
 export const deviceCredentialSchema = z.object({
   device_id: z.string().uuid(),
@@ -112,6 +151,18 @@ export const assetResponseSchema = z.object({
   data: assetSchema
 })
 
+export const deviceProfilesResponseSchema = z.object({
+  data: z.array(deviceProfileSchema)
+}).passthrough()
+
+export const deviceProfileResponseSchema = z.object({
+  data: deviceProfileSchema
+})
+
+export const deviceProfileVersionResponseSchema = z.object({
+  data: deviceProfileVersionSchema
+})
+
 export const devicesResponseSchema = z.object({
   data: z.array(deviceSchema)
 }).passthrough()
@@ -145,6 +196,11 @@ export type DeviceCredentialStatus = z.infer<typeof deviceCredentialStatusSchema
 export type DeviceMqttTopics = z.infer<typeof deviceMqttTopicsSchema>
 export type Project = z.infer<typeof projectSchema>
 export type Asset = z.infer<typeof assetSchema>
+export type DeviceProfile = z.infer<typeof deviceProfileSchema>
+export type DeviceProfileVersion = z.infer<typeof deviceProfileVersionSchema>
+export type DeviceProfileVersionDefinition = z.infer<typeof deviceProfileVersionDefinitionSchema>
+export type DeviceProfileVersionFieldType = z.infer<typeof deviceProfileVersionDefinitionFieldSchema>['type']
+export type DeviceProfileVersionInput = z.infer<typeof deviceProfileVersionInputSchema>
 export type Device = z.infer<typeof deviceSchema>
 export type DeviceCredential = z.infer<typeof deviceCredentialSchema>
 export type ProjectRole = z.infer<typeof projectRoleSchema>
@@ -170,11 +226,14 @@ export interface AssetInput {
   status: ResourceStatus
 }
 
+export type DeviceProfileInput = z.infer<typeof deviceProfileInputSchema>
+
 export interface DeviceInput {
   name: string
   code: string
   description: string | null
   equipment_asset_id: string | null
+  device_profile_version_id: string | null
   status: ResourceStatus
 }
 
@@ -206,13 +265,14 @@ export interface TenantHierarchy {
 export interface AdminTableRow {
   id: string
   name: string
-  status: ResourceStatus
+  status?: ResourceStatus
   asset_type?: AssetType
   code?: string
   tenant_id?: string
   project_id?: string
   parent_asset_id?: string | null
   equipment_asset_id?: string | null
+  device_profile_version_id?: string | null
   description?: string | null
   location?: string | null
   connection_state?: DeviceConnectionState
@@ -222,6 +282,6 @@ export interface AdminTableRow {
   credential_status?: DeviceCredentialStatus
   mqtt_topics?: DeviceMqttTopics
   last_seen_at?: string | null
-  created_at?: string
-  updated_at?: string
+  created_at?: string | null
+  updated_at?: string | null
 }

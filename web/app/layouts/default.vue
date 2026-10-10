@@ -48,6 +48,10 @@ const liteboardLinks = [{
   label: 'Devices',
   icon: 'i-lucide-router',
   to: '/devices'
+}, {
+  label: 'Device Profiles',
+  icon: 'i-lucide-file-cog',
+  to: '/device-profiles'
 }] satisfies NavigationMenuItem[]
 
 const links = computed<NavigationMenuItem[][]>(() => [

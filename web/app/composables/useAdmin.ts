@@ -4,6 +4,9 @@ import {
   assetResponseSchema,
   assetsResponseSchema,
   availableProjectUsersResponseSchema,
+  deviceProfileResponseSchema,
+  deviceProfileVersionResponseSchema,
+  deviceProfilesResponseSchema,
   deviceCredentialResponseSchema,
   deviceResponseSchema,
   devicesResponseSchema,
@@ -22,6 +25,10 @@ import type {
   Device,
   DeviceCredential,
   DeviceCredentialInput,
+  DeviceProfile,
+  DeviceProfileInput,
+  DeviceProfileVersion,
+  DeviceProfileVersionInput,
   DeviceInput,
   Project,
   ProjectProvisioningProfile,
@@ -50,6 +57,15 @@ export function useAdmin() {
     const response = await api.request(
       `/api/tenants/${tenantId}/projects/${projectId}/assets?per_page=100`,
       assetsResponseSchema
+    )
+
+    return response.data
+  }
+
+  async function loadDeviceProfiles(tenantId: string, projectId: string): Promise<DeviceProfile[]> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/device-profiles`,
+      deviceProfilesResponseSchema
     )
 
     return response.data
@@ -194,6 +210,62 @@ export function useAdmin() {
   async function deleteAsset(tenantId: string, projectId: string, assetId: string): Promise<void> {
     await api.request(
       `/api/tenants/${tenantId}/projects/${projectId}/assets/${assetId}`,
+      z.unknown(),
+      { method: 'DELETE' }
+    )
+  }
+
+  async function createDeviceProfile(
+    tenantId: string,
+    projectId: string,
+    payload: DeviceProfileInput
+  ): Promise<DeviceProfile> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/device-profiles`,
+      deviceProfileResponseSchema,
+      { body: payload, method: 'POST' }
+    )
+
+    return response.data
+  }
+
+  async function updateDeviceProfile(
+    tenantId: string,
+    projectId: string,
+    deviceProfileId: string,
+    payload: Partial<DeviceProfileInput>
+  ): Promise<DeviceProfile> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/device-profiles/${deviceProfileId}`,
+      deviceProfileResponseSchema,
+      { body: payload, method: 'PATCH' }
+    )
+
+    return response.data
+  }
+
+  async function createDeviceProfileVersion(
+    tenantId: string,
+    projectId: string,
+    deviceProfileId: string,
+    payload: DeviceProfileVersionInput
+  ): Promise<DeviceProfileVersion> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/device-profiles/${deviceProfileId}/versions`,
+      deviceProfileVersionResponseSchema,
+      { body: payload, method: 'POST' }
+    )
+
+    return response.data
+  }
+
+  async function deleteDeviceProfile(
+    tenantId: string,
+    projectId: string,
+    deviceProfileId: string
+  ): Promise<void> {
+    await api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/device-profiles/${deviceProfileId}`,
       z.unknown(),
       { method: 'DELETE' }
     )
@@ -412,16 +484,20 @@ export function useAdmin() {
     attachProjectUser,
     createAsset,
     createDevice,
+    createDeviceProfile,
+    createDeviceProfileVersion,
     createProject,
     createProjectProvisioningProfile,
     createProjectUserAccount,
     createTenantUser,
     deleteAsset,
     deleteDevice,
+    deleteDeviceProfile,
     deleteProject,
     deleteTenantUser,
     loadAssets,
     loadAvailableProjectUsers,
+    loadDeviceProfiles,
     loadDeviceCredentials,
     loadDevices,
     loadProjectUsers,
@@ -436,6 +512,7 @@ export function useAdmin() {
     rotateProjectProvisioningSecret,
     updateAsset,
     updateDevice,
+    updateDeviceProfile,
     updateDeviceCredentials,
     updateProject,
     updateProjectDeviceQuota,

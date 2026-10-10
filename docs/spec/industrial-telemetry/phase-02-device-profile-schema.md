@@ -1,6 +1,8 @@
 # IT-2 — Device Profile và telemetry schema
 
-> Trạng thái: kế hoạch; chưa có implementation telemetry schema/profile trong Data Plane.
+> Trạng thái: đã implement. Control Plane quản lý Profile/Version và gán version cho Device; Data Plane (`telemetry-service`) validate payload theo version được gán, log outcome `accepted`/`rejected` kèm reason code. Chưa lưu outcome vào DB (Phase 3).
+>
+> Reason code: `invalid_payload`, `schema_not_assigned`, `schema_version_mismatch`, `missing_required_field`, `unknown_field`, `invalid_type`, `below_minimum`, `above_maximum`, `value_not_allowed`.
 
 ## Mục tiêu
 

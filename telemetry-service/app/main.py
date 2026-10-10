@@ -8,8 +8,10 @@ import asyncpg
 from fastapi import FastAPI
 
 from app.adapters.mqtt_subscriber import MqttSubscriber
+from app.adapters.postgres_device_schema_reader import PostgresDeviceSchemaReader
 from app.adapters.postgres_presence_writer import PostgresPresenceWriter
 from app.application.update_device_presence import UpdateDevicePresence
+from app.application.validate_device_telemetry import ValidateDeviceTelemetry
 
 
 @asynccontextmanager
@@ -27,7 +29,8 @@ async def lifespan(application: FastAPI):
 
     presence_writer = PostgresPresenceWriter(db_pool)
     update_device_presence = UpdateDevicePresence(presence_writer)
-    mqtt_subscriber = MqttSubscriber(update_device_presence)
+    validate_device_telemetry = ValidateDeviceTelemetry(PostgresDeviceSchemaReader(db_pool))
+    mqtt_subscriber = MqttSubscriber(update_device_presence, validate_device_telemetry)
     await mqtt_subscriber.connect_and_subscribe()
     application.state.mqtt_client = mqtt_subscriber.client
 

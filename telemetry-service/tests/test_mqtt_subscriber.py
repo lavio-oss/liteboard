@@ -8,7 +8,7 @@ from app.adapters.mqtt_subscriber import (
     HEARTBEAT_TOPIC,
     TELEMETRY_TOPIC,
     MqttSubscriber,
-    is_valid_json_payload,
+    decode_json_object,
     parse_device_topic,
 )
 
@@ -42,15 +42,15 @@ class ParseDeviceTopicTest(unittest.TestCase):
                 self.assertIsNone(parse_device_topic(topic))
 
 
-class IsValidJsonPayloadTest(unittest.TestCase):
-    def test_accepts_json_objects_including_empty_object(self) -> None:
-        self.assertTrue(is_valid_json_payload(b'{"temperature": 22.5}'))
-        self.assertTrue(is_valid_json_payload(b'{}'))
+class DecodeJsonObjectTest(unittest.TestCase):
+    def test_decodes_json_objects_including_empty_object(self) -> None:
+        self.assertEqual({'temperature': 22.5}, decode_json_object(b'{"temperature": 22.5}'))
+        self.assertEqual({}, decode_json_object(b'{}'))
 
     def test_rejects_empty_invalid_utf8_invalid_json_and_non_objects(self) -> None:
         for payload in (b'', b'\xff', b'{invalid', b'[]', b'null', b'42'):
             with self.subTest(payload=payload):
-                self.assertFalse(is_valid_json_payload(payload))
+                self.assertIsNone(decode_json_object(payload))
 
 
 class MqttSubscriberTest(unittest.IsolatedAsyncioTestCase):
@@ -71,7 +71,7 @@ class MqttSubscriberTest(unittest.IsolatedAsyncioTestCase):
             patch('app.adapters.mqtt_subscriber.MQTTClient', _FakeMqttClient),
             patch('app.adapters.mqtt_subscriber.build_mqtt_ssl_context', return_value=tls_context) as build_ssl,
         ):
-            subscriber = MqttSubscriber(handler)
+            subscriber = MqttSubscriber(handler, _validator())
             await subscriber.connect_and_subscribe()
 
         self.assertEqual('liteboard-telemetry-service', subscriber.client.client_id)
@@ -91,7 +91,7 @@ class MqttSubscriberTest(unittest.IsolatedAsyncioTestCase):
             patch('app.adapters.mqtt_subscriber.MQTTClient', _FakeMqttClient),
             patch('app.adapters.mqtt_subscriber.build_mqtt_ssl_context', return_value=object()),
         ):
-            subscriber = MqttSubscriber(handler)
+            subscriber = MqttSubscriber(handler, _validator())
             await subscriber.connect_and_subscribe()
 
         self.assertIsNone(subscriber.client.credentials)
@@ -99,7 +99,7 @@ class MqttSubscriberTest(unittest.IsolatedAsyncioTestCase):
     async def test_callback_skips_invalid_messages_and_forwards_valid_metadata(self) -> None:
         handler = unittest.mock.MagicMock()
         handler.execute = AsyncMock()
-        subscriber = MqttSubscriber(handler)
+        subscriber = MqttSubscriber(handler, _validator())
         topic = f'liteboard/{PROJECT_ID}/devices/{DEVICE_ID}/telemetry'
 
         with patch('builtins.print') as print_mock:
@@ -115,6 +115,60 @@ class MqttSubscriberTest(unittest.IsolatedAsyncioTestCase):
             payload_size=2,
         )
         print_mock.assert_not_called()
+
+    async def test_validates_telemetry_after_updating_presence(self) -> None:
+        events: list[str] = []
+        handler = unittest.mock.MagicMock()
+        handler.execute = AsyncMock(side_effect=lambda **_kwargs: events.append('presence'))
+        validator = _validator()
+        validator.execute.side_effect = lambda **_kwargs: events.append('validate')
+        subscriber = MqttSubscriber(handler, validator)
+        payload = b'{"values": {"temperature": 200}}'
+
+        await subscriber.on_message(
+            subscriber.client,
+            f'liteboard/{PROJECT_ID}/devices/{DEVICE_ID}/telemetry',
+            payload,
+            1,
+            object(),
+        )
+
+        self.assertEqual(['presence', 'validate'], events)
+        validator.execute.assert_awaited_once_with(
+            project_id=PROJECT_ID,
+            device_id=DEVICE_ID,
+            payload={'values': {'temperature': 200}},
+        )
+
+    async def test_does_not_validate_heartbeats_or_invalid_payloads(self) -> None:
+        handler = unittest.mock.MagicMock()
+        handler.execute = AsyncMock()
+        validator = _validator()
+        subscriber = MqttSubscriber(handler, validator)
+
+        await subscriber.on_message(
+            subscriber.client,
+            f'liteboard/{PROJECT_ID}/devices/{DEVICE_ID}/heartbeat',
+            b'{}',
+            1,
+            object(),
+        )
+        await subscriber.on_message(
+            subscriber.client,
+            f'liteboard/{PROJECT_ID}/devices/{DEVICE_ID}/telemetry',
+            b'[]',
+            1,
+            object(),
+        )
+
+        handler.execute.assert_awaited_once()
+        validator.execute.assert_not_awaited()
+
+
+def _validator() -> unittest.mock.MagicMock:
+    validator = unittest.mock.MagicMock()
+    validator.execute = AsyncMock()
+    return validator
 
 
 class _FakeMqttClient:

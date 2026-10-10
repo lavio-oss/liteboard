@@ -8,6 +8,7 @@ from uuid import UUID
 from gmqtt import Client as MQTTClient
 
 from app.application.update_device_presence import UpdateDevicePresence
+from app.application.validate_device_telemetry import ValidateDeviceTelemetry
 from app.mqtt_tls import build_mqtt_ssl_context
 
 TELEMETRY_TOPIC = 'liteboard/+/devices/+/telemetry'
@@ -32,20 +33,26 @@ def parse_device_topic(topic: str) -> tuple[str, str, str] | None:
     return project_id, device_id, channel
 
 
-def is_valid_json_payload(payload: bytes) -> bool:
+def decode_json_object(payload: bytes) -> dict[str, Any] | None:
     if not payload:
-        return False
+        return None
 
     try:
         decoded = json.loads(payload.decode('utf-8'))
-        return isinstance(decoded, dict)
     except (UnicodeDecodeError, json.JSONDecodeError):
-        return False
+        return None
+
+    return decoded if isinstance(decoded, dict) else None
 
 
 class MqttSubscriber:
-    def __init__(self, update_device_presence: UpdateDevicePresence) -> None:
+    def __init__(
+        self,
+        update_device_presence: UpdateDevicePresence,
+        validate_device_telemetry: ValidateDeviceTelemetry,
+    ) -> None:
         self._update_device_presence = update_device_presence
+        self._validate_device_telemetry = validate_device_telemetry
         self.client = MQTTClient('liteboard-telemetry-service')
         self.client.on_message = self.on_message
 
@@ -77,7 +84,8 @@ class MqttSubscriber:
             return
 
         project_id, device_id, channel = parsed
-        if not is_valid_json_payload(payload):
+        decoded = decode_json_object(payload)
+        if decoded is None:
             return
 
         await self._update_device_presence.execute(
@@ -86,3 +94,10 @@ class MqttSubscriber:
             channel=channel,
             payload_size=len(payload),
         )
+
+        if channel == 'telemetry':
+            await self._validate_device_telemetry.execute(
+                project_id=project_id,
+                device_id=device_id,
+                payload=decoded,
+            )

@@ -388,3 +388,179 @@ it('enforces project write permissions for profile mutations', function (): void
         ])
         ->assertForbidden();
 });
+
+it('lets project viewers read profiles but not change them or their versions', function (): void {
+    [, $tenant, $project] = createDeviceProfileOwner();
+    $viewer = User::factory()->create();
+    $tenant->users()->attach($viewer, ['role' => 'member']);
+    $project->users()->attach($viewer, ['role' => 'viewer']);
+    $profile = DeviceProfile::factory()->for($project)->create(['name' => 'Motor telemetry']);
+    $baseUrl = "/api/tenants/$tenant->id/projects/$project->id/device-profiles";
+
+    $this->actingAs($viewer)
+        ->getJson($baseUrl)
+        ->assertOk()
+        ->assertJsonPath('data.0.id', $profile->getKey());
+
+    $this->actingAs($viewer)
+        ->getJson("$baseUrl/$profile->id")
+        ->assertOk();
+
+    $this->actingAs($viewer)
+        ->postJson("$baseUrl/$profile->id/versions", [
+            'schema_code' => 'motor-v1',
+            'definition' => deviceProfileDefinition(),
+        ])
+        ->assertForbidden();
+
+    $this->actingAs($viewer)
+        ->patchJson("$baseUrl/$profile->id", ['name' => 'Renamed'])
+        ->assertForbidden();
+
+    $this->actingAs($viewer)
+        ->deleteJson("$baseUrl/$profile->id")
+        ->assertForbidden();
+
+    expect($profile->fresh()?->getAttribute('name'))->toBe('Motor telemetry');
+    $this->assertDatabaseMissing('device_profile_versions', ['device_profile_id' => $profile->getKey()]);
+});
+
+it('hides project profiles from tenant members outside the project', function (): void {
+    [, $tenant, $project] = createDeviceProfileOwner();
+    $outsider = User::factory()->create();
+    $tenant->users()->attach($outsider, ['role' => 'member']);
+
+    $this->actingAs($outsider)
+        ->getJson("/api/tenants/$tenant->id/projects/$project->id/device-profiles")
+        ->assertForbidden();
+});
+
+it('rejects server-owned and malformed schema version input', function (array $payload, array $errors): void {
+    [$owner, $tenant, $project] = createDeviceProfileOwner();
+    $profile = DeviceProfile::factory()->for($project)->create();
+
+    $this->actingAs($owner)
+        ->postJson(
+            "/api/tenants/$tenant->id/projects/$project->id/device-profiles/$profile->id/versions",
+            [
+                'schema_code' => 'motor-v1',
+                'definition' => deviceProfileDefinition(),
+                ...$payload,
+            ],
+        )
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors($errors);
+
+    $this->assertDatabaseMissing('device_profile_versions', ['device_profile_id' => $profile->getKey()]);
+})->with([
+    'version' => [['version' => 7], ['version']],
+    'project_id' => [['project_id' => '00000000-0000-0000-0000-000000000000'], ['project_id']],
+    'tenant_id' => [['tenant_id' => '00000000-0000-0000-0000-000000000000'], ['tenant_id']],
+    'device_profile_id' => [['device_profile_id' => '00000000-0000-0000-0000-000000000000'], ['device_profile_id']],
+    'missing strict_mode' => [
+        ['definition' => ['fields' => deviceProfileDefinition()['fields']]],
+        ['definition.strict_mode'],
+    ],
+    'empty fields' => [['definition' => ['strict_mode' => true, 'fields' => []]], ['definition.fields']],
+    'unknown field key' => [
+        ['definition' => ['strict_mode' => true, 'fields' => [
+            'temperature' => ['type' => 'float', 'unit' => 'celsius', 'required' => true, 'precision' => 2],
+        ]]],
+        ['definition.fields.temperature'],
+    ],
+    'field name starting with a digit' => [
+        ['definition' => ['strict_mode' => true, 'fields' => [
+            '1temp' => ['type' => 'float', 'unit' => 'celsius', 'required' => true],
+        ]]],
+        ['definition.fields'],
+    ],
+    'field name with a dash' => [
+        ['definition' => ['strict_mode' => true, 'fields' => [
+            'temp-c' => ['type' => 'float', 'unit' => 'celsius', 'required' => true],
+        ]]],
+        ['definition.fields'],
+    ],
+    'range on a string field' => [
+        ['definition' => ['strict_mode' => true, 'fields' => [
+            'label' => ['type' => 'string', 'unit' => 'text', 'required' => true, 'min' => 1],
+        ]]],
+        ['definition.fields.label'],
+    ],
+    'range on a boolean field' => [
+        ['definition' => ['strict_mode' => true, 'fields' => [
+            'running' => ['type' => 'boolean', 'unit' => 'flag', 'required' => true, 'max' => 1],
+        ]]],
+        ['definition.fields.running'],
+    ],
+    'compatibility note too long' => [['compatibility_note' => str_repeat('a', 1001)], ['compatibility_note']],
+]);
+
+it('scopes profile routes to the project in the URL', function (): void {
+    [$owner, $tenant, $project] = createDeviceProfileOwner();
+    $otherProject = Project::factory()->for($tenant)->create();
+    $otherProfile = DeviceProfile::factory()->for($otherProject)->create();
+    $baseUrl = "/api/tenants/$tenant->id/projects/$project->id/device-profiles";
+
+    $this->actingAs($owner)->getJson("$baseUrl/$otherProfile->id")->assertNotFound();
+    $this->actingAs($owner)->patchJson("$baseUrl/$otherProfile->id", ['name' => 'Moved'])->assertNotFound();
+    $this->actingAs($owner)
+        ->postJson("$baseUrl/$otherProfile->id/versions", [
+            'schema_code' => 'motor-v1',
+            'definition' => deviceProfileDefinition(),
+        ])
+        ->assertNotFound();
+});
+
+it('rejects creating a device with a profile version from another project', function (): void {
+    [$owner, $tenant, $project] = createDeviceProfileOwner();
+    $otherProject = Project::factory()->for($tenant)->create();
+    $otherVersion = DeviceProfileVersion::factory()
+        ->forProfile(DeviceProfile::factory()->for($otherProject)->create())
+        ->create();
+
+    $this->actingAs($owner)
+        ->postJson("/api/tenants/$tenant->id/projects/$project->id/devices", [
+            'name' => 'Cross project device',
+            'code' => 'cross-project-device',
+            'device_profile_version_id' => $otherVersion->getKey(),
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['device_profile_version_id']);
+
+    $this->assertDatabaseMissing('devices', ['code' => 'cross-project-device']);
+});
+
+it('exposes no endpoint for changing a published schema version', function (): void {
+    [$owner, $tenant, $project] = createDeviceProfileOwner();
+    $profile = DeviceProfile::factory()->for($project)->create();
+    $version = DeviceProfileVersion::factory()->forProfile($profile)->create();
+    $versionUrl = "/api/tenants/$tenant->id/projects/$project->id/device-profiles/$profile->id/versions/$version->id";
+
+    expect($this->actingAs($owner)->patchJson($versionUrl, ['schema_code' => 'changed'])->status())
+        ->toBeIn([404, 405]);
+    expect($this->actingAs($owner)->deleteJson($versionUrl)->status())
+        ->toBeIn([404, 405]);
+
+    expect($version->fresh()?->getAttribute('schema_code'))->toBe($version->getAttribute('schema_code'));
+});
+
+it('allows the same profile code and schema code in different projects', function (): void {
+    [$owner, $tenant, $project] = createDeviceProfileOwner();
+    $otherProject = Project::factory()->for($tenant)->create();
+
+    foreach ([$project, $otherProject] as $targetProject) {
+        $baseUrl = "/api/tenants/$tenant->id/projects/$targetProject->id/device-profiles";
+        $profileId = (string) $this->actingAs($owner)
+            ->postJson($baseUrl, ['code' => 'motor', 'name' => 'Motor telemetry'])
+            ->assertCreated()
+            ->json('data.id');
+
+        $this->actingAs($owner)
+            ->postJson("$baseUrl/$profileId/versions", [
+                'schema_code' => 'motor-v1',
+                'definition' => deviceProfileDefinition(),
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.version', 1);
+    }
+});

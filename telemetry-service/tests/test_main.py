@@ -64,6 +64,8 @@ class LifespanCompatibilityTest(unittest.IsolatedAsyncioTestCase):
             patch('app.main.asyncpg.create_pool', new=AsyncMock(side_effect=create_pool)) as create_pool_mock,
             patch('app.main.PostgresPresenceWriter') as writer_factory,
             patch('app.main.UpdateDevicePresence') as handler_factory,
+            patch('app.main.PostgresDeviceSchemaReader') as schema_reader_factory,
+            patch('app.main.ValidateDeviceTelemetry') as validator_factory,
             patch('app.main.MqttSubscriber', return_value=subscriber) as subscriber_factory,
         ):
             async with lifespan(application):
@@ -85,4 +87,6 @@ class LifespanCompatibilityTest(unittest.IsolatedAsyncioTestCase):
         )
         writer_factory.assert_called_once_with(pool)
         handler_factory.assert_called_once_with(writer_factory.return_value)
-        subscriber_factory.assert_called_once_with(handler_factory.return_value)
+        schema_reader_factory.assert_called_once_with(pool)
+        validator_factory.assert_called_once_with(schema_reader_factory.return_value)
+        subscriber_factory.assert_called_once_with(handler_factory.return_value, validator_factory.return_value)

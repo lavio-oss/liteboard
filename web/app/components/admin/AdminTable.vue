@@ -2,14 +2,17 @@
 import type { TableColumn } from '@nuxt/ui'
 import { upperFirst } from 'scule'
 import { getPaginationRowModel } from '@tanstack/table-core'
-import type { AdminTableRow } from '~/types/admin'
+import type { AdminTableRow, ResourceStatus } from '~/types/admin'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   columns: TableColumn<AdminTableRow>[]
   data: AdminTableRow[]
   loading?: boolean
   searchPlaceholder: string
-}>()
+  showStatusFilter?: boolean
+}>(), {
+  showStatusFilter: true
+})
 
 const emit = defineEmits<{
   reset: []
@@ -24,7 +27,7 @@ const pagination = ref({
   pageSize: 10
 })
 const search = ref('')
-const statusFilter = ref<'all' | AdminTableRow['status']>('all')
+const statusFilter = ref<'all' | ResourceStatus>('all')
 const isReloading = ref(false)
 const minLoading = ref(false)
 let minLoadingTimer: ReturnType<typeof setTimeout> | undefined
@@ -90,7 +93,9 @@ const filteredData = computed(() => {
       || row.name.toLowerCase().includes(normalizedSearch)
       || row.code?.toLowerCase().includes(normalizedSearch)
 
-    const matchesStatus = statusFilter.value === 'all' || row.status === statusFilter.value
+    const matchesStatus = !props.showStatusFilter
+      || statusFilter.value === 'all'
+      || row.status === statusFilter.value
 
     return matchesSearch && matchesStatus
   })
@@ -132,6 +137,7 @@ watch(filteredData, () => {
       <slot name="filters" />
 
       <USelect
+        v-if="props.showStatusFilter"
         v-model="statusFilter"
         :items="[
           { label: 'All', value: 'all' },
