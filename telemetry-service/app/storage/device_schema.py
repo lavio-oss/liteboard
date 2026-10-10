@@ -4,7 +4,7 @@ import json
 
 from asyncpg.pool import Pool
 
-from app.application.device_schema import DeviceSchema
+from app.telemetry.validation import DeviceSchema
 
 
 SELECT_DEVICE_SCHEMA_SQL = """

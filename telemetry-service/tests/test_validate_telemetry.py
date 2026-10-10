@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from app.application.validate_telemetry import Rejection, validate_telemetry
+from app.telemetry.validation import Rejection, validate_telemetry
 
 MOTOR_V1 = {
     'strict_mode': True,

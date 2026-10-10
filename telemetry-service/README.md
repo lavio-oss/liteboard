@@ -4,41 +4,37 @@
 
 ## Architecture
 
-The service uses Ports and Adapters, an Application Service, and constructor injection. `main.py` is the composition root and owns the resource lifecycle.
+Each MQTT message runs through a **pipeline**: an ordered list of async stages that share one `MessageContext`. `main.py` is the composition root: it creates the PostgreSQL pool, the repositories, and one pipeline per channel.
 
 ```text
-Mosquitto
-   │ MQTT over TLS; QoS 1 subscriptions
-   ▼
-MqttSubscriber                         app/adapters/mqtt_subscriber.py
-   ├─ parses the topic and validates UTF-8 JSON objects
-   ▼
-UpdateDevicePresence                  app/application/update_device_presence.py
-   ├─ calls PresenceWriter
-   └─ prints message metadata after the database operation succeeds
-        │
-        ▼
-PresenceWriter                        app/application/presence_writer.py
-        ▲
-        │ implemented by
-PostgresPresenceWriter                 app/adapters/postgres_presence_writer.py
-   └─ updates Device presence in PostgreSQL
+Mosquitto ── MQTT over TLS, QoS 1 ──▶ MqttSubscriber          app/ingress/mqtt_subscriber.py
+                                         parses the topic, builds MessageContext,
+                                         runs the pipeline for its channel
+                                              │
+                                              ▼
+                                      run_pipeline            app/pipeline/runner.py
+                                         runs stages in order, stops at the first rejection,
+                                         prints one outcome line per message
 
-main.py creates the PostgreSQL pool and wires the writer, application service,
-and MQTT subscriber together. It also exposes the HTTP health endpoints.
+heartbeat: decode_json → MarkPresence
+telemetry: decode_json → MarkPresence → ValidateSchema       app/pipeline/stages.py
+
+validate_telemetry (pure)                                     app/telemetry/validation.py
+PostgresPresenceWriter, PostgresDeviceSchemaReader            app/storage/
 ```
 
-`PresenceWriter` is a Python `Protocol`. The application service depends on that interface rather than on PostgreSQL or MQTT. The subscriber owns MQTT connection, authentication, TLS, subscriptions, topic parsing, and payload checks. The PostgreSQL adapter borrows connections from the pool; it does not own the pool lifecycle.
+A stage is `async (ctx) -> None`. It rejects by calling `ctx.reject(Rejection(code, field))`. Infrastructure errors such as a database failure are not caught: they propagate, and no outcome line is printed. Repositories borrow connections from the pool; they do not own its lifecycle. New processing steps (normalize, persist, rules) are added as stages to the channel list in `main.py`.
 
 ## Current message behavior
 
 - Subscribes to `liteboard/+/devices/+/telemetry` and `liteboard/+/devices/+/heartbeat` at QoS 1.
-- Accepts only five-segment topics with valid Project and Device UUIDs and a `telemetry` or `heartbeat` channel.
-- Accepts payloads that decode as UTF-8 JSON objects. An empty object (`{}`) is valid. Invalid topics and payloads are ignored.
-- Updates `connection_state`, `last_seen_at`, and `updated_at` only where both the Device ID and Project ID match and the Device is active. The Project ID comes from the topic and is used as a second database condition.
-- Prints Project ID, Device ID, channel, and payload byte size after the database operation completes. A zero-row update still prints metadata; a database error propagates and prevents the success metadata from being printed.
+- Accepts only five-segment topics with valid Project and Device UUIDs and a `telemetry` or `heartbeat` channel. Other topics are ignored silently.
+- Payloads must decode as UTF-8 JSON objects (`{}` is valid); otherwise the message is rejected with `invalid_json`.
+- Updates `connection_state`, `last_seen_at`, and `updated_at` only where both the Device ID and Project ID match and the Device is active. Presence is updated even when schema validation later rejects the payload.
+- Telemetry is validated against the Device's assigned profile version, looked up by Device ID and Project ID from the topic. Reason codes: `invalid_json`, `invalid_payload`, `schema_not_assigned`, `schema_version_mismatch`, `missing_required_field`, `unknown_field`, `invalid_type`, `below_minimum`, `above_maximum`, `value_not_allowed`.
+- Prints one line per message: `project_id`, `device_id`, `channel`, `payload_size`, `outcome` (`accepted`/`rejected`), and `reasons`.
 
-This service currently updates presence only. It does not persist telemetry samples or implement schema validation, deduplication, queues, realtime delivery, or intrusion detection. `/ready` reports the current static readiness response and timestamp; it does not probe MQTT or PostgreSQL dependencies.
+The service does not persist telemetry samples or outcomes, deduplicate messages, queue work, or deliver realtime updates. PUBACK is sent before processing (gmqtt optimistic acknowledgement) and the MQTT session is clean, so a crash can lose in-flight messages. `/ready` reports a static readiness response and timestamp; it does not probe MQTT or PostgreSQL.
 
 ## Configuration
 

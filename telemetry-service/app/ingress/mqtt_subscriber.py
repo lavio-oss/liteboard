@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-import json
 import os
+from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
 
 from gmqtt import Client as MQTTClient
 
-from app.application.update_device_presence import UpdateDevicePresence
-from app.application.validate_device_telemetry import ValidateDeviceTelemetry
 from app.mqtt_tls import build_mqtt_ssl_context
+from app.pipeline.context import MessageContext
+from app.pipeline.runner import Stage, run_pipeline
 
 TELEMETRY_TOPIC = 'liteboard/+/devices/+/telemetry'
 HEARTBEAT_TOPIC = 'liteboard/+/devices/+/heartbeat'
@@ -33,26 +33,11 @@ def parse_device_topic(topic: str) -> tuple[str, str, str] | None:
     return project_id, device_id, channel
 
 
-def decode_json_object(payload: bytes) -> dict[str, Any] | None:
-    if not payload:
-        return None
-
-    try:
-        decoded = json.loads(payload.decode('utf-8'))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None
-
-    return decoded if isinstance(decoded, dict) else None
-
-
 class MqttSubscriber:
-    def __init__(
-        self,
-        update_device_presence: UpdateDevicePresence,
-        validate_device_telemetry: ValidateDeviceTelemetry,
-    ) -> None:
-        self._update_device_presence = update_device_presence
-        self._validate_device_telemetry = validate_device_telemetry
+    def __init__(self, pipelines: dict[str, Sequence[Stage]]) -> None:
+        self._pipelines = pipelines
+        # shortcut: PUBACK is sent before processing and clean_session drops queued messages while offline;
+        # IT-3 persistence needs optimistic_acknowledgement=False (on_message returns 0) and clean_session=False.
         self.client = MQTTClient('liteboard-telemetry-service')
         self.client.on_message = self.on_message
 
@@ -84,20 +69,7 @@ class MqttSubscriber:
             return
 
         project_id, device_id, channel = parsed
-        decoded = decode_json_object(payload)
-        if decoded is None:
-            return
-
-        await self._update_device_presence.execute(
-            project_id=project_id,
-            device_id=device_id,
-            channel=channel,
-            payload_size=len(payload),
+        await run_pipeline(
+            self._pipelines[channel],
+            MessageContext(project_id=project_id, device_id=device_id, channel=channel, raw=payload),
         )
-
-        if channel == 'telemetry':
-            await self._validate_device_telemetry.execute(
-                project_id=project_id,
-                device_id=device_id,
-                payload=decoded,
-            )

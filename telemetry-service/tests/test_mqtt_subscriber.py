@@ -4,13 +4,13 @@ import os
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from app.adapters.mqtt_subscriber import (
+from app.ingress.mqtt_subscriber import (
     HEARTBEAT_TOPIC,
     TELEMETRY_TOPIC,
     MqttSubscriber,
-    decode_json_object,
     parse_device_topic,
 )
+from app.pipeline.context import MessageContext
 
 PROJECT_ID = '123e4567-e89b-12d3-a456-426614174000'
 DEVICE_ID = '123e4567-e89b-12d3-a456-426614174001'
@@ -42,21 +42,8 @@ class ParseDeviceTopicTest(unittest.TestCase):
                 self.assertIsNone(parse_device_topic(topic))
 
 
-class DecodeJsonObjectTest(unittest.TestCase):
-    def test_decodes_json_objects_including_empty_object(self) -> None:
-        self.assertEqual({'temperature': 22.5}, decode_json_object(b'{"temperature": 22.5}'))
-        self.assertEqual({}, decode_json_object(b'{}'))
-
-    def test_rejects_empty_invalid_utf8_invalid_json_and_non_objects(self) -> None:
-        for payload in (b'', b'\xff', b'{invalid', b'[]', b'null', b'42'):
-            with self.subTest(payload=payload):
-                self.assertIsNone(decode_json_object(payload))
-
-
 class MqttSubscriberTest(unittest.IsolatedAsyncioTestCase):
     async def test_connects_with_current_auth_tls_defaults_and_qos_one_subscriptions(self) -> None:
-        handler = unittest.mock.MagicMock()
-        handler.execute = AsyncMock()
         tls_context = object()
         with (
             patch.dict(
@@ -68,10 +55,10 @@ class MqttSubscriberTest(unittest.IsolatedAsyncioTestCase):
                 },
                 clear=True,
             ),
-            patch('app.adapters.mqtt_subscriber.MQTTClient', _FakeMqttClient),
-            patch('app.adapters.mqtt_subscriber.build_mqtt_ssl_context', return_value=tls_context) as build_ssl,
+            patch('app.ingress.mqtt_subscriber.MQTTClient', _FakeMqttClient),
+            patch('app.ingress.mqtt_subscriber.build_mqtt_ssl_context', return_value=tls_context) as build_ssl,
         ):
-            subscriber = MqttSubscriber(handler, _validator())
+            subscriber = MqttSubscriber({})
             await subscriber.connect_and_subscribe()
 
         self.assertEqual('liteboard-telemetry-service', subscriber.client.client_id)
@@ -85,90 +72,40 @@ class MqttSubscriberTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(subscriber.client.on_message)
 
     async def test_skips_authentication_when_username_is_empty(self) -> None:
-        handler = unittest.mock.MagicMock()
         with (
             patch.dict(os.environ, {'MQTT_TLS_CA_FILE': '/run/secrets/ca.crt'}, clear=True),
-            patch('app.adapters.mqtt_subscriber.MQTTClient', _FakeMqttClient),
-            patch('app.adapters.mqtt_subscriber.build_mqtt_ssl_context', return_value=object()),
+            patch('app.ingress.mqtt_subscriber.MQTTClient', _FakeMqttClient),
+            patch('app.ingress.mqtt_subscriber.build_mqtt_ssl_context', return_value=object()),
         ):
-            subscriber = MqttSubscriber(handler, _validator())
+            subscriber = MqttSubscriber({})
             await subscriber.connect_and_subscribe()
 
         self.assertIsNone(subscriber.client.credentials)
 
-    async def test_callback_skips_invalid_messages_and_forwards_valid_metadata(self) -> None:
-        handler = unittest.mock.MagicMock()
-        handler.execute = AsyncMock()
-        subscriber = MqttSubscriber(handler, _validator())
-        topic = f'liteboard/{PROJECT_ID}/devices/{DEVICE_ID}/telemetry'
+    async def test_runs_the_pipeline_for_the_topic_channel(self) -> None:
+        subscriber = MqttSubscriber({'telemetry': ['telemetry-stages'], 'heartbeat': ['heartbeat-stages']})
 
-        with patch('builtins.print') as print_mock:
-            await subscriber.on_message(subscriber.client, topic, b'{invalid', 1, object())
-            handler.execute.assert_not_awaited()
+        with patch('app.ingress.mqtt_subscriber.run_pipeline', new=AsyncMock()) as run_pipeline_mock:
+            await subscriber.on_message(
+                subscriber.client,
+                f'liteboard/{PROJECT_ID}/devices/{DEVICE_ID}/heartbeat',
+                b'{}',
+                1,
+                object(),
+            )
 
-            await subscriber.on_message(subscriber.client, topic, b'{}', 2, object())
-
-        handler.execute.assert_awaited_once_with(
-            project_id=PROJECT_ID,
-            device_id=DEVICE_ID,
-            channel='telemetry',
-            payload_size=2,
-        )
-        print_mock.assert_not_called()
-
-    async def test_validates_telemetry_after_updating_presence(self) -> None:
-        events: list[str] = []
-        handler = unittest.mock.MagicMock()
-        handler.execute = AsyncMock(side_effect=lambda **_kwargs: events.append('presence'))
-        validator = _validator()
-        validator.execute.side_effect = lambda **_kwargs: events.append('validate')
-        subscriber = MqttSubscriber(handler, validator)
-        payload = b'{"values": {"temperature": 200}}'
-
-        await subscriber.on_message(
-            subscriber.client,
-            f'liteboard/{PROJECT_ID}/devices/{DEVICE_ID}/telemetry',
-            payload,
-            1,
-            object(),
+        run_pipeline_mock.assert_awaited_once_with(
+            ['heartbeat-stages'],
+            MessageContext(project_id=PROJECT_ID, device_id=DEVICE_ID, channel='heartbeat', raw=b'{}'),
         )
 
-        self.assertEqual(['presence', 'validate'], events)
-        validator.execute.assert_awaited_once_with(
-            project_id=PROJECT_ID,
-            device_id=DEVICE_ID,
-            payload={'values': {'temperature': 200}},
-        )
+    async def test_ignores_topics_outside_the_device_contract(self) -> None:
+        subscriber = MqttSubscriber({'telemetry': [], 'heartbeat': []})
 
-    async def test_does_not_validate_heartbeats_or_invalid_payloads(self) -> None:
-        handler = unittest.mock.MagicMock()
-        handler.execute = AsyncMock()
-        validator = _validator()
-        subscriber = MqttSubscriber(handler, validator)
+        with patch('app.ingress.mqtt_subscriber.run_pipeline', new=AsyncMock()) as run_pipeline_mock:
+            await subscriber.on_message(subscriber.client, 'liteboard/not-a-uuid/devices/x/telemetry', b'{}', 1, object())
 
-        await subscriber.on_message(
-            subscriber.client,
-            f'liteboard/{PROJECT_ID}/devices/{DEVICE_ID}/heartbeat',
-            b'{}',
-            1,
-            object(),
-        )
-        await subscriber.on_message(
-            subscriber.client,
-            f'liteboard/{PROJECT_ID}/devices/{DEVICE_ID}/telemetry',
-            b'[]',
-            1,
-            object(),
-        )
-
-        handler.execute.assert_awaited_once()
-        validator.execute.assert_not_awaited()
-
-
-def _validator() -> unittest.mock.MagicMock:
-    validator = unittest.mock.MagicMock()
-    validator.execute = AsyncMock()
-    return validator
+        run_pipeline_mock.assert_not_awaited()
 
 
 class _FakeMqttClient:

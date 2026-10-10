@@ -7,11 +7,10 @@ from datetime import datetime, timezone
 import asyncpg
 from fastapi import FastAPI
 
-from app.adapters.mqtt_subscriber import MqttSubscriber
-from app.adapters.postgres_device_schema_reader import PostgresDeviceSchemaReader
-from app.adapters.postgres_presence_writer import PostgresPresenceWriter
-from app.application.update_device_presence import UpdateDevicePresence
-from app.application.validate_device_telemetry import ValidateDeviceTelemetry
+from app.ingress.mqtt_subscriber import MqttSubscriber
+from app.pipeline.stages import MarkPresence, ValidateSchema, decode_json
+from app.storage.device_schema import PostgresDeviceSchemaReader
+from app.storage.presence import PostgresPresenceWriter
 
 
 @asynccontextmanager
@@ -27,10 +26,11 @@ async def lifespan(application: FastAPI):
     )
     application.state.db_pool = db_pool
 
-    presence_writer = PostgresPresenceWriter(db_pool)
-    update_device_presence = UpdateDevicePresence(presence_writer)
-    validate_device_telemetry = ValidateDeviceTelemetry(PostgresDeviceSchemaReader(db_pool))
-    mqtt_subscriber = MqttSubscriber(update_device_presence, validate_device_telemetry)
+    mark_presence = MarkPresence(PostgresPresenceWriter(db_pool))
+    mqtt_subscriber = MqttSubscriber({
+        'heartbeat': [decode_json, mark_presence],
+        'telemetry': [decode_json, mark_presence, ValidateSchema(PostgresDeviceSchemaReader(db_pool))],
+    })
     await mqtt_subscriber.connect_and_subscribe()
     application.state.mqtt_client = mqtt_subscriber.client
 

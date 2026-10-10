@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from app.main import app, health, lifespan, ready
+from app.pipeline.stages import decode_json
 
 
 class EndpointCompatibilityTest(unittest.IsolatedAsyncioTestCase):
@@ -63,9 +64,9 @@ class LifespanCompatibilityTest(unittest.IsolatedAsyncioTestCase):
         with (
             patch('app.main.asyncpg.create_pool', new=AsyncMock(side_effect=create_pool)) as create_pool_mock,
             patch('app.main.PostgresPresenceWriter') as writer_factory,
-            patch('app.main.UpdateDevicePresence') as handler_factory,
+            patch('app.main.MarkPresence') as mark_presence_factory,
             patch('app.main.PostgresDeviceSchemaReader') as schema_reader_factory,
-            patch('app.main.ValidateDeviceTelemetry') as validator_factory,
+            patch('app.main.ValidateSchema') as validate_schema_factory,
             patch('app.main.MqttSubscriber', return_value=subscriber) as subscriber_factory,
         ):
             async with lifespan(application):
@@ -86,7 +87,11 @@ class LifespanCompatibilityTest(unittest.IsolatedAsyncioTestCase):
             max_size=5,
         )
         writer_factory.assert_called_once_with(pool)
-        handler_factory.assert_called_once_with(writer_factory.return_value)
+        mark_presence_factory.assert_called_once_with(writer_factory.return_value)
         schema_reader_factory.assert_called_once_with(pool)
-        validator_factory.assert_called_once_with(schema_reader_factory.return_value)
-        subscriber_factory.assert_called_once_with(handler_factory.return_value, validator_factory.return_value)
+        validate_schema_factory.assert_called_once_with(schema_reader_factory.return_value)
+        mark_presence = mark_presence_factory.return_value
+        subscriber_factory.assert_called_once_with({
+            'heartbeat': [decode_json, mark_presence],
+            'telemetry': [decode_json, mark_presence, validate_schema_factory.return_value],
+        })

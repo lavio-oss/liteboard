@@ -72,3 +72,9 @@ def _matches_type(value: Any, field_type: str) -> bool:
         return isinstance(value, str)
 
     return False
+
+
+@dataclass(frozen=True)
+class DeviceSchema:
+    version: int
+    definition: dict[str, Any]
