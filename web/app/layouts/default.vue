@@ -36,7 +36,9 @@ const adminLinks = [{
   to: '/admin/users'
 }] satisfies NavigationMenuItem[]
 
-const liteboardLinks = [{
+const route = useRoute()
+
+const liteboardLinks = computed<NavigationMenuItem[]>(() => [{
   label: 'Dashboard',
   icon: 'i-lucide-layout-dashboard',
   to: '/'
@@ -47,25 +49,29 @@ const liteboardLinks = [{
 }, {
   label: 'Devices',
   icon: 'i-lucide-router',
-  to: '/devices'
-}, {
-  label: 'Device Profiles',
-  icon: 'i-lucide-file-cog',
-  to: '/device-profiles'
-}] satisfies NavigationMenuItem[]
+  to: '/devices',
+  active: route.path.startsWith('/devices') || route.path.startsWith('/device-profiles')
+}])
 
 const links = computed<NavigationMenuItem[][]>(() => [
-  isAdminWorkspace.value ? adminLinks : liteboardLinks
+  isAdminWorkspace.value ? adminLinks : liteboardLinks.value
 ])
 
 const groups = computed(() => [{
   id: 'links',
   label: 'Go to',
-  items: links.value.flat().map(item => ({
-    label: item.label,
-    icon: item.icon,
-    to: item.to
-  }))
+  items: [
+    ...links.value.flat().map(item => ({
+      label: item.label,
+      icon: item.icon,
+      to: item.to
+    })),
+    ...(!isAdminWorkspace.value ? [{
+      label: 'Device Profiles',
+      icon: 'i-lucide-file-cog',
+      to: '/device-profiles'
+    }] : [])
+  ]
 }, {
   id: 'code',
   label: 'Code',

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import type { NavigationMenuItem, TableColumn } from '@nuxt/ui'
 import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
 import { useTenantContext } from '~/composables/useTenantContext'
@@ -105,13 +105,33 @@ const assetTypeColors: Record<AssetType, 'success' | 'secondary' | 'primary' | '
   equipment: 'error'
 }
 
-const assetTypeOptions: Array<{ label: string, value: AssetType | 'all' }> = [
-  { label: 'All asset types', value: 'all' },
-  ...Object.entries(assetTypeLabels).map(([value, label]) => ({
+const assetTypeIcons: Record<AssetType, string> = {
+  site: 'i-lucide-map-pin',
+  factory: 'i-lucide-building-2',
+  area: 'i-lucide-panels-top-left',
+  production_line: 'i-lucide-workflow',
+  station: 'i-lucide-cuboid',
+  equipment: 'i-lucide-cog'
+}
+
+const assetLinks = computed<NavigationMenuItem[][]>(() => [[
+  {
+    label: 'All',
+    icon: 'i-lucide-boxes',
+    active: assetTypeFilter.value === 'all',
+    onSelect: () => {
+      assetTypeFilter.value = 'all'
+    }
+  },
+  ...Object.entries(assetTypeLabels).reverse().map(([value, label]) => ({
     label,
-    value: value as AssetType
+    icon: assetTypeIcons[value as AssetType],
+    active: assetTypeFilter.value === value,
+    onSelect: () => {
+      assetTypeFilter.value = value as AssetType
+    }
   }))
-]
+]])
 
 const { data: assetsData, status: assetsStatus, error: assetsError, refresh: refreshAssets } = await useAsyncData(
   'liteboard-project-assets',
@@ -506,6 +526,10 @@ const errorMessage = computed(() => {
           />
         </template>
       </UDashboardNavbar>
+
+      <UDashboardToolbar>
+        <UNavigationMenu :items="assetLinks" highlight class="-mx-1 flex-1" />
+      </UDashboardToolbar>
     </template>
 
     <template #body>
@@ -540,15 +564,6 @@ const errorMessage = computed(() => {
               v-model="selectedProjectId"
               :items="projectSelectOptions"
               class="min-w-44"
-              :ui="{ trailingIcon: 'group-data-[state=open]:rotate-180 transition-transform duration-200' }"
-            />
-          </template>
-
-          <template #filters>
-            <USelect
-              v-model="assetTypeFilter"
-              :items="assetTypeOptions"
-              class="min-w-40"
               :ui="{ trailingIcon: 'group-data-[state=open]:rotate-180 transition-transform duration-200' }"
             />
           </template>

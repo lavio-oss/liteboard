@@ -17,6 +17,7 @@ use Modules\Admin\Models\Project\Project;
 
 /**
  * @property int $version
+ * @property string $project_id
  * @property string $schema_code
  * @property array{
  *     strict_mode: bool,

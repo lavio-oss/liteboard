@@ -369,10 +369,17 @@ it('keeps device profile APIs inside the active tenant', function (): void {
     [$owner, $tenant, $project] = createDeviceProfileOwner();
     [, $otherTenant, $otherProject] = createDeviceProfileOwner();
     $profile = DeviceProfile::factory()->for($otherProject)->create();
+    $version = DeviceProfileVersion::factory()->forProfile($profile)->create();
 
     $this->actingAs($owner)
         ->getJson("/api/tenants/$otherTenant->id/projects/$otherProject->id/device-profiles/$profile->id")
         ->assertNotFound();
+
+    $this->actingAs($owner)
+        ->deleteJson("/api/tenants/$otherTenant->id/projects/$otherProject->id/device-profiles/$profile->id/versions/$version->id")
+        ->assertNotFound();
+
+    $this->assertDatabaseHas('device_profile_versions', ['id' => $version->id]);
 });
 
 it('enforces project write permissions for profile mutations', function (): void {
@@ -427,12 +434,20 @@ it('lets project viewers read profiles but not change them or their versions', f
 
 it('hides project profiles from tenant members outside the project', function (): void {
     [, $tenant, $project] = createDeviceProfileOwner();
+    $profile = DeviceProfile::factory()->for($project)->create();
+    $version = DeviceProfileVersion::factory()->forProfile($profile)->create();
     $outsider = User::factory()->create();
     $tenant->users()->attach($outsider, ['role' => 'member']);
 
     $this->actingAs($outsider)
         ->getJson("/api/tenants/$tenant->id/projects/$project->id/device-profiles")
         ->assertForbidden();
+
+    $this->actingAs($outsider)
+        ->deleteJson("/api/tenants/$tenant->id/projects/$project->id/device-profiles/$profile->id/versions/$version->id")
+        ->assertForbidden();
+
+    $this->assertDatabaseHas('device_profile_versions', ['id' => $version->id]);
 });
 
 it('rejects server-owned and malformed schema version input', function (array $payload, array $errors): void {
@@ -498,9 +513,16 @@ it('rejects server-owned and malformed schema version input', function (array $p
 it('scopes profile routes to the project in the URL', function (): void {
     [$owner, $tenant, $project] = createDeviceProfileOwner();
     $otherProject = Project::factory()->for($tenant)->create();
+    $profile = DeviceProfile::factory()->for($project)->create();
+    $siblingProfile = DeviceProfile::factory()->for($project)->create();
+    $siblingVersion = DeviceProfileVersion::factory()->forProfile($siblingProfile)->create();
     $otherProfile = DeviceProfile::factory()->for($otherProject)->create();
+    $otherVersion = DeviceProfileVersion::factory()->forProfile($otherProfile)->create();
     $baseUrl = "/api/tenants/$tenant->id/projects/$project->id/device-profiles";
 
+    $this->actingAs($owner)
+        ->deleteJson("$baseUrl/$profile->id/versions/$siblingVersion->id")
+        ->assertNotFound();
     $this->actingAs($owner)->getJson("$baseUrl/$otherProfile->id")->assertNotFound();
     $this->actingAs($owner)->patchJson("$baseUrl/$otherProfile->id", ['name' => 'Moved'])->assertNotFound();
     $this->actingAs($owner)
@@ -509,6 +531,12 @@ it('scopes profile routes to the project in the URL', function (): void {
             'definition' => deviceProfileDefinition(),
         ])
         ->assertNotFound();
+    $this->actingAs($owner)
+        ->deleteJson("$baseUrl/$otherProfile->id/versions/$otherVersion->id")
+        ->assertNotFound();
+
+    $this->assertDatabaseHas('device_profile_versions', ['id' => $siblingVersion->id]);
+    $this->assertDatabaseHas('device_profile_versions', ['id' => $otherVersion->id]);
 });
 
 it('rejects creating a device with a profile version from another project', function (): void {
@@ -538,11 +566,85 @@ it('exposes no endpoint for changing a published schema version', function (): v
 
     expect($this->actingAs($owner)->patchJson($versionUrl, ['schema_code' => 'changed'])->status())
         ->toBeIn([404, 405]);
-    expect($this->actingAs($owner)->deleteJson($versionUrl)->status())
-        ->toBeIn([404, 405]);
 
     expect($version->fresh()?->getAttribute('schema_code'))->toBe($version->getAttribute('schema_code'));
 });
+
+it('allows deleting an unassigned device profile version', function (): void {
+    [$owner, $tenant, $project] = createDeviceProfileOwner();
+    $profile = DeviceProfile::factory()->for($project)->create();
+    $version = DeviceProfileVersion::factory()->forProfile($profile)->create();
+    $versionUrl = "/api/tenants/$tenant->id/projects/$project->id/device-profiles/$profile->id/versions/$version->id";
+
+    $this->actingAs($owner)->deleteJson($versionUrl)->assertNoContent();
+
+    $this->assertDatabaseMissing('device_profile_versions', ['id' => $version->id]);
+});
+
+it('unlinks devices when deleting an assigned device profile version via API', function (): void {
+    [$owner, $tenant, $project] = createDeviceProfileOwner();
+    $profile = DeviceProfile::factory()->for($project)->create();
+    $version = DeviceProfileVersion::factory()->forProfile($profile)->create();
+    $devices = Device::factory()->count(2)->for($project)->create([
+        'device_profile_version_id' => $version->id,
+    ]);
+    $versionUrl = "/api/tenants/$tenant->id/projects/$project->id/device-profiles/$profile->id/versions/$version->id";
+
+    $this->actingAs($owner)->deleteJson($versionUrl)->assertNoContent();
+
+    $this->assertDatabaseMissing('device_profile_versions', ['id' => $version->id]);
+
+    foreach ($devices as $device) {
+        $this->assertDatabaseHas('devices', [
+            'id' => $device->getKey(),
+            'project_id' => $project->getKey(),
+            'device_profile_version_id' => null,
+        ]);
+    }
+});
+
+it('numbers device profile versions from the highest remaining version', function (
+    int $versionCount,
+    array $deletedVersions,
+    int $expectedVersion,
+): void {
+    [$owner, $tenant, $project] = createDeviceProfileOwner();
+    $profile = DeviceProfile::factory()->for($project)->create();
+    $versionsUrl = "/api/tenants/$tenant->id/projects/$project->id/device-profiles/$profile->id/versions";
+    /** @var array<int, string> $versionIds */
+    $versionIds = [];
+
+    for ($number = 1; $number <= $versionCount; $number++) {
+        $versionIds[$number] = (string) $this->actingAs($owner)
+            ->postJson($versionsUrl, [
+                'schema_code' => "motor-v$number",
+                'definition' => deviceProfileDefinition(),
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.version', $number)
+            ->json('data.id');
+    }
+
+    foreach ($deletedVersions as $number) {
+        $this->actingAs($owner)
+            ->deleteJson("$versionsUrl/$versionIds[$number]")
+            ->assertNoContent();
+
+        $this->assertDatabaseMissing('device_profile_versions', ['id' => $versionIds[$number]]);
+    }
+
+    $this->actingAs($owner)
+        ->postJson($versionsUrl, [
+            'schema_code' => 'motor-recreated',
+            'definition' => deviceProfileDefinition(),
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.version', $expectedVersion);
+})->with([
+    'latest version deleted' => [2, [2], 2],
+    'all versions deleted' => [2, [1, 2], 1],
+    'middle version deleted' => [3, [2], 4],
+]);
 
 it('allows the same profile code and schema code in different projects', function (): void {
     [$owner, $tenant, $project] = createDeviceProfileOwner();

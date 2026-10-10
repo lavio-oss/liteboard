@@ -50,9 +50,17 @@ const items = computed<DropdownMenuItem[][]>(() => [workspaces.map(workspace => 
       }"
     >
       <template #leading>
-        <span class="grid size-6 shrink-0 place-items-center rounded-md bg-primary/10">
-          <img :src="brandLogo" alt="" class="size-4">
-        </span>
+        <UIcon
+          v-if="isAdminWorkspace"
+          :name="selectedWorkspace.icon"
+          class="size-5 shrink-0 text-primary"
+        />
+        <img
+          v-else
+          :src="brandLogo"
+          alt=""
+          class="size-5 shrink-0"
+        >
       </template>
     </UButton>
   </UDropdownMenu>

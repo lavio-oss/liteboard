@@ -43,6 +43,7 @@ type FilterTreeItem = {
   label: string
   searchText?: string
   icon?: string
+  iconClass?: string
   children?: FilterTreeItem[]
   onSelect?: (event: FilterTreeSelectEvent) => void
 }
@@ -55,56 +56,65 @@ const kindConfig = {
   tenant: {
     label: 'Tenant',
     icon: 'i-lucide-building-2',
-    iconClass: 'text-emerald-500',
+    iconClass: 'text-teal-500',
+    badgeClass: 'bg-teal-500/10 text-teal-600 dark:text-teal-400 ring-teal-500/25',
     badgeColor: 'success' as const
   },
   project: {
     label: 'Project',
     icon: 'i-lucide-folder-kanban',
     iconClass: 'text-blue-500',
-    badgeColor: 'primary' as const
+    badgeClass: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 ring-blue-500/25',
+    badgeColor: 'info' as const
   },
   site: {
     label: 'Asset',
-    icon: 'i-lucide-box',
-    iconClass: 'text-indigo-500',
-    badgeColor: 'secondary' as const
+    icon: 'i-lucide-map-pin',
+    iconClass: 'text-emerald-500',
+    badgeClass: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-emerald-500/25',
+    badgeColor: 'success' as const
   },
   factory: {
     label: 'Asset',
-    icon: 'i-lucide-box',
-    iconClass: 'text-indigo-500',
+    icon: 'i-lucide-building-2',
+    iconClass: 'text-purple-500',
+    badgeClass: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 ring-purple-500/25',
     badgeColor: 'secondary' as const
   },
   area: {
     label: 'Asset',
-    icon: 'i-lucide-box',
-    iconClass: 'text-indigo-500',
-    badgeColor: 'secondary' as const
+    icon: 'i-lucide-panels-top-left',
+    iconClass: 'text-primary',
+    badgeClass: 'bg-primary/10 text-primary ring-primary/25',
+    badgeColor: 'primary' as const
   },
   production_line: {
     label: 'Asset',
-    icon: 'i-lucide-box',
-    iconClass: 'text-indigo-500',
-    badgeColor: 'secondary' as const
+    icon: 'i-lucide-workflow',
+    iconClass: 'text-amber-500',
+    badgeClass: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 ring-amber-500/25',
+    badgeColor: 'warning' as const
   },
   station: {
     label: 'Asset',
-    icon: 'i-lucide-box',
-    iconClass: 'text-indigo-500',
-    badgeColor: 'secondary' as const
+    icon: 'i-lucide-cuboid',
+    iconClass: 'text-slate-500',
+    badgeClass: 'bg-slate-500/10 text-slate-600 dark:text-slate-400 ring-slate-500/25',
+    badgeColor: 'neutral' as const
   },
   equipment: {
     label: 'Asset',
     icon: 'i-lucide-cog',
     iconClass: 'text-orange-500',
-    badgeColor: 'warning' as const
+    badgeClass: 'bg-orange-500/10 text-orange-600 dark:text-orange-400 ring-orange-500/25',
+    badgeColor: 'error' as const
   }
 } satisfies Record<FlowKind, {
   label: string
   icon: string
   iconClass: string
-  badgeColor: 'success' | 'neutral' | 'primary' | 'secondary' | 'warning'
+  badgeClass: string
+  badgeColor: 'success' | 'neutral' | 'primary' | 'secondary' | 'warning' | 'error' | 'info'
 }>
 
 const assetTypeLabels: Record<AssetType, string> = {
@@ -115,6 +125,17 @@ const assetTypeLabels: Record<AssetType, string> = {
   station: 'Station',
   equipment: 'Equipment'
 }
+
+const legendKinds: FlowKind[] = [
+  'tenant',
+  'project',
+  'site',
+  'factory',
+  'area',
+  'production_line',
+  'station',
+  'equipment'
+]
 
 function getKindConfig(kind: FlowKind) {
   return kindConfig[kind]
@@ -173,6 +194,7 @@ function buildAssetFilterItems(assets: Asset[], projectId: string, parentAssetId
       label: asset.name,
       searchText: `${asset.name} ${asset.code} ${asset.location ?? ''} ${assetTypeLabels[asset.asset_type]}`,
       icon: getKindConfig(asset.asset_type).icon,
+      iconClass: getKindConfig(asset.asset_type).iconClass,
       children: buildAssetFilterItems(assets, projectId, asset.id),
       onSelect: preventFilterRowSelection
     }))
@@ -188,12 +210,14 @@ const filterTreeItems = computed<FilterTreeItem[]>(() => {
     label: tenant.name,
     searchText: `${tenant.name} ${tenant.code}`,
     icon: getKindConfig('tenant').icon,
+    iconClass: getKindConfig('tenant').iconClass,
     onSelect: preventFilterRowSelection,
     children: currentHierarchy.projects.map(project => ({
       id: `project-${project.id}`,
       label: project.name,
       searchText: `${project.name} ${project.description ?? ''}`,
       icon: getKindConfig('project').icon,
+      iconClass: getKindConfig('project').iconClass,
       children: buildAssetFilterItems(currentHierarchy.assets, project.id, null),
       onSelect: preventFilterRowSelection
     }))
@@ -943,7 +967,8 @@ const flowKey = computed(() => `${selectedTenantId.value}-${selectedFilterKeys.v
                     </span>
                     <UIcon
                       :name="item.icon ?? 'i-lucide-box'"
-                      class="size-4 shrink-0 text-muted"
+                      class="size-4 shrink-0"
+                      :class="item.iconClass ?? 'text-muted'"
                     />
                     <span class="min-w-0 flex-1 truncate text-left">
                       {{ item.label }}
@@ -969,18 +994,17 @@ const flowKey = computed(() => `${selectedTenantId.value}-${selectedFilterKeys.v
         </template>
       </UPopover>
 
-      <div class="ms-auto flex flex-wrap items-center gap-2 text-xs text-muted">
-        <UBadge color="success" variant="subtle" class="gap-1">
-          <UIcon name="i-lucide-building-2" class="size-3" />
-          Tenant
-        </UBadge>
-        <UBadge color="primary" variant="subtle" class="gap-1">
-          <UIcon name="i-lucide-folder-kanban" class="size-3" />
-          Project
-        </UBadge>
-        <UBadge color="secondary" variant="subtle" class="gap-1">
-          <UIcon name="i-lucide-box" class="size-3" />
-          Asset
+      <div class="ms-auto flex flex-wrap items-center gap-2 text-xs">
+        <UBadge
+          v-for="kind in legendKinds"
+          :key="kind"
+          :color="kindConfig[kind].badgeColor"
+          variant="subtle"
+          class="gap-1.5"
+          :class="kindConfig[kind].badgeClass"
+        >
+          <UIcon :name="kindConfig[kind].icon" class="size-3 shrink-0" :class="kindConfig[kind].iconClass" />
+          {{ kind === 'tenant' || kind === 'project' ? kindConfig[kind].label : assetTypeLabels[kind] }}
         </UBadge>
       </div>
     </div>

@@ -4,13 +4,14 @@ use Illuminate\Support\Facades\Route;
 use Modules\Admin\Actions\DeviceProfile\Http\CreateDeviceProfileAction;
 use Modules\Admin\Actions\DeviceProfile\Http\CreateDeviceProfileVersionAction;
 use Modules\Admin\Actions\DeviceProfile\Http\DeleteDeviceProfileAction;
+use Modules\Admin\Actions\DeviceProfile\Http\DeleteDeviceProfileVersionAction;
 use Modules\Admin\Actions\DeviceProfile\Http\ListDeviceProfilesAction;
 use Modules\Admin\Actions\DeviceProfile\Http\ShowDeviceProfileAction;
 use Modules\Admin\Actions\DeviceProfile\Http\UpdateDeviceProfileAction;
 
 Route::middleware(['auth:sanctum', 'tenant.context'])
     ->prefix('tenants/{tenant}/projects/{project}/device-profiles')
-    ->whereUuid(['tenant', 'project', 'deviceProfile'])
+    ->whereUuid(['tenant', 'project', 'deviceProfile', 'version'])
     ->scopeBindings()
     ->group(function (): void {
         Route::get('/', ListDeviceProfilesAction::class)
@@ -24,5 +25,7 @@ Route::middleware(['auth:sanctum', 'tenant.context'])
         Route::delete('/{deviceProfile}', DeleteDeviceProfileAction::class)
             ->middleware('abilities:control-plane:write');
         Route::post('/{deviceProfile}/versions', CreateDeviceProfileVersionAction::class)
+            ->middleware('abilities:control-plane:write');
+        Route::delete('/{deviceProfile}/versions/{version}', DeleteDeviceProfileVersionAction::class)
             ->middleware('abilities:control-plane:write');
     });

@@ -35,6 +35,24 @@ const assetTypeColors: Record<AssetType, 'success' | 'secondary' | 'primary' | '
   station: 'neutral',
   equipment: 'error'
 }
+
+const assetTypeIcons: Record<AssetType, string> = {
+  site: 'i-lucide-map-pin',
+  factory: 'i-lucide-building-2',
+  area: 'i-lucide-panels-top-left',
+  production_line: 'i-lucide-workflow',
+  station: 'i-lucide-cuboid',
+  equipment: 'i-lucide-cog'
+}
+
+const assetTypeIconClasses: Record<AssetType, string> = {
+  site: 'text-emerald-500',
+  factory: 'text-purple-500',
+  area: 'text-primary',
+  production_line: 'text-amber-500',
+  station: 'text-slate-500',
+  equipment: 'text-orange-500'
+}
 </script>
 
 <template>
@@ -44,7 +62,10 @@ const assetTypeColors: Record<AssetType, 'success' | 'secondary' | 'primary' | '
   >
     <template #title>
       <div class="flex items-center gap-2">
-        <UIcon name="i-lucide-box" class="size-5 text-primary" />
+        <UIcon
+          :name="props.asset ? assetTypeIcons[props.asset.asset_type] : 'i-lucide-box'"
+          :class="['size-5 shrink-0', props.asset ? assetTypeIconClasses[props.asset.asset_type] : 'text-primary']"
+        />
         <span>{{ props.asset?.name ?? 'Asset details' }}</span>
         <UBadge
           v-if="props.asset !== null"
@@ -76,8 +97,9 @@ const assetTypeColors: Record<AssetType, 'success' | 'secondary' | 'primary' | '
               <UBadge
                 :color="assetTypeColors[props.asset.asset_type]"
                 variant="subtle"
-                class="capitalize"
+                class="capitalize gap-1"
               >
+                <UIcon :name="assetTypeIcons[props.asset.asset_type]" class="size-3.5" />
                 {{ assetTypeLabels[props.asset.asset_type] }}
               </UBadge>
             </div>

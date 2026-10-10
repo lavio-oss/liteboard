@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 use LogicException;
 use Modules\Admin\Models\Device\Device;
@@ -8,6 +9,18 @@ use Modules\Admin\Models\DeviceProfile\DeviceProfile;
 use Modules\Admin\Models\DeviceProfile\DeviceProfileVersion;
 use Modules\Admin\Models\Project\Project;
 use Modules\Core\Models\Tenant\Tenant;
+
+it('creates device profiles with the defined schema columns', function (): void {
+    expect(Schema::getColumnListing('device_profiles'))->toEqualCanonicalizing([
+        'id',
+        'project_id',
+        'code',
+        'name',
+        'description',
+        'created_at',
+        'updated_at',
+    ]);
+});
 
 it('stores versioned schema definitions and leaves assigned devices pinned', function (): void {
     $tenant = Tenant::factory()->create();

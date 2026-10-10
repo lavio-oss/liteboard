@@ -10,11 +10,15 @@ type DrawerView = 'versions' | 'form'
 const props = withDefaults(defineProps<{
   profile?: DeviceProfile | null
   canWrite?: boolean
+  canDelete?: boolean
   creating?: boolean
+  deleting?: boolean
 }>(), {
   profile: null,
   canWrite: false,
-  creating: false
+  canDelete: false,
+  creating: false,
+  deleting: false
 })
 
 const open = defineModel<boolean>('open', { required: true })
@@ -22,6 +26,7 @@ const view = defineModel<DrawerView>('view', { required: true })
 
 const emit = defineEmits<{
   create: [payload: DeviceProfileVersionInput]
+  delete: [version: DeviceProfileVersion]
 }>()
 
 const versionSchema = z.object({
@@ -60,13 +65,14 @@ const versionSchema = z.object({
 type VersionFormState = z.input<typeof versionSchema>
 
 const form = useTemplateRef('form')
+const selectedVersion = ref<DeviceProfileVersion | null>(null)
 const state = reactive<VersionFormState>({
   schema_code: '',
   compatibility_note: '',
   definition: ''
 })
 
-const readonly = computed(() => !props.canWrite || props.creating)
+const readonly = computed(() => !props.canWrite || props.creating || props.deleting)
 const orderedVersions = computed(() => [...(props.profile?.versions ?? [])].reverse())
 const description = computed(() => {
   if (props.profile === null) {
@@ -75,7 +81,9 @@ const description = computed(() => {
 
   return view.value === 'versions'
     ? `${props.profile.versions.length} versions`
-    : `${props.profile.code} · Version schema`
+    : selectedVersion.value !== null
+      ? `${props.profile.code} · ${selectedVersion.value.schema_code}`
+      : `${props.profile.code} · Version schema`
 })
 
 interface PreviewField {
@@ -119,12 +127,14 @@ watch(
   ([isOpen]) => {
     if (isOpen) {
       view.value = 'versions'
+      selectedVersion.value = null
     }
   }
 )
 
 function openForm(version: DeviceProfileVersion | null): void {
-  state.schema_code = version === null || props.canWrite ? '' : version.schema_code
+  selectedVersion.value = version
+  state.schema_code = version?.schema_code ?? ''
   state.compatibility_note = version?.compatibility_note ?? ''
   state.definition = version === null ? '' : JSON.stringify(version.definition, null, 2)
   view.value = 'form'
@@ -155,9 +165,7 @@ function onSubmit(event: FormSubmitEvent<z.output<typeof versionSchema>>): void 
   >
     <template #title>
       <div class="flex items-center gap-2.5">
-        <div class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          <UIcon name="i-lucide-layers" class="size-4.5" />
-        </div>
+        <UIcon name="i-lucide-layers" class="size-5 shrink-0 text-primary" />
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
             <span class="truncate font-semibold">{{ props.profile?.name ?? 'Device profile versions' }}</span>
@@ -226,41 +234,37 @@ function onSubmit(event: FormSubmitEvent<z.output<typeof versionSchema>>): void 
                 </UBadge>
               </div>
 
-              <div class="flex shrink-0 items-center gap-1 text-xs text-dimmed group-hover:text-primary transition-colors">
-                <span class="font-medium">Inspect</span>
-                <UIcon
-                  name="i-lucide-chevron-right"
-                  class="size-4 transition-transform group-hover:translate-x-0.5"
+              <div class="flex shrink-0 items-center gap-1.5 text-xs text-dimmed">
+                <UButton
+                  v-if="props.canDelete"
+                  icon="i-lucide-trash-2"
+                  color="error"
+                  variant="ghost"
+                  size="xs"
+                  aria-label="Delete version"
+                  :disabled="props.deleting"
+                  @click.stop="emit('delete', version)"
                 />
               </div>
             </div>
 
             <!-- Schema Fields Preview -->
-            <div class="space-y-1.5">
-              <div class="flex items-center justify-between text-xs text-dimmed">
-                <span class="flex items-center gap-1 font-medium">
-                  <UIcon name="i-lucide-list-tree" class="size-3.5" />
-                  Schema fields ({{ Object.keys(version.definition?.fields ?? {}).length }})
-                </span>
-              </div>
+            <div class="flex flex-wrap gap-1.5">
+              <span
+                v-for="field in getPreviewFields(version.definition?.fields)"
+                :key="field.name"
+                class="inline-flex items-center gap-1 rounded-md border border-default/60 bg-elevated/60 px-2 py-0.5 font-mono text-[11px] text-muted"
+              >
+                <span class="font-medium text-highlighted">{{ field.name }}</span>
+                <span class="text-dimmed text-[10px]">{{ field.unit ? `${field.type} · ${field.unit}` : field.type }}</span>
+              </span>
 
-              <div class="flex flex-wrap gap-1.5">
-                <span
-                  v-for="field in getPreviewFields(version.definition?.fields)"
-                  :key="field.name"
-                  class="inline-flex items-center gap-1 rounded-md border border-default/60 bg-elevated/60 px-2 py-0.5 font-mono text-[11px] text-muted"
-                >
-                  <span class="font-medium text-highlighted">{{ field.name }}</span>
-                  <span class="text-dimmed text-[10px]">{{ field.unit ? `${field.type} · ${field.unit}` : field.type }}</span>
-                </span>
-
-                <span
-                  v-if="getRemainingFieldCount(version.definition?.fields) > 0"
-                  class="inline-flex items-center rounded-md px-1.5 py-0.5 font-mono text-[11px] font-medium text-dimmed"
-                >
-                  +{{ getRemainingFieldCount(version.definition?.fields) }} more
-                </span>
-              </div>
+              <span
+                v-if="getRemainingFieldCount(version.definition?.fields) > 0"
+                class="inline-flex items-center rounded-md px-1.5 py-0.5 font-mono text-[11px] font-medium text-dimmed"
+              >
+                +{{ getRemainingFieldCount(version.definition?.fields) }} more
+              </span>
             </div>
 
             <!-- Card Footer -->
@@ -291,7 +295,6 @@ function onSubmit(event: FormSubmitEvent<z.output<typeof versionSchema>>): void 
           name="schema_code"
           label="Schema code"
           required
-          description="Must be unique within the project."
         >
           <UInput
             v-model="state.schema_code"
@@ -356,7 +359,7 @@ function onSubmit(event: FormSubmitEvent<z.output<typeof versionSchema>>): void 
           icon="i-lucide-arrow-left"
           color="neutral"
           variant="ghost"
-          :disabled="props.creating"
+          :disabled="props.creating || props.deleting"
           @click="view = 'versions'"
         />
 
@@ -365,13 +368,22 @@ function onSubmit(event: FormSubmitEvent<z.output<typeof versionSchema>>): void 
             label="Cancel"
             color="neutral"
             variant="subtle"
-            :disabled="props.creating"
+            :disabled="props.creating || props.deleting"
             @click="view = 'versions'"
           />
           <UButton
+            v-if="selectedVersion !== null && props.canDelete"
+            label="Delete"
+            icon="i-lucide-trash-2"
+            color="error"
+            variant="subtle"
+            :disabled="props.deleting"
+            @click="emit('delete', selectedVersion)"
+          />
+          <UButton
             v-if="props.canWrite"
-            label="Create version"
-            icon="i-lucide-plus"
+            label="Save"
+            icon="i-lucide-save"
             color="primary"
             :loading="props.creating"
             @click="form?.submit()"

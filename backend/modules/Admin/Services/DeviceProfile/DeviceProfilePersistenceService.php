@@ -55,6 +55,7 @@ final class DeviceProfilePersistenceService
                 ->lockForUpdate()
                 ->firstOrFail();
             $nextVersion = (int) $lockedProfile->versions()->max('version') + 1;
+
             $version = $lockedProfile->versions()->make([
                 'version' => $nextVersion,
                 'schema_code' => $schemaCode,
@@ -82,6 +83,25 @@ final class DeviceProfilePersistenceService
 
             if (! $lockedProfile->delete()) {
                 throw new RuntimeException('Device profile deletion was cancelled.');
+            }
+        });
+    }
+
+    public function deleteVersion(DeviceProfileVersion $deviceProfileVersion): void
+    {
+        DB::transaction(function () use ($deviceProfileVersion): void {
+            $lockedVersion = DeviceProfileVersion::query()
+                ->whereKey($deviceProfileVersion->getKey())
+                ->where('project_id', $deviceProfileVersion->project_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $lockedVersion->devices()
+                ->where('project_id', $lockedVersion->project_id)
+                ->update(['device_profile_version_id' => null]);
+
+            if (! $lockedVersion->delete()) {
+                throw new RuntimeException('Device profile version deletion was cancelled.');
             }
         });
     }

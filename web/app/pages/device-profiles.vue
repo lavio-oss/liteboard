@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import type { NavigationMenuItem, TableColumn } from '@nuxt/ui'
 import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
 import { useTenantContext } from '~/composables/useTenantContext'
@@ -9,6 +9,7 @@ import type {
   Device,
   DeviceProfile,
   DeviceProfileInput,
+  DeviceProfileVersion,
   DeviceProfileVersionInput,
   Project
 } from '~/types/admin'
@@ -16,6 +17,17 @@ import type {
 definePageMeta({
   middleware: 'auth'
 })
+
+const deviceLinks = [[{
+  label: 'Devices',
+  icon: 'i-lucide-router',
+  to: '/devices',
+  exact: true
+}, {
+  label: 'Device Profiles',
+  icon: 'i-lucide-file-cog',
+  to: '/device-profiles'
+}]] satisfies NavigationMenuItem[][]
 
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
@@ -25,6 +37,7 @@ const {
   createDeviceProfile,
   createDeviceProfileVersion,
   deleteDeviceProfile,
+  deleteDeviceProfileVersion,
   loadDeviceProfiles,
   loadDevices,
   loadProjects,
@@ -111,6 +124,9 @@ const versionsOpen = ref(false)
 const versionsLoading = ref(false)
 const versionsView = ref<'versions' | 'form'>('versions')
 const versionsProfile = ref<DeviceProfile | null>(null)
+const deleteVersionOpen = ref(false)
+const deleteVersionLoading = ref(false)
+const deletingVersion = ref<DeviceProfileVersion | null>(null)
 
 watch(activeTenantId, () => {
   projectFilter.value = null
@@ -121,6 +137,8 @@ watch(activeTenantId, () => {
   versionsOpen.value = false
   versionsView.value = 'versions'
   versionsProfile.value = null
+  deleteVersionOpen.value = false
+  deletingVersion.value = null
 })
 
 function projectFor(projectId: string): Project {
@@ -323,6 +341,65 @@ async function createSelectedVersion(payload: DeviceProfileVersionInput): Promis
   }
 }
 
+function promptDeleteVersion(version: DeviceProfileVersion): void {
+  deletingVersion.value = version
+  deleteVersionOpen.value = true
+}
+
+async function deleteSelectedVersion(): Promise<void> {
+  const profile = versionsProfile.value
+  const version = deletingVersion.value
+
+  if (profile === null || version === null) {
+    throw new Error('A device profile and version are required before deletion.')
+  }
+
+  const project = projectFor(profile.project_id)
+  deleteVersionLoading.value = true
+
+  try {
+    await deleteDeviceProfileVersion(
+      project.tenant_id,
+      project.id,
+      profile.id,
+      version.id
+    )
+
+    if (activeTenantId.value !== project.tenant_id) {
+      return
+    }
+
+    await refresh()
+
+    const refreshedProfile = profiles.value.find(item => item.id === profile.id)
+    if (refreshedProfile !== undefined) {
+      versionsProfile.value = refreshedProfile
+    }
+
+    versionsView.value = 'versions'
+    deleteVersionOpen.value = false
+    deletingVersion.value = null
+
+    toast.add({
+      title: 'Version deleted',
+      description: `Deleted version ${version.schema_code}.`,
+      color: 'success'
+    })
+  } catch (error: unknown) {
+    if (!(error instanceof ApiError)) {
+      throw error
+    }
+
+    toast.add({
+      title: 'Unable to delete version',
+      description: error.message,
+      color: 'error'
+    })
+  } finally {
+    deleteVersionLoading.value = false
+  }
+}
+
 const columns: TableColumn<AdminTableRow>[] = [
   {
     id: 'name',
@@ -466,6 +543,10 @@ const errorMessage = computed(() => {
           />
         </template>
       </UDashboardNavbar>
+
+      <UDashboardToolbar>
+        <UNavigationMenu :items="deviceLinks" highlight class="-mx-1 flex-1" />
+      </UDashboardToolbar>
     </template>
 
     <template #body>
@@ -524,13 +605,24 @@ const errorMessage = computed(() => {
         @confirm="deleteSelectedProfile"
       />
 
+      <ConfirmDeleteModal
+        v-model:open="deleteVersionOpen"
+        :title="`Delete version ${deletingVersion?.schema_code ?? ''}`"
+        description="This action cannot be undone. Devices assigned to this version will be unlinked."
+        :loading="deleteVersionLoading"
+        @confirm="deleteSelectedVersion"
+      />
+
       <AdminDeviceProfileVersionsDrawer
         v-model:open="versionsOpen"
         v-model:view="versionsView"
         :profile="versionsProfile"
         :can-write="versionsProfile !== null && canWriteInProject(versionsProfile.project_id)"
+        :can-delete="versionsProfile !== null && canDeleteInProject(versionsProfile.project_id)"
         :creating="versionsLoading"
+        :deleting="deleteVersionLoading"
         @create="createSelectedVersion"
+        @delete="promptDeleteVersion"
       />
     </template>
   </UDashboardPanel>

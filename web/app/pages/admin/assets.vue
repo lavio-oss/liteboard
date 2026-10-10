@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import type { NavigationMenuItem, TableColumn } from '@nuxt/ui'
 import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
 import { useTenantContext } from '~/composables/useTenantContext'
@@ -26,6 +26,8 @@ const manageableTenantIds = computed(() => new Set(
 ))
 const formOpen = ref(false)
 const formLoading = ref(false)
+const viewOpen = ref(false)
+const viewingAsset = ref<Asset | null>(null)
 const selectedProjectId = ref<string | null>(null)
 const selectedParentId = ref<string | null>(null)
 const editingAsset = ref<Asset | null>(null)
@@ -60,13 +62,33 @@ const assetTypeColors: Record<AssetType, 'success' | 'secondary' | 'primary' | '
   equipment: 'error'
 }
 
-const assetTypeOptions: Array<{ label: string, value: AssetType | 'all' }> = [
-  { label: 'All asset types', value: 'all' },
-  ...Object.entries(assetTypeLabels).map(([value, label]) => ({
+const assetTypeIcons: Record<AssetType, string> = {
+  site: 'i-lucide-map-pin',
+  factory: 'i-lucide-building-2',
+  area: 'i-lucide-panels-top-left',
+  production_line: 'i-lucide-workflow',
+  station: 'i-lucide-cuboid',
+  equipment: 'i-lucide-cog'
+}
+
+const assetLinks = computed<NavigationMenuItem[][]>(() => [[
+  {
+    label: 'All',
+    icon: 'i-lucide-boxes',
+    active: assetTypeFilter.value === 'all',
+    onSelect: () => {
+      assetTypeFilter.value = 'all'
+    }
+  },
+  ...Object.entries(assetTypeLabels).reverse().map(([value, label]) => ({
     label,
-    value: value as AssetType
+    icon: assetTypeIcons[value as AssetType],
+    active: assetTypeFilter.value === value,
+    onSelect: () => {
+      assetTypeFilter.value = value as AssetType
+    }
   }))
-]
+]])
 
 const { data: response, status, error, refresh } = await useAsyncData('admin-assets', async () => {
   const hierarchies = await Promise.all(
@@ -201,6 +223,17 @@ function parentNameFor(parentId: string | null | undefined): string {
   }
 
   return parent.name
+}
+
+function openView(assetId: string): void {
+  const asset = assets.value.find(item => item.id === assetId)
+
+  if (asset === undefined) {
+    throw new Error('The selected asset is not available.')
+  }
+
+  viewingAsset.value = asset
+  viewOpen.value = true
 }
 
 function assetTypeLabelFor(assetType: AssetType | undefined): string {
@@ -464,6 +497,14 @@ const columns: TableColumn<AdminTableRow>[] = [
 
       const actions: ReturnType<typeof h>[] = []
 
+      actions.push(h(UButton, {
+        'icon': 'i-lucide-eye',
+        'color': 'neutral',
+        'variant': 'ghost',
+        'aria-label': `View ${row.original.name}`,
+        'onClick': () => openView(row.original.id)
+      }))
+
       if (canWriteProject(projectId)) {
         actions.push(h(UButton, {
           'icon': 'i-lucide-pencil',
@@ -517,6 +558,10 @@ const errorMessage = computed(() => {
           />
         </template>
       </UDashboardNavbar>
+
+      <UDashboardToolbar>
+        <UNavigationMenu :items="assetLinks" highlight class="-mx-1 flex-1" />
+      </UDashboardToolbar>
     </template>
 
     <template #body>
@@ -537,12 +582,6 @@ const errorMessage = computed(() => {
           @reset="resetAssetFilters"
         >
           <template #filters>
-            <USelect
-              v-model="assetTypeFilter"
-              :items="assetTypeOptions"
-              class="min-w-40"
-              :ui="{ trailingIcon: 'group-data-[state=open]:rotate-180 transition-transform duration-200' }"
-            />
             <USelect
               v-model="projectFilter"
               :items="projectFilterOptions"
@@ -577,6 +616,15 @@ const errorMessage = computed(() => {
         description="This action cannot be undone. Child assets will remain as root assets."
         :loading="deleteLoading"
         @confirm="deleteSelectedAsset"
+      />
+
+      <AdminAssetDetailModal
+        v-model:open="viewOpen"
+        :asset="viewingAsset"
+        :project-name="viewingAsset ? projectNameFor(viewingAsset.project_id) : undefined"
+        :parent-name="viewingAsset ? parentNameFor(viewingAsset.parent_asset_id) : undefined"
+        :can-edit="viewingAsset ? canWriteProject(viewingAsset.project_id) : false"
+        @edit="(asset) => openEdit(asset.id)"
       />
     </template>
   </UDashboardPanel>
