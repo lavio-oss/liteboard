@@ -9,7 +9,6 @@ import type {
   Device,
   DeviceProfile,
   DeviceProfileInput,
-  DeviceProfileVersion,
   DeviceProfileVersionInput,
   Project
 } from '~/types/admin'
@@ -37,7 +36,6 @@ const {
   createDeviceProfile,
   createDeviceProfileVersion,
   deleteDeviceProfile,
-  deleteDeviceProfileVersion,
   loadDeviceProfiles,
   loadDevices,
   loadProjects,
@@ -124,9 +122,6 @@ const versionsOpen = ref(false)
 const versionsLoading = ref(false)
 const versionsView = ref<'versions' | 'form'>('versions')
 const versionsProfile = ref<DeviceProfile | null>(null)
-const deleteVersionOpen = ref(false)
-const deleteVersionLoading = ref(false)
-const deletingVersion = ref<DeviceProfileVersion | null>(null)
 
 watch(activeTenantId, () => {
   projectFilter.value = null
@@ -137,8 +132,6 @@ watch(activeTenantId, () => {
   versionsOpen.value = false
   versionsView.value = 'versions'
   versionsProfile.value = null
-  deleteVersionOpen.value = false
-  deletingVersion.value = null
 })
 
 function projectFor(projectId: string): Project {
@@ -341,65 +334,6 @@ async function createSelectedVersion(payload: DeviceProfileVersionInput): Promis
   }
 }
 
-function promptDeleteVersion(version: DeviceProfileVersion): void {
-  deletingVersion.value = version
-  deleteVersionOpen.value = true
-}
-
-async function deleteSelectedVersion(): Promise<void> {
-  const profile = versionsProfile.value
-  const version = deletingVersion.value
-
-  if (profile === null || version === null) {
-    throw new Error('A device profile and version are required before deletion.')
-  }
-
-  const project = projectFor(profile.project_id)
-  deleteVersionLoading.value = true
-
-  try {
-    await deleteDeviceProfileVersion(
-      project.tenant_id,
-      project.id,
-      profile.id,
-      version.id
-    )
-
-    if (activeTenantId.value !== project.tenant_id) {
-      return
-    }
-
-    await refresh()
-
-    const refreshedProfile = profiles.value.find(item => item.id === profile.id)
-    if (refreshedProfile !== undefined) {
-      versionsProfile.value = refreshedProfile
-    }
-
-    versionsView.value = 'versions'
-    deleteVersionOpen.value = false
-    deletingVersion.value = null
-
-    toast.add({
-      title: 'Version deleted',
-      description: `Deleted version ${version.schema_code}.`,
-      color: 'success'
-    })
-  } catch (error: unknown) {
-    if (!(error instanceof ApiError)) {
-      throw error
-    }
-
-    toast.add({
-      title: 'Unable to delete version',
-      description: error.message,
-      color: 'error'
-    })
-  } finally {
-    deleteVersionLoading.value = false
-  }
-}
-
 const columns: TableColumn<AdminTableRow>[] = [
   {
     id: 'name',
@@ -500,7 +434,9 @@ const columns: TableColumn<AdminTableRow>[] = [
         'onClick': () => openVersions(row.original.id)
       }))
 
-      if (canDeleteInProject(projectId)) {
+      const profile = profiles.value.find(profile => profile.id === row.original.id)
+
+      if (canDeleteInProject(projectId) && profile?.versions.length === 0) {
         actions.push(h(UButton, {
           'icon': 'i-lucide-trash-2',
           'color': 'error',
@@ -600,17 +536,9 @@ const errorMessage = computed(() => {
       <ConfirmDeleteModal
         v-model:open="deleteOpen"
         :title="`Delete ${deletingProfile?.name ?? 'profile'}`"
-        description="This action cannot be undone. A profile assigned to a device cannot be deleted."
+        description="Profiles with published versions cannot be deleted."
         :loading="deleteLoading"
         @confirm="deleteSelectedProfile"
-      />
-
-      <ConfirmDeleteModal
-        v-model:open="deleteVersionOpen"
-        :title="`Delete version ${deletingVersion?.schema_code ?? ''}`"
-        description="This action cannot be undone. Devices assigned to this version will be unlinked."
-        :loading="deleteVersionLoading"
-        @confirm="deleteSelectedVersion"
       />
 
       <AdminDeviceProfileVersionsDrawer
@@ -618,11 +546,8 @@ const errorMessage = computed(() => {
         v-model:view="versionsView"
         :profile="versionsProfile"
         :can-write="versionsProfile !== null && canWriteInProject(versionsProfile.project_id)"
-        :can-delete="versionsProfile !== null && canDeleteInProject(versionsProfile.project_id)"
         :creating="versionsLoading"
-        :deleting="deleteVersionLoading"
         @create="createSelectedVersion"
-        @delete="promptDeleteVersion"
       />
     </template>
   </UDashboardPanel>

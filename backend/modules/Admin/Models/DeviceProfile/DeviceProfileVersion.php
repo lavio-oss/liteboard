@@ -50,6 +50,10 @@ final class DeviceProfileVersion extends Model
         self::updating(static function (DeviceProfileVersion $profileVersion): void {
             throw new LogicException('Device profile versions are immutable.');
         });
+
+        self::deleting(static function (DeviceProfileVersion $profileVersion): void {
+            throw new LogicException('Device profile versions cannot be deleted.');
+        });
     }
 
     /** @return array<string, string> */

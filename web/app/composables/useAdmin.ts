@@ -259,19 +259,6 @@ export function useAdmin() {
     return response.data
   }
 
-  async function deleteDeviceProfileVersion(
-    tenantId: string,
-    projectId: string,
-    deviceProfileId: string,
-    versionId: string
-  ): Promise<void> {
-    await api.request(
-      `/api/tenants/${tenantId}/projects/${projectId}/device-profiles/${deviceProfileId}/versions/${versionId}`,
-      z.unknown(),
-      { method: 'DELETE' }
-    )
-  }
-
   async function deleteDeviceProfile(
     tenantId: string,
     projectId: string,
@@ -506,7 +493,6 @@ export function useAdmin() {
     deleteAsset,
     deleteDevice,
     deleteDeviceProfile,
-    deleteDeviceProfileVersion,
     deleteProject,
     deleteTenantUser,
     loadAssets,

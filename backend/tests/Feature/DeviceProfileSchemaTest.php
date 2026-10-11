@@ -131,7 +131,7 @@ it('rejects assigning a profile version from another project to a device', funct
         ->toBeNull();
 });
 
-it('prevents deleting a profile version assigned to a device', function (): void {
+it('prevents deleting any published profile version', function (): void {
     $project = Project::factory()->for(Tenant::factory())->create();
     $profile = DeviceProfile::factory()->for($project)->create();
     $version = DeviceProfileVersion::factory()->forProfile($profile)->create();
@@ -139,8 +139,9 @@ it('prevents deleting a profile version assigned to a device', function (): void
     $device->profileVersion()->associate($version);
     $device->save();
 
-    expect(fn () => $version->delete())->toThrow(QueryException::class);
+    expect(fn () => $version->delete())->toThrow(LogicException::class);
     $this->assertModelExists($device->fresh());
+    $this->assertModelExists($version->fresh());
 });
 
 it('cascades profile data when its owning tenant is deleted', function (): void {

@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use LogicException;
 use Modules\Admin\Models\Project\Project;
 
 #[Fillable(['code', 'name', 'description'])]
@@ -22,6 +23,15 @@ final class DeviceProfile extends Model
     protected static function newFactory(): EloquentFactory
     {
         return DeviceProfileFactory::new();
+    }
+
+    protected static function booted(): void
+    {
+        self::deleting(static function (DeviceProfile $deviceProfile): void {
+            if ($deviceProfile->versions()->exists()) {
+                throw new LogicException('Device profiles with published versions cannot be deleted.');
+            }
+        });
     }
 
     /** @return BelongsTo<Project, $this> */

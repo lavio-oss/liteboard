@@ -77,31 +77,12 @@ final class DeviceProfilePersistenceService
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            if ($lockedProfile->versions()->whereHas('devices')->exists()) {
-                throw new ConflictHttpException('DEVICE_PROFILE_IN_USE');
+            if ($lockedProfile->versions()->exists()) {
+                throw new ConflictHttpException('DEVICE_PROFILE_HAS_VERSIONS');
             }
 
             if (! $lockedProfile->delete()) {
                 throw new RuntimeException('Device profile deletion was cancelled.');
-            }
-        });
-    }
-
-    public function deleteVersion(DeviceProfileVersion $deviceProfileVersion): void
-    {
-        DB::transaction(function () use ($deviceProfileVersion): void {
-            $lockedVersion = DeviceProfileVersion::query()
-                ->whereKey($deviceProfileVersion->getKey())
-                ->where('project_id', $deviceProfileVersion->project_id)
-                ->lockForUpdate()
-                ->firstOrFail();
-
-            $lockedVersion->devices()
-                ->where('project_id', $lockedVersion->project_id)
-                ->update(['device_profile_version_id' => null]);
-
-            if (! $lockedVersion->delete()) {
-                throw new RuntimeException('Device profile version deletion was cancelled.');
             }
         });
     }

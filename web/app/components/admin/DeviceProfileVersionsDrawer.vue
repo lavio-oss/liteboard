@@ -10,15 +10,11 @@ type DrawerView = 'versions' | 'form'
 const props = withDefaults(defineProps<{
   profile?: DeviceProfile | null
   canWrite?: boolean
-  canDelete?: boolean
   creating?: boolean
-  deleting?: boolean
 }>(), {
   profile: null,
   canWrite: false,
-  canDelete: false,
-  creating: false,
-  deleting: false
+  creating: false
 })
 
 const open = defineModel<boolean>('open', { required: true })
@@ -26,7 +22,6 @@ const view = defineModel<DrawerView>('view', { required: true })
 
 const emit = defineEmits<{
   create: [payload: DeviceProfileVersionInput]
-  delete: [version: DeviceProfileVersion]
 }>()
 
 const versionSchema = z.object({
@@ -72,7 +67,7 @@ const state = reactive<VersionFormState>({
   definition: ''
 })
 
-const readonly = computed(() => !props.canWrite || props.creating || props.deleting)
+const readonly = computed(() => !props.canWrite || props.creating)
 const orderedVersions = computed(() => [...(props.profile?.versions ?? [])].reverse())
 const description = computed(() => {
   if (props.profile === null) {
@@ -93,7 +88,7 @@ interface PreviewField {
 }
 
 function getPreviewFields(
-  fields: Record<string, { type: string; unit?: string }> | undefined,
+  fields: Record<string, { type: string, unit?: string }> | undefined,
   limit = 5
 ): PreviewField[] {
   if (!fields) {
@@ -182,8 +177,6 @@ function onSubmit(event: FormSubmitEvent<z.output<typeof versionSchema>>): void 
       </div>
     </template>
 
-
-
     <template #body>
       <template v-if="view === 'versions'">
         <UEmpty
@@ -232,19 +225,6 @@ function onSubmit(event: FormSubmitEvent<z.output<typeof versionSchema>>): void 
                   <UIcon name="i-lucide-shield-check" class="size-3 text-success" />
                   Strict mode
                 </UBadge>
-              </div>
-
-              <div class="flex shrink-0 items-center gap-1.5 text-xs text-dimmed">
-                <UButton
-                  v-if="props.canDelete"
-                  icon="i-lucide-trash-2"
-                  color="error"
-                  variant="ghost"
-                  size="xs"
-                  aria-label="Delete version"
-                  :disabled="props.deleting"
-                  @click.stop="emit('delete', version)"
-                />
               </div>
             </div>
 
@@ -359,7 +339,7 @@ function onSubmit(event: FormSubmitEvent<z.output<typeof versionSchema>>): void 
           icon="i-lucide-arrow-left"
           color="neutral"
           variant="ghost"
-          :disabled="props.creating || props.deleting"
+          :disabled="props.creating"
           @click="view = 'versions'"
         />
 
@@ -368,17 +348,8 @@ function onSubmit(event: FormSubmitEvent<z.output<typeof versionSchema>>): void 
             label="Cancel"
             color="neutral"
             variant="subtle"
-            :disabled="props.creating || props.deleting"
+            :disabled="props.creating"
             @click="view = 'versions'"
-          />
-          <UButton
-            v-if="selectedVersion !== null && props.canDelete"
-            label="Delete"
-            icon="i-lucide-trash-2"
-            color="error"
-            variant="subtle"
-            :disabled="props.deleting"
-            @click="emit('delete', selectedVersion)"
           />
           <UButton
             v-if="props.canWrite"
