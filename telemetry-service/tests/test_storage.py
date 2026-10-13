@@ -3,7 +3,8 @@ from __future__ import annotations
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
-from app.storage.presence import UPDATE_DEVICE_PRESENCE_SQL, PostgresPresenceWriter
+from app.storage.presence import PostgresPresenceWriter
+from app.storage.queries import UPDATE_DEVICE_PRESENCE_SQL
 
 
 class PostgresPresenceWriterTest(unittest.IsolatedAsyncioTestCase):

@@ -7,7 +7,7 @@ from app.pipeline.context import MessageContext
 from app.telemetry.validation import Rejection
 
 if TYPE_CHECKING:
-    from app.storage.presence import PostgresPresenceWriter
+    from app.storage.presence import DBPresenceWriter
 
 
 async def decode_json(ctx: MessageContext) -> None:
@@ -23,7 +23,7 @@ async def decode_json(ctx: MessageContext) -> None:
 
 
 class MarkPresence:
-    def __init__(self, presence_writer: PostgresPresenceWriter) -> None:
+    def __init__(self, presence_writer: DBPresenceWriter) -> None:
         self._presence_writer = presence_writer
 
     async def __call__(self, ctx: MessageContext) -> None:

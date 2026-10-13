@@ -1,26 +1,19 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
+
 from asyncpg.pool import Pool
 
-
-UPDATE_DEVICE_PRESENCE_SQL = """
-UPDATE devices d
-SET connection_state = 'online',
-    last_seen_at = CURRENT_TIMESTAMP,
-    updated_at = CURRENT_TIMESTAMP
-FROM projects p
-JOIN tenants t ON t.id = p.tenant_id
-WHERE d.id = $1::uuid
-  AND d.project_id = $2::uuid
-  AND p.id = d.project_id
-  AND d.status = 'active'
-  AND d.approval_status = 'approved'
-  AND p.status = 'active'
-  AND t.status = 'active'
-"""
+from app.storage.queries import UPDATE_DEVICE_PRESENCE_SQL
 
 
-class PostgresPresenceWriter:
+class DBPresenceWriter(ABC):
+    @abstractmethod
+    async def mark_online(self, *, device_id: str, project_id: str) -> None:
+        ...
+
+
+class PostgresPresenceWriter(DBPresenceWriter):
     def __init__(self, db_pool: Pool) -> None:
         self._db_pool = db_pool
 

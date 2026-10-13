@@ -5,7 +5,7 @@ import unittest
 from datetime import datetime, timezone
 from uuid import UUID
 
-from app.storage.telemetry_ingest import (
+from app.storage.queries import (
     INSERT_INGEST_OUTCOME_SQL,
     INSERT_MESSAGE_IDENTITY_SQL,
     INSERT_SAMPLE_SQL,
@@ -13,6 +13,8 @@ from app.storage.telemetry_ingest import (
     MARK_DEVICE_PRESENCE_SQL,
     SELECT_DEVICE_CONTEXT_SQL,
     SELECT_MESSAGE_IDENTITY_SQL,
+)
+from app.storage.telemetry_ingest import (
     IngestResult,
     PostgresTelemetryIngestor,
 )
