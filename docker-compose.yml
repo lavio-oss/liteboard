@@ -144,6 +144,9 @@ services:
       MQTT_TLS_CA_FILE: /run/secrets/mqtt_tls_ca_certificate
       MQTT_USERNAME: ${MQTT_INTERNAL_USERNAME:-telemetry-service}
       MQTT_PASSWORD: ${MQTT_INTERNAL_PASSWORD:-telemetry-service-secret}
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID:-liteboard-telemetry-service}
+      MQTT_SESSION_EXPIRY_SECONDS: ${MQTT_SESSION_EXPIRY_SECONDS:-2147483647}
+      MQTT_RECEIVE_MAXIMUM: ${MQTT_RECEIVE_MAXIMUM:-20}
       DB_HOST: ${MQTT_PG_HOST:-host.docker.internal}
       DB_PORT: ${MQTT_PG_PORT:-5432}
       DB_DATABASE: ${POSTGRES_DB:-liteboard}

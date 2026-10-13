@@ -4,13 +4,19 @@ from asyncpg.pool import Pool
 
 
 UPDATE_DEVICE_PRESENCE_SQL = """
-UPDATE devices
+UPDATE devices d
 SET connection_state = 'online',
-    last_seen_at = NOW(),
-    updated_at = NOW()
-WHERE id = $1::uuid
-  AND project_id = $2::uuid
-  AND status = 'active'
+    last_seen_at = CURRENT_TIMESTAMP,
+    updated_at = CURRENT_TIMESTAMP
+FROM projects p
+JOIN tenants t ON t.id = p.tenant_id
+WHERE d.id = $1::uuid
+  AND d.project_id = $2::uuid
+  AND p.id = d.project_id
+  AND d.status = 'active'
+  AND d.approval_status = 'approved'
+  AND p.status = 'active'
+  AND t.status = 'active'
 """
 
 

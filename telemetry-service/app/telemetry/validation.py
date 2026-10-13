@@ -21,10 +21,14 @@ class ValidationResult:
 
 
 def validate_telemetry(*, definition: dict[str, Any], version: int, payload: dict[str, Any]) -> ValidationResult:
-    if 'schema_version' in payload:
-        schema_version = payload['schema_version']
-        if isinstance(schema_version, bool) or schema_version != version:
-            return ValidationResult((Rejection('schema_version_mismatch'),))
+    if 'schema_version' not in payload:
+        return ValidationResult((Rejection('missing_required_field', 'schema_version'),))
+
+    schema_version = payload['schema_version']
+    if isinstance(schema_version, bool) or not isinstance(schema_version, int) or schema_version < 1:
+        return ValidationResult((Rejection('invalid_type', 'schema_version'),))
+    if schema_version != version:
+        return ValidationResult((Rejection('schema_version_mismatch', 'schema_version'),))
 
     values = payload.get('values')
     if not isinstance(values, dict):

@@ -1,28 +1,53 @@
 from __future__ import annotations
 
 import unittest
+import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
+
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 
 from app.main import app, health, lifespan, ready
 from app.pipeline.stages import decode_json
 
 
 class EndpointCompatibilityTest(unittest.IsolatedAsyncioTestCase):
-    async def test_health_response_is_unchanged(self) -> None:
+    async def test_health_reports_process_liveness_without_dependency_state(self) -> None:
         self.assertEqual(
             {'service': 'liteboard-telemetry-service', 'status': 'ok'},
             await health(),
         )
 
-    async def test_ready_response_keeps_fields_and_utc_timestamp(self) -> None:
-        response = await ready()
+    async def test_ready_checks_postgres_and_mqtt_and_returns_a_utc_timestamp(self) -> None:
+        request = _request(
+            db_pool=SimpleNamespace(fetchval=AsyncMock(return_value=1)),
+            mqtt_subscriber=SimpleNamespace(is_connected=True),
+        )
+
+        response = await ready(request)
 
         self.assertEqual('liteboard-telemetry-service', response['service'])
         self.assertEqual('ready', response['status'])
+        self.assertEqual({'postgres': 'ready', 'mqtt': 'ready'}, response['dependencies'])
         timestamp = datetime.fromisoformat(response['checked_at'])
         self.assertEqual(timezone.utc, timestamp.tzinfo)
+        request.app.state.db_pool.fetchval.assert_awaited_once_with('SELECT 1')
+
+    async def test_ready_returns_503_when_a_dependency_is_unavailable(self) -> None:
+        request = _request(
+            db_pool=SimpleNamespace(fetchval=AsyncMock(side_effect=RuntimeError('database unavailable'))),
+            mqtt_subscriber=SimpleNamespace(is_connected=False),
+        )
+
+        response = await ready(request)
+
+        self.assertIsInstance(response, JSONResponse)
+        self.assertEqual(503, response.status_code)
+        body = json.loads(response.body)
+        self.assertEqual('not_ready', body['status'])
+        self.assertEqual({'postgres': False, 'mqtt': False}, body['dependencies'])
 
     def test_health_and_ready_remain_get_routes(self) -> None:
         routes = {
@@ -43,8 +68,7 @@ class LifespanCompatibilityTest(unittest.IsolatedAsyncioTestCase):
                 events.append('pool.close')
 
         class FakeMqttClient:
-            async def disconnect(self) -> None:
-                events.append('mqtt.disconnect')
+            pass
 
         class FakeSubscriber:
             def __init__(self) -> None:
@@ -53,6 +77,9 @@ class LifespanCompatibilityTest(unittest.IsolatedAsyncioTestCase):
             async def connect_and_subscribe(self) -> None:
                 events.append('mqtt.connect_and_subscribe')
 
+            async def disconnect(self) -> None:
+                events.append('mqtt.disconnect')
+
         pool = FakePool()
         subscriber = FakeSubscriber()
 
@@ -60,18 +87,18 @@ class LifespanCompatibilityTest(unittest.IsolatedAsyncioTestCase):
             events.append('pool.create')
             return pool
 
-        application = SimpleNamespace(state=SimpleNamespace())
+        application = FastAPI()
         with (
             patch('app.main.asyncpg.create_pool', new=AsyncMock(side_effect=create_pool)) as create_pool_mock,
             patch('app.main.PostgresPresenceWriter') as writer_factory,
             patch('app.main.MarkPresence') as mark_presence_factory,
-            patch('app.main.PostgresDeviceSchemaReader') as schema_reader_factory,
-            patch('app.main.ValidateSchema') as validate_schema_factory,
+            patch('app.main.PostgresTelemetryIngestor') as ingestor_factory,
             patch('app.main.MqttSubscriber', return_value=subscriber) as subscriber_factory,
         ):
             async with lifespan(application):
                 self.assertIs(application.state.db_pool, pool)
                 self.assertIs(application.state.mqtt_client, subscriber.client)
+                self.assertIs(application.state.mqtt_subscriber, subscriber)
 
         self.assertEqual(
             ['pool.create', 'mqtt.connect_and_subscribe', 'mqtt.disconnect', 'pool.close'],
@@ -88,10 +115,12 @@ class LifespanCompatibilityTest(unittest.IsolatedAsyncioTestCase):
         )
         writer_factory.assert_called_once_with(pool)
         mark_presence_factory.assert_called_once_with(writer_factory.return_value)
-        schema_reader_factory.assert_called_once_with(pool)
-        validate_schema_factory.assert_called_once_with(schema_reader_factory.return_value)
-        mark_presence = mark_presence_factory.return_value
-        subscriber_factory.assert_called_once_with({
-            'heartbeat': [decode_json, mark_presence],
-            'telemetry': [decode_json, mark_presence, validate_schema_factory.return_value],
-        })
+        ingestor_factory.assert_called_once_with(pool)
+        subscriber_factory.assert_called_once_with(
+            heartbeat_pipeline=[decode_json, mark_presence_factory.return_value],
+            telemetry_ingestor=ingestor_factory.return_value,
+        )
+
+
+def _request(*, db_pool: object, mqtt_subscriber: object) -> SimpleNamespace:
+    return SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(db_pool=db_pool, mqtt_subscriber=mqtt_subscriber)))

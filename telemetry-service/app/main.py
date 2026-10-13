@@ -5,12 +5,13 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 import asyncpg
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from app.ingress.mqtt_subscriber import MqttSubscriber
-from app.pipeline.stages import MarkPresence, ValidateSchema, decode_json
-from app.storage.device_schema import PostgresDeviceSchemaReader
+from app.pipeline.stages import MarkPresence, decode_json
 from app.storage.presence import PostgresPresenceWriter
+from app.storage.telemetry_ingest import PostgresTelemetryIngestor
 
 
 @asynccontextmanager
@@ -26,18 +27,18 @@ async def lifespan(application: FastAPI):
     )
     application.state.db_pool = db_pool
 
-    mark_presence = MarkPresence(PostgresPresenceWriter(db_pool))
-    mqtt_subscriber = MqttSubscriber({
-        'heartbeat': [decode_json, mark_presence],
-        'telemetry': [decode_json, mark_presence, ValidateSchema(PostgresDeviceSchemaReader(db_pool))],
-    })
-    await mqtt_subscriber.connect_and_subscribe()
-    application.state.mqtt_client = mqtt_subscriber.client
+    mqtt_subscriber = MqttSubscriber(
+        heartbeat_pipeline=[decode_json, MarkPresence(PostgresPresenceWriter(db_pool))],
+        telemetry_ingestor=PostgresTelemetryIngestor(db_pool),
+    )
+    application.state.mqtt_subscriber = mqtt_subscriber
 
     try:
+        await mqtt_subscriber.connect_and_subscribe()
+        application.state.mqtt_client = mqtt_subscriber.client
         yield
     finally:
-        await mqtt_subscriber.client.disconnect()
+        await mqtt_subscriber.disconnect()
         await db_pool.close()
 
 
@@ -49,10 +50,29 @@ async def health() -> dict[str, str]:
     return {'service': 'liteboard-telemetry-service', 'status': 'ok'}
 
 
-@app.get('/ready')
-async def ready() -> dict[str, str]:
+@app.get('/ready', response_model=None)
+async def ready(request: Request) -> dict[str, str] | JSONResponse:
+    postgres_ready = False
+    mqtt_ready = request.app.state.mqtt_subscriber.is_connected
+    try:
+        postgres_ready = await request.app.state.db_pool.fetchval('SELECT 1') == 1
+    except Exception:
+        postgres_ready = False
+
+    if not postgres_ready or not mqtt_ready:
+        return JSONResponse(
+            status_code=503,
+            content={
+                'service': 'liteboard-telemetry-service',
+                'status': 'not_ready',
+                'dependencies': {'postgres': postgres_ready, 'mqtt': mqtt_ready},
+                'checked_at': datetime.now(timezone.utc).isoformat(),
+            },
+        )
+
     return {
         'service': 'liteboard-telemetry-service',
         'status': 'ready',
+        'dependencies': {'postgres': 'ready', 'mqtt': 'ready'},
         'checked_at': datetime.now(timezone.utc).isoformat(),
     }

@@ -4,10 +4,9 @@ import json
 from typing import TYPE_CHECKING
 
 from app.pipeline.context import MessageContext
-from app.telemetry.validation import Rejection, validate_telemetry
+from app.telemetry.validation import Rejection
 
 if TYPE_CHECKING:
-    from app.storage.device_schema import PostgresDeviceSchemaReader
     from app.storage.presence import PostgresPresenceWriter
 
 
@@ -29,17 +28,3 @@ class MarkPresence:
 
     async def __call__(self, ctx: MessageContext) -> None:
         await self._presence_writer.mark_online(device_id=ctx.device_id, project_id=ctx.project_id)
-
-
-class ValidateSchema:
-    def __init__(self, schema_reader: PostgresDeviceSchemaReader) -> None:
-        self._schema_reader = schema_reader
-
-    async def __call__(self, ctx: MessageContext) -> None:
-        schema = await self._schema_reader.find_for_device(device_id=ctx.device_id, project_id=ctx.project_id)
-        if schema is None:
-            ctx.reject(Rejection('schema_not_assigned'))
-            return
-
-        result = validate_telemetry(definition=schema.definition, version=schema.version, payload=ctx.payload or {})
-        ctx.reject(*result.reasons)

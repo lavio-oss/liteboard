@@ -203,11 +203,11 @@ Implemented in the control plane and device flows:
 Current Data Plane behavior in `telemetry-service/app/main.py`:
 
 - Connects to the broker over TLS and subscribes to telemetry and heartbeat topics.
-- Parses the topic shape and JSON object, updates presence only when both Device ID and Project ID match an active Device, and logs topic metadata and payload size.
-- Validates telemetry against the Device's assigned profile version (looked up by Device ID and Project ID) and logs an `accepted`/`rejected` outcome with stable reason codes.
-- Does not persist telemetry or rejection outcomes, deduplicate message IDs, or expose a telemetry query API.
+- Resolves telemetry to an active, approved Device under an active Project and Tenant; updates presence even when that Device's telemetry is rejected.
+- Requires a bounded MQTT v5 envelope, validates against the assigned Profile Version, and records a durable sample or rejection/dedup outcome in PostgreSQL.
+- Uses a persistent MQTT session and returns subscriber PUBACK success only after the PostgreSQL transaction commits. REST history/latest remains out of scope for IT-3.
 
-Still open: durable/queryable telemetry, end-to-end idempotency, timestamp validation, persisted processing outcomes and metrics, offline-state transitions, rules/alerts/commands, WebSocket delivery, and L0 reconciliation. Device and provisioning data are tenant-owned through Project; each next data-plane path must derive and retain that organization context rather than trust topic or payload IDs alone.
+Still open: authorized telemetry queries, measured ingest metrics and L0 reconciliation, offline-state transitions, rules/alerts/commands, and WebSocket delivery. Device and provisioning data are tenant-owned through Project; each next data-plane path must derive and retain that organization context rather than trust topic or payload IDs alone.
 
 ### Core entity distinctions
 
@@ -362,7 +362,7 @@ Gate: an authorized Device can be created and assigned a topic scope; unauthoriz
 
 ### Phase 2 — Secure MQTT ingestion L0
 
-Status: next implementation phase. The current consumer performs basic topic/JSON handling and presence updates, but has no durable telemetry ingest path.
+Status: the durable ingest path is implemented under industrial-telemetry IT-3; live outage/recovery and five-minute L0 acceptance remain open.
 
 ~~~text
 Simulator → MQTT broker → Python consumer → authenticate / authorize
@@ -372,29 +372,29 @@ Simulator → MQTT broker → Python consumer → authenticate / authorize
 - Subscribe to Device topic namespaces and bind topic identity to the authenticated Device.
 - Require message_id, occurred_at, and values; add received_at and a traceable processing result.
 - Define payload-size limits, QoS and retained-message behavior. Redact credentials and avoid logging unrestricted payloads.
-- Persist accepted L0 messages through the first durable PostgreSQL path so sent/accepted/persisted counts can be reconciled. Phase 3 expands this into versioned schemas, queryable time-series records, and retention behavior.
-- Handle reconnect and QoS 1 redelivery with application-level idempotency.
+- Persist accepted messages, dedup identities, and outcomes in one PostgreSQL transaction; keep the Device → Project → Tenant scope at every write.
+- Handle reconnect and QoS 1 redelivery with the persistent MQTT session and application-level idempotency.
 
 Failure exercise: malformed JSON, wrong tenant or Device, duplicate message_id, revoked credential, broker restart, and consumer reconnect.
 
 L0 gate: 10 simulated devices at 1 message/second each for 5 minutes; reconcile sent, accepted, rejected, persisted, and duplicate messages; bounded memory/queue; no unexplained loss; record end-to-end p50/p95/p99 and recovery behavior. This is a development gate, not a production capacity claim.
 
-### Phase 3 — Schema validation and time-series persistence
+### Phase 3 — Schema validation and durable time-series ingestion
 
-- Add versioned Device/Profile telemetry schemas and structured rejection reasons.
-- Normalize accepted values and persist measurements with Device, project, message identity, event time, receive time, and processing status.
-- Add tenant-authorized query API with time range, metric keys, pagination/limits, and basic aggregation.
-  Planned route: GET /api/tenants/{tenant}/projects/{project}/devices/{device}/telemetry.
-- Begin with PostgreSQL. Add TimescaleDB, partitioning, downsampling, and retention automation only when measured workload supports them.
+- Device Profile schema validation and structured rejection reasons are implemented under IT-2.
+- Persist valid measurements with Device, Project, assigned Profile Version, message identity, event time, receive time, and processing status; record rejected, duplicate, and conflict outcomes without raw payloads.
+- Keep PostgreSQL as the initial store. Do not add automatic deletion, TimescaleDB, partitioning, downsampling, or batching before measured workload and retention policy justify them.
+- Move tenant-authorized REST history/latest to IT-4 so ingestion durability can be verified before query/API work.
 
 Failure exercise: invalid type/range, schema version mismatch, duplicate batch, late/out-of-order timestamps, PostgreSQL slowdown/outage, and process restart during buffered writes.
 
-Gate: accepted data reconciles with the simulator; duplicates do not create duplicate logical samples; rejected input has a reason; batch size, flush interval, write latency, queue depth, and recovery are measured.
+Gate: accepted data reconciles with the sender; duplicates do not create duplicate logical samples; rejected input has a reason; p50/p95/p99 write latency, in-flight/queued work, memory, database latency, and recovery are measured.
 
 ### Phase 4 — Device state, realtime API, and message trace
 
 - Compute ONLINE/OFFLINE/UNSTABLE from heartbeat and server-side timeout policy.
-- Expose authorized REST reads and WebSocket events for telemetry, state, and later alerts.
+- Expose tenant-authorized REST latest/history reads and WebSocket events for telemetry, state, and later alerts.
+  Planned route: GET /api/tenants/{tenant}/projects/{project}/devices/{device}/telemetry.
   Scope WebSocket subscriptions under the authenticated tenant/project and Device; a suggested path is /ws/tenants/{tenant}/projects/{project}/devices/{device}.
 - Implement a bounded Message Inspector trace across receive, auth, decode, validation, persistence, rule evaluation, and broadcast.
 - Redact credentials and sensitive values; never let a client select a tenant by an untrusted header or topic alone.

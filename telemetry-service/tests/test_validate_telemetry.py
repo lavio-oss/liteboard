@@ -20,7 +20,7 @@ def _validate(values: object, *, definition: dict | None = None, **payload: obje
     return validate_telemetry(
         definition=definition or MOTOR_V1,
         version=1,
-        payload={'values': values, **payload},
+        payload={'schema_version': 1, 'values': values, **payload},
     )
 
 
@@ -128,27 +128,42 @@ class ValidateTelemetryTest(unittest.TestCase):
         )
 
     def test_rejects_payload_without_a_values_object(self) -> None:
-        for payload in ({}, {'values': None}, {'values': [1, 2]}, {'values': 'temperature=30'}):
+        for payload in (
+            {'schema_version': 1},
+            {'schema_version': 1, 'values': None},
+            {'schema_version': 1, 'values': [1, 2]},
+            {'schema_version': 1, 'values': 'temperature=30'},
+        ):
             with self.subTest(payload=payload):
                 result = validate_telemetry(definition=MOTOR_V1, version=1, payload=payload)
 
                 self.assertEqual((Rejection('invalid_payload'),), result.reasons)
 
     def test_rejects_a_schema_version_other_than_the_assigned_one(self) -> None:
-        for schema_version in (2, 0, '1', True, None):
+        for schema_version in (2,):
             with self.subTest(schema_version=schema_version):
                 result = _validate(VALID_VALUES, schema_version=schema_version)
 
-                self.assertEqual((Rejection('schema_version_mismatch'),), result.reasons)
+                self.assertEqual((Rejection('schema_version_mismatch', 'schema_version'),), result.reasons)
+
+    def test_requires_schema_version_and_rejects_non_integer_or_non_positive_values(self) -> None:
+        self.assertEqual(
+            (Rejection('missing_required_field', 'schema_version'),),
+            validate_telemetry(definition=MOTOR_V1, version=1, payload={'values': VALID_VALUES}).reasons,
+        )
+        for schema_version in (0, '1', True, None):
+            with self.subTest(schema_version=schema_version):
+                result = _validate(VALID_VALUES, schema_version=schema_version)
+
+                self.assertEqual((Rejection('invalid_type', 'schema_version'),), result.reasons)
 
     def test_never_switches_schema_when_the_device_claims_another_version(self) -> None:
         result = _validate({'temperature': 'not-checked'}, schema_version=2)
 
-        self.assertEqual((Rejection('schema_version_mismatch'),), result.reasons)
+        self.assertEqual((Rejection('schema_version_mismatch', 'schema_version'),), result.reasons)
 
-    def test_validates_against_the_assigned_version_when_it_is_sent_or_omitted(self) -> None:
+    def test_validates_against_the_assigned_version_when_it_is_sent(self) -> None:
         self.assertTrue(_validate(VALID_VALUES, schema_version=1).accepted)
-        self.assertTrue(_validate(VALID_VALUES).accepted)
         self.assertEqual(
             (Rejection('missing_required_field', 'rpm'),),
             _validate({'temperature': 36.5, 'vibration': 1.2}, schema_version=1).reasons,

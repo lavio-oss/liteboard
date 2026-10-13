@@ -1,6 +1,6 @@
 # Roadmap telemetry công nghiệp end-to-end
 
-> Trạng thái: kế hoạch theo feature; chưa phải cam kết các phase đã triển khai.
+> Trạng thái: IT-1/IT-2 có implementation; IT-3 ingestion code và tests đã có, live integration/L0 gate còn mở; IT-4 trở đi vẫn là roadmap.
 > Phạm vi: một vertical slice từ Device thuộc Project đến telemetry, rule, alert và event giao cho EAMO.
 
 ## Mục tiêu
@@ -48,8 +48,8 @@ Create Project
 |---|---|---|---|---|
 | IT-1 | Project, Equipment và Device binding | Dùng Tenant/Project/Asset/Device/Access Token hiện có; demo association MOTOR-01 có authorization đúng scope. | Plan Phase 1 | Implementation hiện có; industrial acceptance còn mở. |
 | IT-2 | Device Profile và Telemetry Schema | Project-owned Profile, schema versioned, Device assignment và reason code validation. | Plan Phase 3 (schema gate) | CRUD/assignment/validator đã có; durable outcome và end-to-end acceptance còn mở. |
-| IT-3 | MQTT ingest và lưu bền vững | Envelope bắt buộc, resolve active Tenant/Project/Device, PostgreSQL commit, dedup, restart/retry và L0 reconciliation. | Plan Phase 2–3 | Chưa có sample persistence hoặc application-level dedup. |
-| IT-4 | REST latest/history, WebSocket và trace | Authorized query; latest không lùi do late sample; reconnect/recovery và trace có stage timestamps. | Plan Phase 4 | Chưa implement. |
+| IT-3 | MQTT ingest và lưu bền vững | Envelope bắt buộc, resolve active Tenant/Project/Device, PostgreSQL commit, dedup và restart/retry. | Plan Phase 2–3 | Migration, service flow, unit tests và gated PG/Mosquitto integration tests đã có; live integration và L0 reconciliation còn mở. |
+| IT-4 | REST latest/history, WebSocket và trace | Authorized query; latest không lùi do late sample; reconnect/recovery và trace có stage timestamps. | REST query chuyển từ Plan Phase 3; realtime/trace ở Plan Phase 4 | Chưa implement. |
 | IT-5 | Rule, alert và outbound event | Duration/gap/recovery semantics, alert lifecycle, transactional outbox, retry và delivery history. | Plan Phase 5 | Chưa implement. |
 | Commands/RPC | Device commands và ACK | Persistent command lifecycle, expiry, retry và idempotent Device ACK. | Plan Phase 6 | Topic/ACL hiện có; command API, state machine và ACK processing chưa implement. |
 | IT-6 | EAMO event contract | Versioned alert lifecycle event, tenant-owned mapping, outbox/inbox dedup và reconciliation. | Plan Phase 8 — EAMO/MES | Chưa implement; phụ thuộc IT-5. |
