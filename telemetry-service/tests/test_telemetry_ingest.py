@@ -253,7 +253,7 @@ class PostgresTelemetryIngestorTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual('client-message', result.outcome.message_id)
         self.assertEqual([INSERT_INGEST_OUTCOME_SQL], connection.executed_sql)
 
-    async def test_profileless_invalid_payload_is_rejected_without_sample_writes(self) -> None:
+    async def test_profileless_payload_without_metrics_is_rejected_without_sample_writes(self) -> None:
         connection = _FakeConnection(device={
             'device_profile_version_id': None,
             'version': None,
@@ -264,7 +264,7 @@ class PostgresTelemetryIngestorTest(unittest.IsolatedAsyncioTestCase):
         result = await PostgresTelemetryIngestor(_FakePool(connection)).ingest(
             project_id=PROJECT_ID,
             device_id=DEVICE_ID,
-            raw=b'{"temperature":40,"values":{"humidity":60}}',
+            raw=b'{"message_id":"client-message"}',
             retained=False,
             received_wall=RECEIVED_AT,
         )

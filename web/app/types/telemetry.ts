@@ -10,12 +10,12 @@ export const telemetrySampleSchema = z.object({
   message_id: z.string(),
   occurred_at: z.string(),
   received_at: z.string(),
-  values: z.record(z.string(), z.union([z.number(), z.string(), z.boolean()]))
+  values: z.record(z.string(), z.unknown())
 })
 
 export const telemetryLatestValueSchema = z.object({
   metric: z.string(),
-  value: z.union([z.number(), z.string(), z.boolean()]),
+  value: z.unknown(),
   sample_id: z.string().uuid(),
   message_id: z.string(),
   occurred_at: z.string(),
