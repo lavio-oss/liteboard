@@ -7,7 +7,7 @@
     "dev": "nuxt dev",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "test": "node --experimental-strip-types --test tests/colorTheme.test.ts tests/projectPermissions.test.ts tests/provisioningProject.test.ts tests/deviceCredentialContract.test.ts tests/deviceProfileDefinition.test.ts tests/telemetryContract.test.ts tests/devicePresence.test.ts",
+    "test": "node --experimental-strip-types --test tests/colorTheme.test.ts tests/projectPermissions.test.ts tests/provisioningProject.test.ts tests/deviceCredentialContract.test.ts tests/deviceProfileDefinition.test.ts tests/telemetryContract.test.ts tests/devicePresence.test.ts tests/telemetryOutcomesSummary.test.ts",
     "lint": "eslint .",
     "typecheck": "nuxt typecheck"
   },

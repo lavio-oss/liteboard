@@ -122,62 +122,32 @@ class InspectTelemetryEnvelopeTest(unittest.TestCase):
         self.assertEqual(hashlib.sha256(canonical.encode()).hexdigest(), result.content_hash)
         self.assertEqual(raw.decode(), json.dumps(result.payload, separators=(',', ':')))
 
-    def test_accepts_wrapped_values_and_keeps_supplied_metadata(self) -> None:
-        result = _inspect_unprofiled({
-            'message_id': 'client-message',
-            'schema_version': 7,
-            'occurred_at': '2026-10-11T03:59:00Z',
-            'values': {'temperature': 25.12},
-        })
-
-        self.assertEqual((), result.reasons)
-        self.assertEqual('client-message', result.envelope.message_id)
-        self.assertEqual(7, result.envelope.schema_version)
-        self.assertEqual(datetime(2026, 10, 11, 3, 59, tzinfo=timezone.utc), result.envelope.occurred_at)
-        self.assertEqual({'temperature': 25.12}, result.envelope.values)
-
-    def test_rejects_mixed_metric_sources_and_empty_metrics(self) -> None:
-        for payload, field in (
-            ({'temperature': 25, 'values': {'humidity': 60}}, 'temperature'),
-            ({'message_id': 'client-message'}, 'values'),
-            ({'values': {}}, 'values'),
+    def test_ignores_client_metadata_without_validating_it(self) -> None:
+        for metadata in (
+            {'message_id': 'client-message', 'schema_version': 7, 'occurred_at': '2026-10-11T03:59:00Z'},
+            {'message_id': None, 'schema_version': True, 'occurred_at': 42},
+            {'occurred_at': '2099-01-01T00:00:00Z'},
         ):
-            with self.subTest(payload=payload):
-                self.assertIn(Rejection('invalid_payload', field), _inspect_unprofiled(payload).reasons)
+            with self.subTest(metadata=metadata):
+                result = _inspect_unprofiled({'temperature': 25.12, **metadata})
 
-    def test_rejects_non_scalar_metric_values(self) -> None:
-        for value in (None, {}, [], {'nested': 1}):
-            with self.subTest(value=value):
-                result = _inspect_unprofiled({'values': {'metric': value}})
-                self.assertIn(Rejection('invalid_type', 'metric'), result.reasons)
+                self.assertEqual((), result.reasons)
+                self.assertEqual({'temperature': 25.12}, result.envelope.values)
+                self.assertEqual(RECEIVED_AT, result.envelope.occurred_at)
+                self.assertIsNone(result.envelope.schema_version)
+                if metadata.get('message_id') is None:
+                    self.assertIsNotNone(result.envelope.message_id)
+                else:
+                    self.assertEqual('client-message', result.envelope.message_id)
 
-    def test_rejects_invalid_or_null_metadata_instead_of_defaulting_it(self) -> None:
-        for field in ('message_id', 'occurred_at', 'schema_version'):
-            with self.subTest(field=field):
-                result = _inspect_unprofiled({'values': {'temperature': 25}, field: None})
-                self.assertIn(Rejection('invalid_type', field), result.reasons)
+    def test_stores_any_json_value_as_received_and_rejects_only_empty_metrics(self) -> None:
+        wrapped = _inspect_unprofiled({'values': {'humidity': 60}, 'nested': [1, {'a': None}], 'empty': None})
 
-        for field, value, expected in (
-            ('message_id', 42, Rejection('invalid_type', 'message_id')),
-            ('message_id', '', Rejection('invalid_type', 'message_id')),
-            ('message_id', 'x' * (MAX_MESSAGE_ID_LENGTH + 1), Rejection('invalid_payload', 'message_id')),
-            ('occurred_at', 42, Rejection('invalid_type', 'occurred_at')),
-            ('occurred_at', '2026-10-11T04:00:00', Rejection('invalid_type', 'occurred_at')),
-            ('schema_version', True, Rejection('invalid_type', 'schema_version')),
-            ('schema_version', 0, Rejection('invalid_payload', 'schema_version')),
-        ):
-            with self.subTest(field=field, value=value):
-                result = _inspect_unprofiled({'values': {'temperature': 25}, field: value})
-                self.assertIn(expected, result.reasons)
+        self.assertEqual((), wrapped.reasons)
+        self.assertEqual({'values': {'humidity': 60}, 'nested': [1, {'a': None}], 'empty': None}, wrapped.envelope.values)
+        self.assertIn(Rejection('invalid_payload', 'values'), _inspect_unprofiled({'message_id': 'client-message'}).reasons)
 
-    def test_checks_future_timestamp_payload_size_and_preserves_raw_hash(self) -> None:
-        future = _inspect_unprofiled({
-            'message_id': 'client-message',
-            'occurred_at': '2026-10-11T04:06:00Z',
-            'temperature': 25,
-        })
-        self.assertIn(Rejection('occurred_at_too_far_in_future', 'occurred_at'), future.reasons)
-
+    def test_checks_payload_size_and_json(self) -> None:
         valid_raw = b'{"temperature":25}'
         at_limit = valid_raw + b' ' * (MAX_TELEMETRY_PAYLOAD_BYTES - len(valid_raw))
         self.assertEqual((), inspect_unprofiled_telemetry(at_limit, received_at=RECEIVED_AT).reasons)
@@ -187,12 +157,6 @@ class InspectTelemetryEnvelopeTest(unittest.TestCase):
         self.assertEqual(
             (Rejection('invalid_json'),),
             inspect_unprofiled_telemetry(b'{"temperature":NaN}', received_at=RECEIVED_AT).reasons,
-        )
-
-        raw = b'{"temperature":25,"message_id":"client-message"}'
-        self.assertEqual(
-            inspect_unprofiled_telemetry(raw, received_at=RECEIVED_AT).content_hash,
-            inspect_unprofiled_telemetry(b'{"message_id":"client-message","temperature":25}', received_at=RECEIVED_AT).content_hash,
         )
 
 

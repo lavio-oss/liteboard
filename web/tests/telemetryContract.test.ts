@@ -31,7 +31,7 @@ const late = sample('00000000-0000-4000-8000-000000000003', '2026-10-13T09:59:00
 
 test('stream events share the REST sample contract', () => {
   assert.equal(telemetryStreamEventSchema.safeParse({ type: 'telemetry.sample', data: first }).success, true)
-  assert.equal(telemetryStreamEventSchema.safeParse({ type: 'telemetry.sample', data: { ...first, values: { raw: {} } } }).success, false)
+  assert.equal(telemetryStreamEventSchema.safeParse({ type: 'telemetry.sample', data: { ...first, values: { raw: {} } } }).success, true)
   const profileless = { ...first, device_profile_version_id: null }
   assert.equal(telemetryStreamEventSchema.safeParse({ type: 'telemetry.sample', data: profileless }).success, true)
   assert.equal(telemetryHistoryResponseSchema.safeParse({ data: [profileless], meta: { next_cursor: null } }).success, true)

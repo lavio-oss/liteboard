@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { VisAxis, VisLine, VisXYContainer } from '@unovis/vue'
+import type { TableColumn } from '@nuxt/ui'
+import { getPaginationRowModel } from '@tanstack/table-core'
+import { VisAxis, VisDonut, VisLine, VisSingleContainer, VisXYContainer } from '@unovis/vue'
 import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
 import { useTelemetry } from '~/composables/useTelemetry'
@@ -18,7 +20,8 @@ import type {
   TelemetryTrace,
   DevicePresenceEventData
 } from '~/types/telemetry'
-import { hasValidationErrors, mergeTelemetryOutcomes } from '~/utils/telemetryOutcomes'
+import { telemetryOutcomeStatusPresentation } from '~/utils/realtimeStatus'
+import { hasValidationErrors, mergeTelemetryOutcomes, summarizeOutcomes } from '~/utils/telemetryOutcomes'
 import { applySampleToLatestValues, mergeTelemetrySamples } from '~/utils/telemetrySamples'
 import { applyDevicePresenceToDevice, mergeDevicePresenceEvents } from '~/utils/devicePresence'
 
@@ -29,7 +32,18 @@ definePageMeta({
 const LIVE_SAMPLE_LIMIT = 500
 const HISTORY_LIMIT = 1000
 const RECOVERY_MAX_PAGES = 5
-const MESSAGE_PAGE_SIZE = 10
+const PAGE_SIZE = 10
+const UBadge = resolveComponent('UBadge')
+const UButton = resolveComponent('UButton')
+const USelect = resolveComponent('USelect')
+const tableUi = {
+  base: 'border-separate border-spacing-0',
+  thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
+  tbody: '[&>tr]:last:[&>td]:border-b-0',
+  th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
+  td: 'border-b border-default',
+  separator: 'h-0'
+}
 const OUTCOME_LIMIT = 50
 // Devices may report up to five minutes ahead of the server (IT-3 clock-skew policy).
 const FUTURE_SKEW_MS = 5 * 60 * 1000
@@ -251,6 +265,10 @@ async function loadHistory(): Promise<void> {
   }
 }
 
+watch([rangeMinutes, interval, metric], () => {
+  pointPagination.value.pageIndex = 0
+})
+
 watch([activeTab, rangeMinutes, interval, metric], () => {
   if (activeTab.value === 'telemetry') {
     void loadHistory()
@@ -286,16 +304,80 @@ const chartPoints = computed<ChartPoint[]>(() => {
     })
 })
 
+const pointRows = computed(() => chartPoints.value.toReversed())
+const pointPagination = ref({ pageIndex: 0, pageSize: PAGE_SIZE })
+const pointTable = useTemplateRef('pointTable')
+
+const pointColumns = computed<TableColumn<ChartPoint>[]>(() => [
+  {
+    id: 'time',
+    header: 'Time',
+    cell: ({ row }) => h('span', { class: 'whitespace-nowrap text-muted' }, formatDateTime(new Date(row.original.t)))
+  },
+  {
+    id: 'metric',
+    header: 'Metric',
+    cell: () => h('span', { class: 'font-mono text-xs' }, metric.value)
+  },
+  {
+    id: 'value',
+    accessorKey: 'v',
+    header: ({ column }) => {
+      const isSorted = column.getIsSorted()
+
+      return h(UButton, {
+        color: 'neutral',
+        variant: 'ghost',
+        label: interval.value === 'raw' ? 'Value' : 'Average',
+        icon: isSorted
+          ? isSorted === 'asc'
+            ? 'i-lucide-arrow-up-narrow-wide'
+            : 'i-lucide-arrow-down-wide-narrow'
+          : 'i-lucide-arrow-up-down',
+        class: '-mx-2.5',
+        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc')
+      })
+    },
+    cell: ({ row }) => h('span', { class: 'font-mono' }, String(row.original.v)),
+    meta: { class: { th: 'text-right', td: 'text-right' } }
+  }
+])
+
 // Message Inspector tab
 const outcomes = ref<TelemetryIngestOutcome[]>([])
 const outcomesLoading = ref(false)
 const messageFilter = ref('')
 const appliedMessageFilter = ref('')
-const currentMessagePage = ref(1)
+const ALL = 'all'
+const statusFilter = ref(ALL)
+const reasonFilter = ref(ALL)
+const statusOptions = [
+  { label: 'Status', value: ALL },
+  ...Object.entries(telemetryOutcomeStatusPresentation).map(([value, { label }]) => ({ label, value }))
+]
+const reasonOptions = computed(() => [
+  { label: 'Reasons', value: ALL },
+  ...[...new Set(outcomes.value.flatMap(outcome => outcome.reason_codes.map(reason => reason.code)))]
+    .sort()
+    .map(code => ({ label: code, value: code }))
+])
+const outcomePagination = ref({ pageIndex: 0, pageSize: PAGE_SIZE })
+const outcomeTable = useTemplateRef('outcomeTable')
 const traceQuery = ref('')
 const trace = ref<TelemetryTrace | null>(null)
 const traceLoading = ref(false)
 const traceDrawerOpen = ref(false)
+
+const errorColors = ['#ef4444', '#f97316', '#eab308', '#8b5cf6', '#0ea5e9']
+const persistedColor = '#22c55e'
+const summary = computed(() => summarizeOutcomes(outcomes.value))
+const recentColumns = computed(() => outcomeColumns.value
+  .filter(column => column.id !== 'details')
+  .map(column => column.id === 'status' ? { ...column, header: 'Status' } : column.id === 'reasons' ? { ...column, header: 'Reasons' } : column))
+const donutSlices = computed(() => [
+  ...summary.value.persistedCount > 0 ? [{ label: 'Persisted', count: summary.value.persistedCount, color: persistedColor }] : [],
+  ...summary.value.topReasons.map((reason, index) => ({ label: reason.code, count: reason.count, color: errorColors[index] }))
+])
 
 watch(activeTenantId, () => {
   devicePresence.value = null
@@ -311,7 +393,9 @@ watch(activeTenantId, () => {
   traceDrawerOpen.value = false
   messageFilter.value = ''
   appliedMessageFilter.value = ''
-  currentMessagePage.value = 1
+  statusFilter.value = ALL
+  reasonFilter.value = ALL
+  outcomePagination.value.pageIndex = 0
   outcomesLoading.value = false
   historyLoading.value = false
   traceLoading.value = false
@@ -332,25 +416,78 @@ function acceptOutcomes(incoming: TelemetryIngestOutcome[]): void {
 const filteredOutcomes = computed(() => {
   const query = appliedMessageFilter.value.toLowerCase()
 
-  if (query === '') {
-    return outcomes.value
-  }
-
   return outcomes.value.filter(outcome =>
-    outcome.processing_id.toLowerCase().includes(query)
-    || (outcome.message_id !== null && outcome.message_id.toLowerCase().includes(query))
+    (statusFilter.value === ALL || outcome.status === statusFilter.value)
+    && (reasonFilter.value === ALL || outcome.reason_codes.some(reason => reason.code === reasonFilter.value))
+    && (query === ''
+      || outcome.processing_id.toLowerCase().includes(query)
+      || (outcome.message_id !== null && outcome.message_id.toLowerCase().includes(query)))
   )
 })
 
-const paginatedOutcomes = computed(() => {
-  const start = (currentMessagePage.value - 1) * MESSAGE_PAGE_SIZE
-
-  return filteredOutcomes.value.slice(start, start + MESSAGE_PAGE_SIZE)
-})
-
 watch(filteredOutcomes, () => {
-  currentMessagePage.value = 1
+  outcomePagination.value.pageIndex = 0
 })
+
+const outcomeColumns = computed<TableColumn<TelemetryIngestOutcome>[]>(() => [
+  {
+    id: 'received',
+    header: 'Received',
+    cell: ({ row }) => h('span', { class: 'whitespace-nowrap text-muted' }, formatDateTime(row.original.received_at))
+  },
+  {
+    id: 'message_id',
+    header: 'Message ID',
+    cell: ({ row }) => {
+      const id = row.original.message_id ?? row.original.processing_id
+
+      return h('span', { class: 'block max-w-72 truncate font-mono text-xs', title: id }, id)
+    }
+  },
+  {
+    id: 'status',
+    header: () => h(USelect, {
+      'modelValue': statusFilter.value,
+      'onUpdate:modelValue': (value: string) => { statusFilter.value = value },
+      'items': statusOptions,
+      'variant': 'ghost',
+      'class': '-ml-2.5 w-44 font-medium',
+      'aria-label': 'Filter by status'
+    }),
+    cell: ({ row }) => h(TelemetryOutcomeStatus, { status: row.original.status })
+  },
+  {
+    id: 'reasons',
+    header: () => h(USelect, {
+      'modelValue': reasonFilter.value,
+      'onUpdate:modelValue': (value: string) => { reasonFilter.value = value },
+      'items': reasonOptions.value,
+      'variant': 'ghost',
+      'class': '-ml-2.5 w-48 font-medium',
+      'aria-label': 'Filter by reason'
+    }),
+    cell: ({ row }) => {
+      const reason = row.original.reason_codes[0]
+
+      return reason
+        ? h(UBadge, { color: row.original.status === 'skipped' ? 'neutral' : 'error', variant: 'subtle', class: 'font-mono' }, () => reason.code)
+        : h('span', { class: 'text-muted' }, '—')
+    }
+  },
+  {
+    id: 'details',
+    header: 'Details',
+    cell: ({ row }) => h(UButton, {
+      label: 'View trace',
+      icon: 'i-lucide-arrow-up-right',
+      color: 'neutral',
+      variant: 'ghost',
+      size: 'sm',
+      onClick: () => openTrace(row.original.processing_id)
+    }),
+    meta: { class: { th: 'text-right', td: 'text-right' } }
+  }
+])
 
 async function loadOutcomes(tenantId = activeTenantId.value): Promise<void> {
   if (tenantId === null) {
@@ -446,87 +583,140 @@ async function openTrace(message: string): Promise<void> {
         class="w-full"
       >
         <template #overview>
-          <div class="grid gap-4 pt-4 lg:grid-cols-3">
-            <UCard>
-              <template #header>
-                <p class="font-medium">
-                  Device
+          <div class="space-y-4 pt-4">
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <UCard>
+                <p class="text-xs text-muted">
+                  Last active
                 </p>
-              </template>
-              <dl v-if="device" class="space-y-2 text-sm">
-                <div class="flex justify-between gap-2">
-                  <dt class="text-muted">
-                    Code
-                  </dt>
-                  <dd>{{ device.code }}</dd>
-                </div>
-                <div class="flex items-start justify-between gap-2">
-                  <dt class="text-muted">
-                    Device connection
-                  </dt>
-                  <dd>
-                    <DevicePresenceStatus
-                      :state="device.connection_state"
-                      :last-seen-at="device.last_seen_at"
-                    />
-                  </dd>
-                </div>
-              </dl>
-            </UCard>
-
-            <UCard class="lg:col-span-2">
-              <template #header>
-                <p class="font-medium">
-                  Latest telemetry
+                <p class="text-lg font-semibold">
+                  {{ device?.last_seen_at ? formatDateTime(device.last_seen_at) : 'Never' }}
                 </p>
-              </template>
+              </UCard>
+              <UCard>
+                <p class="text-xs text-muted">
+                  Avg. interval
+                </p>
+                <p class="text-2xl font-semibold">
+                  {{ summary.averageGapSeconds === null ? '—' : `${summary.averageGapSeconds.toFixed(1)} s` }}
+                </p>
+              </UCard>
+              <UCard>
+                <p class="text-xs text-muted">
+                  Success rate
+                </p>
+                <p class="text-2xl font-semibold">
+                  {{ summary.successRate === null ? '—' : `${summary.successRate}%` }}
+                </p>
+              </UCard>
+            </div>
 
-              <p v-if="latest.length === 0" class="text-sm text-muted">
-                No telemetry has been stored for this device yet.
-              </p>
-              <div v-else class="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                <div
-                  v-for="latestValue in latest"
-                  :key="latestValue.metric"
-                  class="rounded-md border border-default p-3"
-                >
-                  <p class="text-xs text-muted">
-                    {{ latestValue.metric }}
+            <div class="grid gap-4 lg:grid-cols-3">
+              <div class="space-y-4">
+                <UCard>
+                  <p v-if="donutSlices.length === 0" class="text-sm text-muted">
+                    No processed messages yet.
                   </p>
-                  <p class="text-lg font-semibold">
-                    {{ latestValue.value }}
+                  <div v-else class="flex flex-wrap items-center gap-6">
+                    <ClientOnly>
+                      <VisSingleContainer :data="donutSlices" :height="160" :width="160">
+                        <VisDonut
+                          :value="(slice: { count: number }) => slice.count"
+                          :color="(slice: { color: string }) => slice.color"
+                          :arc-width="28"
+                        />
+                      </VisSingleContainer>
+                    </ClientOnly>
+                    <ul class="min-w-0 flex-1 space-y-2 text-sm">
+                      <li v-for="slice in donutSlices" :key="slice.label" class="flex items-center justify-between gap-2">
+                        <span class="flex min-w-0 items-center gap-2">
+                          <span class="size-2 shrink-0 rounded-full" :style="{ backgroundColor: slice.color }" />
+                          <span class="truncate" :class="{ 'font-mono': slice.color !== persistedColor }">{{ slice.label }}</span>
+                        </span>
+                        <span class="text-muted">{{ slice.count }}×</span>
+                      </li>
+                    </ul>
+                  </div>
+                </UCard>
+
+                <UCard>
+                  <p class="mb-2 text-xs text-muted">
+                    Delay between consecutive messages, in seconds.
                   </p>
-                  <p class="text-xs text-muted">
-                    {{ formatDateTime(latestValue.occurred_at) }}
+                  <p v-if="summary.recentGaps.length === 0" class="text-sm text-muted">
+                    Not enough messages yet.
                   </p>
-                </div>
+                  <ClientOnly v-else>
+                    <VisXYContainer :data="summary.recentGaps" :height="140">
+                      <VisLine :x="(gap: { index: number }) => gap.index" :y="(gap: { seconds: number }) => gap.seconds" />
+                      <VisAxis type="y" label="seconds" />
+                    </VisXYContainer>
+                  </ClientOnly>
+                </UCard>
               </div>
-            </UCard>
+
+              <div class="relative h-96 lg:col-span-2 lg:h-auto">
+                <UCard
+                  class="flex h-full flex-col lg:absolute lg:inset-0"
+                  :ui="{ root: 'flex flex-col', body: 'min-h-0 flex-1 overflow-hidden p-0 sm:p-0' }"
+                >
+                  <UTable
+                    sticky
+                    class="h-full"
+                    :data="outcomes"
+                    :columns="recentColumns"
+                    :loading="outcomesLoading"
+                    :ui="{ ...tableUi, thead: `${tableUi.thead} bg-default` }"
+                  >
+                    <template #empty>
+                      <p class="py-10 text-center text-muted">
+                        No processed messages yet.
+                      </p>
+                    </template>
+                  </UTable>
+                </UCard>
+              </div>
+            </div>
           </div>
         </template>
 
         <template #telemetry>
           <div class="space-y-4 pt-4">
-            <div class="flex flex-wrap gap-2">
-              <USelect
-                v-model="rangeMinutes"
-                :items="rangeOptions"
-                class="w-44"
-                aria-label="Time range"
-              />
-              <USelect
-                v-model="interval"
-                :items="intervalOptions"
-                class="w-44"
-                aria-label="Aggregation interval"
-              />
-              <USelect
-                v-model="metric"
-                :items="metricOptions"
-                class="w-44"
-                placeholder="Metric"
-                aria-label="Metric"
-              />
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p class="font-medium">
+                  Telemetry history
+                </p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <USelect
+                  v-model="rangeMinutes"
+                  :items="rangeOptions"
+                  class="w-44"
+                  aria-label="Time range"
+                />
+                <USelect
+                  v-model="interval"
+                  :items="intervalOptions"
+                  class="w-44"
+                  aria-label="Aggregation interval"
+                />
+                <USelect
+                  v-model="metric"
+                  :items="metricOptions"
+                  class="w-44"
+                  placeholder="Metric"
+                  aria-label="Metric"
+                />
+                <UButton
+                  icon="i-lucide-refresh-cw"
+                  color="neutral"
+                  variant="ghost"
+                  :loading="historyLoading"
+                  aria-label="Refresh telemetry"
+                  @click="loadHistory"
+                />
+              </div>
             </div>
 
             <UAlert
@@ -536,20 +726,45 @@ async function openTrace(message: string): Promise<void> {
               :title="`Showing the first ${HISTORY_LIMIT} samples. Choose an aggregation interval to see the whole range.`"
             />
 
-            <UCard>
-              <p v-if="chartPoints.length === 0" class="py-12 text-center text-sm text-muted">
-                {{ historyLoading
-                  ? 'Loading telemetry…'
-                  : 'No numeric samples in this range.' }}
-              </p>
-              <ClientOnly v-else>
-                <VisXYContainer :data="chartPoints" :height="320">
+            <UCard v-if="chartPoints.length > 0">
+              <ClientOnly>
+                <VisXYContainer :data="chartPoints" :height="240">
                   <VisLine :x="(point: ChartPoint) => point.t" :y="(point: ChartPoint) => point.v" />
                   <VisAxis type="x" :tick-format="(t: number) => formatDateTime(new Date(t))" :num-ticks="5" />
                   <VisAxis type="y" :label="interval === 'raw' ? metric : `${metric} (avg)`" />
                 </VisXYContainer>
               </ClientOnly>
             </UCard>
+
+            <UTable
+              ref="pointTable"
+              v-model:pagination="pointPagination"
+              :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
+              class="shrink-0"
+              :data="pointRows"
+              :columns="pointColumns"
+              :loading="historyLoading"
+              :ui="tableUi"
+            >
+              <template #empty>
+                <p class="py-10 text-center text-muted">
+                  No numeric samples in this range.
+                </p>
+              </template>
+            </UTable>
+
+            <div class="flex items-center justify-between gap-3 border-t border-default pt-4">
+              <div class="text-sm text-muted">
+                {{ pointRows.length }} row(s).
+              </div>
+
+              <UPagination
+                :page="pointPagination.pageIndex + 1"
+                :items-per-page="pointPagination.pageSize"
+                :total="pointRows.length"
+                @update:page="(page: number) => pointTable?.tableApi?.setPageIndex(page - 1)"
+              />
+            </div>
           </div>
         </template>
 
@@ -559,9 +774,6 @@ async function openTrace(message: string): Promise<void> {
               <div>
                 <p class="font-medium">
                   Recent messages
-                </p>
-                <p class="text-sm text-muted">
-                  Select a row to inspect validation reasons and processing stages.
                 </p>
               </div>
               <div class="flex flex-wrap items-center gap-2">
@@ -589,77 +801,33 @@ async function openTrace(message: string): Promise<void> {
               </div>
             </div>
 
-            <div class="overflow-x-auto">
-              <table class="w-full min-w-[52rem] border-separate border-spacing-0 text-sm">
-                <thead class="[&>tr]:bg-elevated/50 [&>tr]:after:content-none">
-                  <tr>
-                    <th scope="col" class="border-y border-default px-3 py-2 text-left font-medium first:rounded-l-lg first:border-l last:rounded-r-lg last:border-r">
-                      Received
-                    </th>
-                    <th scope="col" class="border-y border-default px-3 py-2 text-left font-medium first:rounded-l-lg first:border-l last:rounded-r-lg last:border-r">
-                      Message ID
-                    </th>
-                    <th scope="col" class="border-y border-default px-3 py-2 text-left font-medium first:rounded-l-lg first:border-l last:rounded-r-lg last:border-r">
-                      Status
-                    </th>
-                    <th scope="col" class="border-y border-default px-3 py-2 text-left font-medium first:rounded-l-lg first:border-l last:rounded-r-lg last:border-r">
-                      Reasons
-                    </th>
-                    <th scope="col" class="border-y border-default px-3 py-2 text-right font-medium first:rounded-l-lg first:border-l last:rounded-r-lg last:border-r">
-                      Details
-                    </th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-default [&>tr:last-child>td]:border-b-0">
-                  <tr v-for="outcome in paginatedOutcomes" :key="outcome.id" class="hover:bg-elevated/50">
-                    <td class="border-b border-default whitespace-nowrap px-3 py-3 text-muted">
-                      {{ formatDateTime(outcome.received_at) }}
-                    </td>
-                    <td class="max-w-72 truncate border-b border-default px-3 py-3 font-mono text-xs" :title="outcome.message_id ?? outcome.processing_id">
-                      {{ outcome.message_id ?? outcome.processing_id }}
-                    </td>
-                    <td class="border-b border-default px-3 py-3">
-                      <TelemetryOutcomeStatus :status="outcome.status" />
-                    </td>
-                    <td class="border-b border-default px-3 py-3">
-                      <UBadge
-                        v-if="outcome.reason_codes[0]"
-                        :color="outcome.status === 'skipped' ? 'neutral' : 'error'"
-                        variant="subtle"
-                        class="font-mono"
-                      >
-                        {{ outcome.reason_codes[0].code }}
-                      </UBadge>
-                      <span v-else class="text-muted">—</span>
-                    </td>
-                    <td class="border-b border-default px-3 py-3 text-right">
-                      <UButton
-                        label="View trace"
-                        icon="i-lucide-arrow-up-right"
-                        color="neutral"
-                        variant="ghost"
-                        size="sm"
-                        @click="openTrace(outcome.processing_id)"
-                      />
-                    </td>
-                  </tr>
-                  <tr v-if="filteredOutcomes.length === 0">
-                    <td colspan="5" class="border-b border-default px-3 py-10 text-center text-muted">
-                      {{ outcomesLoading ? 'Loading messages…' : appliedMessageFilter === '' ? 'No processed messages yet.' : 'No messages match this search.' }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <UTable
+              ref="outcomeTable"
+              v-model:pagination="outcomePagination"
+              :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
+              class="shrink-0"
+              :data="filteredOutcomes"
+              :columns="outcomeColumns"
+              :loading="outcomesLoading"
+              :ui="tableUi"
+            >
+              <template #empty>
+                <p class="py-10 text-center text-muted">
+                  {{ appliedMessageFilter === '' && statusFilter === ALL && reasonFilter === ALL ? 'No processed messages yet.' : 'No messages match this search.' }}
+                </p>
+              </template>
+            </UTable>
 
-            <div class="flex flex-wrap items-center justify-between gap-3 border-t border-default pt-4">
-              <p class="text-sm text-muted">
-                {{ filteredOutcomes.length }} message(s)
-              </p>
+            <div class="flex items-center justify-between gap-3 border-t border-default pt-4">
+              <div class="text-sm text-muted">
+                {{ filteredOutcomes.length }} row(s).
+              </div>
+
               <UPagination
-                v-model:page="currentMessagePage"
-                :items-per-page="MESSAGE_PAGE_SIZE"
+                :page="outcomePagination.pageIndex + 1"
+                :items-per-page="outcomePagination.pageSize"
                 :total="filteredOutcomes.length"
+                @update:page="(page: number) => outcomeTable?.tableApi?.setPageIndex(page - 1)"
               />
             </div>
           </div>
