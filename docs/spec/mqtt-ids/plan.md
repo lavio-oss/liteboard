@@ -122,8 +122,7 @@ Nếu không đạt, giữ POC như công cụ nghiên cứu/điều tra offline
 
 ## 8. Quan hệ với các spec hiện có
 
-- [Industrial telemetry IT-3 — MQTT ingestion và time-series persistence](../industrial-telemetry/phase-03-mqtt-ingestion-storage.md): tạo dữ liệu telemetry bền vững và contract trước.
-- [Industrial telemetry IT-4 — REST, WebSocket và message trace](../industrial-telemetry/phase-04-rest-websocket-trace.md): message trace realtime thuộc chức năng telemetry của LiteBoard.
+- [Telemetry service flow hiện tại](../industrial-telemetry/telemetry-flow-current.md): contract ingest, trace, REST và WebSocket của LiteBoard.
 - [Industrial telemetry IT-5 — Rule, alert và webhook](../industrial-telemetry/phase-05-rules-alerts-webhook.md): alert nghiệp vụ theo rule; ML IDS không nằm trong slice này.
 - [Kế hoạch tổng thể](../../plan.md): IDS vẫn là hướng nghiên cứu tùy chọn; không đổi non-goal ML của các release đầu cho đến khi có POC và quyết định productization.
 

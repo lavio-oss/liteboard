@@ -329,6 +329,15 @@ export function useAdmin() {
     )
   }
 
+  async function loadDevice(tenantId: string, projectId: string, deviceId: string): Promise<Device> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/projects/${projectId}/devices/${deviceId}`,
+      deviceResponseSchema
+    )
+
+    return response.data
+  }
+
   async function loadDeviceCredentials(
     tenantId: string,
     projectId: string,
@@ -497,6 +506,7 @@ export function useAdmin() {
     deleteTenantUser,
     loadAssets,
     loadAvailableProjectUsers,
+    loadDevice,
     loadDeviceProfiles,
     loadDeviceCredentials,
     loadDevices,

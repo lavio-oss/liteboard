@@ -54,6 +54,7 @@ const loading = ref(false)
 const search = ref('')
 const roleFilter = ref<'all' | 'assigned' | 'unassigned' | ProjectRole>('all')
 const columnVisibility = ref()
+const columnPinning = ref({ right: ['actions'] })
 const pagination = ref({ pageIndex: 0, pageSize: 10 })
 const pendingUserIds = ref<Set<string>>(new Set())
 
@@ -444,17 +445,18 @@ watch(
         <UTable
           ref="table"
           v-model:column-visibility="columnVisibility"
+          v-model:column-pinning="columnPinning"
           v-model:pagination="pagination"
           :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
           :data="filteredUsers"
           :columns="columns"
           :loading="loading"
           :ui="{
-            base: 'table-fixed border-separate border-spacing-0',
+            base: 'border-separate border-spacing-0',
             thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
             tbody: '[&>tr]:last:[&>td]:border-b-0',
-            th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
-            td: 'border-b border-default',
+            th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r data-[pinned=right]:min-w-max data-[pinned=right]:whitespace-nowrap data-[pinned=right]:border-l data-[pinned=right]:bg-elevated data-[pinned=right]:z-20',
+            td: 'border-b border-default data-[pinned=right]:min-w-max data-[pinned=right]:whitespace-nowrap data-[pinned=right]:border-l data-[pinned=right]:bg-default data-[pinned=right]:z-10',
             separator: 'h-0'
           }"
         />

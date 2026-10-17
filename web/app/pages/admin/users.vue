@@ -26,6 +26,7 @@ const users = ref<TenantUser[]>([])
 const search = ref('')
 const roleFilter = ref<'all' | TenantRole>('all')
 const columnVisibility = ref()
+const columnPinning = ref({ right: ['actions'] })
 const pagination = ref({ pageIndex: 0, pageSize: 10 })
 const editOpen = ref(false)
 const editLoading = ref(false)
@@ -329,17 +330,18 @@ watch(addRequested, (requested) => {
           <UTable
             ref="table"
             v-model:column-visibility="columnVisibility"
+            v-model:column-pinning="columnPinning"
             v-model:pagination="pagination"
             :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
             class="shrink-0"
             :data="filteredUsers"
             :columns="columns"
             :ui="{
-              base: 'table-fixed border-separate border-spacing-0',
+              base: 'border-separate border-spacing-0',
               thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
               tbody: '[&>tr]:last:[&>td]:border-b-0',
-              th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
-              td: 'border-b border-default',
+              th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r data-[pinned=right]:min-w-max data-[pinned=right]:whitespace-nowrap data-[pinned=right]:border-l data-[pinned=right]:bg-elevated data-[pinned=right]:z-20',
+              td: 'border-b border-default data-[pinned=right]:min-w-max data-[pinned=right]:whitespace-nowrap data-[pinned=right]:border-l data-[pinned=right]:bg-default data-[pinned=right]:z-10',
               separator: 'h-0'
             }"
           />

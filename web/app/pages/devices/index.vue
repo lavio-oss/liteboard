@@ -4,17 +4,20 @@ import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
 import { useMqttCaCertificateDownload } from '~/composables/useMqttCaCertificateDownload'
 import { useProvisioningCaCertificateDownload } from '~/composables/useProvisioningCaCertificateDownload'
+import { useDevicePresenceStream } from '~/composables/useDevicePresenceStream'
 import { useTenantContext } from '~/composables/useTenantContext'
+import DevicePresenceStatus from '~/components/realtime/DevicePresenceStatus.vue'
 import DeviceProvisioningModal from '~/components/DeviceProvisioningModal.vue'
 import { canDeleteProjectData, canWriteProjectData } from '~/utils/projectPermissions'
 import { initialProvisioningProjectId } from '~/utils/provisioning'
+import { applyDevicePresenceToDevice, mergeDevicePresenceEvents } from '~/utils/devicePresence'
 import type {
   AdminTableRow,
   Device,
   DeviceApprovalStatus,
-  DeviceConnectionState,
   DeviceInput
 } from '~/types/admin'
+import type { DevicePresenceEventData } from '~/types/telemetry'
 
 definePageMeta({
   middleware: 'auth'
@@ -81,18 +84,6 @@ function resetDeviceFilters(): void {
   projectFilter.value = null
 }
 
-const connectionStateLabels: Record<DeviceConnectionState, string> = {
-  online: 'Online',
-  offline: 'Offline',
-  unstable: 'Unstable'
-}
-
-const connectionStateColors: Record<DeviceConnectionState, 'success' | 'neutral' | 'warning'> = {
-  online: 'success',
-  offline: 'neutral',
-  unstable: 'warning'
-}
-
 const approvalStatusLabels: Record<DeviceApprovalStatus, string> = {
   pending: 'Waiting for approval',
   approved: 'Approved',
@@ -130,8 +121,35 @@ const { data: response, status, error, refresh } = await useAsyncData('tenant-de
   }
 }, { watch: [activeTenantId] })
 
+const presenceEvents = ref<Record<string, DevicePresenceEventData>>({})
+
+function acceptPresenceEvent(incoming: DevicePresenceEventData): void {
+  const current = presenceEvents.value[incoming.device_id] ?? null
+  const latest = mergeDevicePresenceEvents(current, incoming)
+
+  if (latest !== current) {
+    presenceEvents.value = { ...presenceEvents.value, [incoming.device_id]: latest }
+  }
+}
+
+const presenceStream = useDevicePresenceStream(() => activeTenantId.value, {
+  onPresence: acceptPresenceEvent,
+  onLive: async () => {
+    await refresh()
+  }
+})
+
+watch(activeTenantId, () => {
+  presenceEvents.value = {}
+  response.value = { assets: [], deviceProfiles: [], devices: [], projects: [] }
+}, { flush: 'sync' })
+
+onMounted(() => presenceStream.start())
+
 const assets = computed(() => response.value?.assets ?? [])
-const devices = computed(() => response.value?.devices ?? [])
+const devices = computed(() => (response.value?.devices ?? []).map((device) => {
+  return applyDevicePresenceToDevice(device, presenceEvents.value[device.id] ?? null)
+}))
 const selectedProjectDeviceProfiles = computed(() => (response.value?.deviceProfiles ?? [])
   .filter(profile => profile.project_id === selectedProjectId.value))
 const projects = computed(() => response.value?.projects ?? [])
@@ -239,14 +257,6 @@ function equipmentNameFor(equipmentAssetId: string | null | undefined): string {
   }
 
   return equipment.name
-}
-
-function connectionStateLabelFor(connectionState: DeviceConnectionState | undefined): string {
-  if (connectionState === undefined) {
-    throw new Error('The device connection_state is missing.')
-  }
-
-  return connectionStateLabels[connectionState]
 }
 
 function openCreate(): void {
@@ -507,17 +517,17 @@ const columns: TableColumn<AdminTableRow>[] = [
       })
     },
     cell: ({ row }) => {
-      const connectionState = row.original.connection_state
+      const { connection_state: connectionState, last_seen_at: lastSeenAt } = row.original
 
-      if (connectionState === undefined) {
-        throw new Error('The device connection_state is missing.')
+      if (connectionState === undefined || lastSeenAt === undefined) {
+        throw new Error('The device presence fields are missing.')
       }
 
-      return h(
-        UBadge,
-        { class: 'capitalize', color: connectionStateColors[connectionState], variant: 'subtle' },
-        () => connectionStateLabelFor(connectionState)
-      )
+      return h(DevicePresenceStatus, {
+        state: connectionState,
+        lastSeenAt,
+        compact: true
+      })
     }
   },
   {
@@ -598,7 +608,15 @@ const columns: TableColumn<AdminTableRow>[] = [
         throw new Error('The device project is missing.')
       }
 
-      const actions: ReturnType<typeof h>[] = []
+      const actions: ReturnType<typeof h>[] = [
+        h(UButton, {
+          'icon': 'i-lucide-activity',
+          'color': 'neutral',
+          'variant': 'ghost',
+          'to': `/devices/${projectId}/${row.original.id}`,
+          'aria-label': `View telemetry for ${row.original.name}`
+        })
+      ]
 
       if (canWriteProject(projectId)) {
         if (row.original.approval_status === 'pending') {
@@ -650,9 +668,7 @@ const columns: TableColumn<AdminTableRow>[] = [
         }))
       }
 
-      return actions.length > 0
-        ? h('div', { class: 'flex justify-end gap-1' }, actions)
-        : null
+      return h('div', { class: 'flex justify-end gap-1' }, actions)
     }
   }
 ]

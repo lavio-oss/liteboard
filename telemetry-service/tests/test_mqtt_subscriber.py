@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 import os
 import unittest
-from unittest.mock import AsyncMock, patch
+from datetime import datetime, timezone
+from unittest.mock import ANY, AsyncMock, patch
 
 from app.ingress.mqtt_subscriber import (
     HEARTBEAT_TOPIC,
@@ -13,10 +14,15 @@ from app.ingress.mqtt_subscriber import (
     parse_device_topic,
 )
 from app.pipeline.context import MessageContext
-from app.storage.telemetry_ingest import IngestResult
+from app.realtime.hub import RealtimeHub
+from app.realtime.presence_hub import PresenceHub
+from app.storage.presence import DevicePresence
+from app.storage.telemetry_ingest import IngestResult, PersistedSample, RecordedOutcome
+from app.telemetry.validation import Rejection
 
 PROJECT_ID = '123e4567-e89b-12d3-a456-426614174000'
 DEVICE_ID = '123e4567-e89b-12d3-a456-426614174001'
+TENANT_ID = '123e4567-e89b-12d3-a456-426614174010'
 TELEMETRY_PATH = f'liteboard/{PROJECT_ID}/devices/{DEVICE_ID}/telemetry'
 HEARTBEAT_PATH = f'liteboard/{PROJECT_ID}/devices/{DEVICE_ID}/heartbeat'
 
@@ -104,7 +110,7 @@ class MqttSubscriberTest(unittest.IsolatedAsyncioTestCase):
             started.set()
             await commit.wait()
             committed = True
-            return IngestResult('persisted')
+            return IngestResult('persisted', 'processing-1')
 
         ingestor.ingest.side_effect = ingest
         subscriber = _subscriber(ingestor=ingestor)
@@ -121,6 +127,47 @@ class MqttSubscriberTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(SUCCESSFUL_PUBACK, await acknowledgement)
         self.assertTrue(committed)
 
+    async def test_publishes_presence_only_after_ingestion_returns_from_commit(self) -> None:
+        committed = False
+        ingestor = _FakeIngestor()
+
+        class CommitCheckingPresenceHub(PresenceHub):
+            def publish_device_presence(self, presence: DevicePresence) -> int:
+                if not committed:
+                    raise AssertionError('Presence must be published after the ingest commit.')
+                return super().publish_device_presence(presence)
+
+        presence_hub = CommitCheckingPresenceHub()
+        watcher = presence_hub.subscribe(TENANT_ID)
+        other_tenant = presence_hub.subscribe('123e4567-e89b-12d3-a456-426614174011')
+        presence = DevicePresence(
+            tenant_id=TENANT_ID,
+            project_id=PROJECT_ID,
+            device_id=DEVICE_ID,
+            connection_state='online',
+            last_seen_at=datetime(2026, 10, 15, 10, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2026, 10, 15, 10, 0, tzinfo=timezone.utc),
+        )
+
+        async def ingest(**_kwargs: object) -> IngestResult:
+            nonlocal committed
+            committed = True
+            return IngestResult('rejected', 'processing-1', presence=presence)
+
+        ingestor.ingest.side_effect = ingest
+        subscriber = _subscriber(ingestor=ingestor, presence_hub=presence_hub)
+
+        await subscriber.on_message(subscriber.client, TELEMETRY_PATH, b'{}', 1, {'retain': False})
+
+        self.assertTrue(committed)
+        event = watcher.queue.get_nowait()
+        self.assertEqual('device.presence', event['type'])
+        self.assertEqual(DEVICE_ID, event['data']['device_id'])
+        self.assertEqual(PROJECT_ID, event['data']['project_id'])
+        self.assertEqual('online', event['data']['connection_state'])
+        self.assertEqual('2026-10-15T10:00:00Z', event['data']['last_seen_at'])
+        self.assertTrue(other_tenant.queue.empty())
+
     async def test_rejects_retained_telemetry_but_heartbeat_keeps_its_presence_pipeline(self) -> None:
         ingestor = _FakeIngestor()
         subscriber = _subscriber(ingestor=ingestor, heartbeat_pipeline=['heartbeat-stages'])
@@ -133,6 +180,7 @@ class MqttSubscriberTest(unittest.IsolatedAsyncioTestCase):
             device_id=DEVICE_ID,
             raw=b'{}',
             retained=True,
+            received_wall=ANY,
         )
         with patch('app.ingress.mqtt_subscriber.run_pipeline', new=AsyncMock()) as run_pipeline:
             ack = await subscriber.on_message(subscriber.client, HEARTBEAT_PATH, b'{}', 1, {'retain': True})
@@ -155,6 +203,83 @@ class MqttSubscriberTest(unittest.IsolatedAsyncioTestCase):
         await subscriber._reconnect_task
         subscriber.client.reconnect.assert_awaited_once_with(delay=True)
 
+    async def test_publishes_committed_samples_to_device_subscribers_and_records_the_broadcast(self) -> None:
+        ingestor = _FakeIngestor()
+        sample = PersistedSample(
+            id='sample-1',
+            project_id=PROJECT_ID,
+            device_id=DEVICE_ID,
+            device_profile_version_id='version-1',
+            message_id='msg-1',
+            occurred_at=datetime(2026, 10, 13, 10, 0, tzinfo=timezone.utc),
+            received_at=datetime(2026, 10, 13, 10, 0, 1, tzinfo=timezone.utc),
+            values={'temperature': 40},
+        )
+        processing_id = '123e4567-e89b-12d3-a456-426614174003'
+        outcome = RecordedOutcome(
+            id='123e4567-e89b-12d3-a456-426614174002',
+            project_id=PROJECT_ID,
+            device_id=DEVICE_ID,
+            processing_id=processing_id,
+            message_id='msg-1',
+            status='persisted',
+            reason_codes=(),
+            stages=(
+                {'stage': 'received', 'at': '2026-10-13T10:00:01+00:00'},
+                {'stage': 'commit', 'at': '2026-10-13T10:00:01+00:00'},
+            ),
+            received_at=datetime(2026, 10, 13, 10, 0, 1, tzinfo=timezone.utc),
+        )
+        ingestor.ingest.return_value = IngestResult('persisted', processing_id, sample=sample, outcome=outcome)
+        hub = RealtimeHub()
+        watcher = hub.subscribe(PROJECT_ID, DEVICE_ID)
+        other = hub.subscribe(PROJECT_ID, '123e4567-e89b-12d3-a456-426614174099')
+        subscriber = _subscriber(ingestor=ingestor, hub=hub)
+
+        ack = await subscriber.on_message(subscriber.client, TELEMETRY_PATH, b'{}', 1, {'retain': False})
+        await asyncio.gather(*subscriber._broadcast_records)
+
+        self.assertEqual(SUCCESSFUL_PUBACK, ack)
+        outcome_event = watcher.queue.get_nowait()
+        self.assertEqual('telemetry.outcome', outcome_event['type'])
+        self.assertEqual(processing_id, outcome_event['data']['processing_id'])
+        self.assertEqual('persisted', outcome_event['data']['status'])
+        sample_event = watcher.queue.get_nowait()
+        self.assertEqual('telemetry.sample', sample_event['type'])
+        self.assertEqual('sample-1', sample_event['data']['id'])
+        self.assertEqual('2026-10-13T10:00:00.000000Z', sample_event['data']['occurred_at'])
+        self.assertTrue(other.queue.empty())
+        ingestor.record_broadcast.assert_awaited_once_with(processing_id, 1)
+
+    async def test_broadcasts_skipped_outcomes_without_a_sample(self) -> None:
+        processing_id = '123e4567-e89b-12d3-a456-426614174003'
+        outcome = RecordedOutcome(
+            id='123e4567-e89b-12d3-a456-426614174002',
+            project_id=PROJECT_ID,
+            device_id=DEVICE_ID,
+            processing_id=processing_id,
+            message_id=None,
+            status='skipped',
+            reason_codes=(Rejection('schema_not_assigned'),),
+            stages=({'stage': 'received', 'at': '2026-10-13T10:00:01+00:00'}, {'stage': 'skipped', 'at': '2026-10-13T10:00:01+00:00'}, {'stage': 'commit', 'at': '2026-10-13T10:00:01+00:00'}),
+            received_at=datetime(2026, 10, 13, 10, 0, 1, tzinfo=timezone.utc),
+        )
+        ingestor = _FakeIngestor()
+        ingestor.ingest.return_value = IngestResult('skipped', processing_id, outcome.reason_codes, outcome=outcome)
+        hub = RealtimeHub()
+        watcher = hub.subscribe(PROJECT_ID, DEVICE_ID)
+        subscriber = _subscriber(ingestor=ingestor, hub=hub)
+
+        await subscriber.on_message(subscriber.client, TELEMETRY_PATH, b'{"values":{}}', 1, {'retain': False})
+        await asyncio.gather(*subscriber._broadcast_records)
+
+        event = watcher.queue.get_nowait()
+        self.assertEqual('telemetry.outcome', event['type'])
+        self.assertEqual('skipped', event['data']['status'])
+        self.assertEqual([{'code': 'schema_not_assigned', 'field': None}], event['data']['reason_codes'])
+        self.assertTrue(watcher.queue.empty())
+        ingestor.record_broadcast.assert_awaited_once_with(processing_id, 1)
+
     async def test_ignores_topics_outside_the_device_contract(self) -> None:
         ingestor = _FakeIngestor()
         subscriber = _subscriber(ingestor=ingestor)
@@ -163,11 +288,27 @@ class MqttSubscriberTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(SUCCESSFUL_PUBACK, ack)
         ingestor.ingest.assert_not_awaited()
+        ingestor.record_invalid_topic.assert_awaited_once_with(
+            topic='liteboard/not-a-uuid/devices/x/telemetry',
+            payload_size=2,
+            received_wall=ANY,
+        )
+
+    async def test_invalid_topic_is_still_acked_when_its_trace_record_fails(self) -> None:
+        ingestor = _FakeIngestor()
+        ingestor.record_invalid_topic.side_effect = RuntimeError('database unavailable')
+        subscriber = _subscriber(ingestor=ingestor)
+
+        ack = await subscriber.on_message(subscriber.client, 'liteboard/x/devices/y/telemetry', b'{}', 1, {})
+
+        self.assertEqual(SUCCESSFUL_PUBACK, ack)
 
 
 class _FakeIngestor:
     def __init__(self) -> None:
-        self.ingest = AsyncMock(return_value=IngestResult('persisted'))
+        self.ingest = AsyncMock(return_value=IngestResult('persisted', 'processing-1'))
+        self.record_broadcast = AsyncMock()
+        self.record_invalid_topic = AsyncMock(return_value='processing-invalid')
 
 
 class _FakeMqttClient:
@@ -198,9 +339,13 @@ def _subscriber(
     *,
     ingestor: _FakeIngestor | None = None,
     heartbeat_pipeline: list[object] | None = None,
+    hub: RealtimeHub | None = None,
+    presence_hub: PresenceHub | None = None,
 ) -> MqttSubscriber:
     with patch('app.ingress.mqtt_subscriber.MQTTClient', _FakeMqttClient):
         return MqttSubscriber(
             heartbeat_pipeline=heartbeat_pipeline or [],
             telemetry_ingestor=ingestor or _FakeIngestor(),
+            realtime_hub=hub or RealtimeHub(),
+            presence_hub=presence_hub or PresenceHub(),
         )

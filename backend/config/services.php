@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'telemetry' => [
+        'ws_secret' => env('TELEMETRY_WS_SECRET'),
+    ],
+
 ];

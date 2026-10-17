@@ -18,6 +18,9 @@ use Modules\Admin\Models\Asset\Asset;
 use Modules\Admin\Models\DeviceProfile\DeviceProfileVersion;
 use Modules\Admin\Models\DeviceProvisioning\DeviceProvisioningAudit;
 use Modules\Admin\Models\Project\Project;
+use Modules\Admin\Models\Telemetry\TelemetryIngestOutcome;
+use Modules\Admin\Models\Telemetry\TelemetryLatestValue;
+use Modules\Admin\Models\Telemetry\TelemetrySample;
 
 #[Fillable([
     'equipment_asset_id',
@@ -87,5 +90,23 @@ final class Device extends Model
     {
         return $this->hasOne(DeviceProvisioningAudit::class)
             ->where('action', 'device_rejected');
+    }
+
+    /** @return HasMany<TelemetrySample, $this> */
+    public function telemetrySamples(): HasMany
+    {
+        return $this->hasMany(TelemetrySample::class)->where('project_id', $this->getAttribute('project_id'));
+    }
+
+    /** @return HasMany<TelemetryLatestValue, $this> */
+    public function latestValues(): HasMany
+    {
+        return $this->hasMany(TelemetryLatestValue::class)->where('project_id', $this->getAttribute('project_id'));
+    }
+
+    /** @return HasMany<TelemetryIngestOutcome, $this> */
+    public function ingestOutcomes(): HasMany
+    {
+        return $this->hasMany(TelemetryIngestOutcome::class)->where('project_id', $this->getAttribute('project_id'));
     }
 }

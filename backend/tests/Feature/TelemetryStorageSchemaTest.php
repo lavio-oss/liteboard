@@ -10,7 +10,7 @@ use Modules\Admin\Models\DeviceProfile\DeviceProfileVersion;
 use Modules\Admin\Models\Project\Project;
 use Modules\Core\Models\Tenant\Tenant;
 
-it('stores samples under their project and enforces device and profile project boundaries', function (): void {
+it('stores profile-less samples and enforces device and profile project boundaries', function (): void {
     $project = Project::factory()->for(Tenant::factory())->create();
     $otherProject = Project::factory()->for(Tenant::factory())->create();
     $profile = DeviceProfile::factory()->for($project)->create();
@@ -58,6 +58,26 @@ it('stores samples under their project and enforces device and profile project b
         'device_id' => $device->getKey(),
         'device_profile_version_id' => $version->getKey(),
         'message_id' => 'message-1',
+        'status' => 'persisted',
+    ]);
+
+    $unprofiledDevice = Device::factory()->for($project)->create();
+    $unprofiledSampleId = (string) Str::uuid();
+    DB::table('telemetry_samples')->insert([
+        'id' => $unprofiledSampleId,
+        'project_id' => $project->getKey(),
+        'device_id' => $unprofiledDevice->getKey(),
+        'device_profile_version_id' => null,
+        'message_id' => 'unprofiled-message',
+        'occurred_at' => '2026-10-11 04:00:00+00:00',
+        'values' => json_encode(['temperature' => 43], JSON_THROW_ON_ERROR),
+    ]);
+
+    $this->assertDatabaseHas('telemetry_samples', [
+        'id' => $unprofiledSampleId,
+        'project_id' => $project->getKey(),
+        'device_id' => $unprofiledDevice->getKey(),
+        'device_profile_version_id' => null,
         'status' => 'persisted',
     ]);
 });
@@ -127,6 +147,7 @@ it('cascades device-owned samples, dedup identities, and outcomes when a device 
         'id' => (string) Str::uuid(),
         'project_id' => $project->getKey(),
         'device_id' => $device->getKey(),
+        'processing_id' => (string) Str::uuid(),
         'message_id' => $messageId,
         'status' => 'persisted',
         'reason_codes' => json_encode([], JSON_THROW_ON_ERROR),

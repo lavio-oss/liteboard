@@ -10,10 +10,11 @@ export default defineEventHandler((event) => {
     '/api/logout-all'
   ])
   const isSanctumCsrfRequest = requestUrl.pathname === '/sanctum/csrf-cookie'
-  const isTenantApiRequest = requestUrl.pathname === '/api/tenants'
+  const isScopedApiRequest = requestUrl.pathname === '/api/tenants'
     || requestUrl.pathname.startsWith('/api/tenants/')
+    || requestUrl.pathname.startsWith('/api/platform/')
 
-  if (!proxiedApiPaths.has(requestUrl.pathname) && !isSanctumCsrfRequest && !isTenantApiRequest) {
+  if (!proxiedApiPaths.has(requestUrl.pathname) && !isSanctumCsrfRequest && !isScopedApiRequest) {
     return
   }
 

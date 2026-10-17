@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
 
 from app.pipeline.context import MessageContext
+from app.realtime.presence_hub import PresenceHub
+from app.storage.presence import DBPresenceWriter
 from app.telemetry.validation import Rejection
-
-if TYPE_CHECKING:
-    from app.storage.presence import DBPresenceWriter
 
 
 async def decode_json(ctx: MessageContext) -> None:
@@ -23,8 +21,12 @@ async def decode_json(ctx: MessageContext) -> None:
 
 
 class MarkPresence:
-    def __init__(self, presence_writer: DBPresenceWriter) -> None:
+    def __init__(self, presence_writer: DBPresenceWriter, presence_hub: PresenceHub) -> None:
         self._presence_writer = presence_writer
+        self._presence_hub = presence_hub
 
     async def __call__(self, ctx: MessageContext) -> None:
-        await self._presence_writer.mark_online(device_id=ctx.device_id, project_id=ctx.project_id)
+        presence = await self._presence_writer.mark_online(device_id=ctx.device_id, project_id=ctx.project_id)
+
+        if presence is not None:
+            self._presence_hub.publish_device_presence(presence)

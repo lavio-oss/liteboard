@@ -4,7 +4,7 @@ import unittest
 import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, patch
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -80,6 +80,13 @@ class LifespanCompatibilityTest(unittest.IsolatedAsyncioTestCase):
             async def disconnect(self) -> None:
                 events.append('mqtt.disconnect')
 
+        class FakePresenceMonitor:
+            async def refresh(self) -> None:
+                events.append('presence.refresh')
+
+            async def run(self) -> None:
+                return None
+
         pool = FakePool()
         subscriber = FakeSubscriber()
 
@@ -89,9 +96,17 @@ class LifespanCompatibilityTest(unittest.IsolatedAsyncioTestCase):
 
         application = FastAPI()
         with (
+            patch.dict('os.environ', {
+                'DB_HOST': 'localhost',
+                'DB_PORT': '5432',
+                'DB_DATABASE': 'liteboard',
+                'DB_USERNAME': 'liteboard',
+                'DB_PASSWORD': 'liteboard',
+            }),
             patch('app.main.asyncpg.create_pool', new=AsyncMock(side_effect=create_pool)) as create_pool_mock,
             patch('app.main.PostgresPresenceWriter') as writer_factory,
             patch('app.main.MarkPresence') as mark_presence_factory,
+            patch('app.main.PostgresDevicePresenceMonitor', return_value=FakePresenceMonitor()) as presence_monitor_factory,
             patch('app.main.PostgresTelemetryIngestor') as ingestor_factory,
             patch('app.main.MqttSubscriber', return_value=subscriber) as subscriber_factory,
         ):
@@ -99,9 +114,10 @@ class LifespanCompatibilityTest(unittest.IsolatedAsyncioTestCase):
                 self.assertIs(application.state.db_pool, pool)
                 self.assertIs(application.state.mqtt_client, subscriber.client)
                 self.assertIs(application.state.mqtt_subscriber, subscriber)
+                self.assertIsNotNone(application.state.presence_hub)
 
         self.assertEqual(
-            ['pool.create', 'mqtt.connect_and_subscribe', 'mqtt.disconnect', 'pool.close'],
+            ['pool.create', 'presence.refresh', 'mqtt.connect_and_subscribe', 'mqtt.disconnect', 'pool.close'],
             events,
         )
         create_pool_mock.assert_awaited_once_with(
@@ -114,11 +130,14 @@ class LifespanCompatibilityTest(unittest.IsolatedAsyncioTestCase):
             max_size=5,
         )
         writer_factory.assert_called_once_with(pool)
-        mark_presence_factory.assert_called_once_with(writer_factory.return_value)
+        mark_presence_factory.assert_called_once_with(writer_factory.return_value, ANY)
         ingestor_factory.assert_called_once_with(pool)
+        presence_monitor_factory.assert_called_once_with(pool, ANY)
         subscriber_factory.assert_called_once_with(
             heartbeat_pipeline=[decode_json, mark_presence_factory.return_value],
             telemetry_ingestor=ingestor_factory.return_value,
+            realtime_hub=ANY,
+            presence_hub=ANY,
         )
 
 

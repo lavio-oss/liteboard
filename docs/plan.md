@@ -175,8 +175,8 @@ LiteBoard separates control-plane changes from the high-throughput data path.
 MQTT received
   → broker-authenticated connection and topic permission
   → topic / Device / project ownership check
-  → decode and envelope validation
-  → schema validation and normalization
+  → if a Profile Version is assigned: decode, validate the envelope/schema, and normalize
+  → if no Profile Version is assigned: accept flat metrics or `{values: {...}}`, validate the basic payload contract, and supply missing message metadata
   → idempotency check and bounded buffering
   → telemetry persistence
   → device state / rules / alerts
@@ -204,10 +204,12 @@ Current Data Plane behavior in `telemetry-service/app/main.py`:
 
 - Connects to the broker over TLS and subscribes to telemetry and heartbeat topics.
 - Resolves telemetry to an active, approved Device under an active Project and Tenant; updates presence even when that Device's telemetry is rejected.
-- Requires a bounded MQTT v5 envelope, validates against the assigned Profile Version, and records a durable sample or rejection/dedup outcome in PostgreSQL.
+- For a Device with an assigned Profile Version, requires a bounded MQTT v5 envelope, validates against that version, and records a durable sample or rejection/dedup outcome in PostgreSQL. A Device without an assigned profile accepts bounded flat or wrapped scalar telemetry, supplies missing message metadata, persists the sample with a null Profile Version, and skips only profile-schema validation.
 - Uses a persistent MQTT session and returns subscriber PUBACK success only after the PostgreSQL transaction commits. REST history/latest remains out of scope for IT-3.
 
-Still open: authorized telemetry queries, measured ingest metrics and L0 reconciliation, offline-state transitions, rules/alerts/commands, and WebSocket delivery. Device and provisioning data are tenant-owned through Project; each next data-plane path must derive and retain that organization context rather than trust topic or payload IDs alone.
+IT-4 first slice (2026-10-13): tenant-authorized REST latest/history/aggregates and message trace in Laravel, ticket-authorized WebSocket fan-out after commit in the telemetry service, per-stage processing timestamps, and a Device detail page. Pilot latency percentiles are not yet measured.
+
+Still open: measured ingest metrics and L0 reconciliation, IT-4 pilot latency baseline, offline-state transitions, and rules/alerts/commands. Device and provisioning data are tenant-owned through Project; each next data-plane path must derive and retain that organization context rather than trust topic or payload IDs alone.
 
 ### Core entity distinctions
 
@@ -370,19 +372,19 @@ Simulator → MQTT broker → Python consumer → authenticate / authorize
 ~~~
 
 - Subscribe to Device topic namespaces and bind topic identity to the authenticated Device.
-- Require message_id, occurred_at, and values; add received_at and a traceable processing result.
+- Require message_id, schema_version, occurred_at, and values for Devices with an assigned profile. Devices without a profile may send flat metric key/value pairs or `{values: {...}}`; persist valid scalar metrics with server-generated message metadata when omitted and skip only profile-schema validation. Keep `received_at` and a traceable processing result.
 - Define payload-size limits, QoS and retained-message behavior. Redact credentials and avoid logging unrestricted payloads.
 - Persist accepted messages, dedup identities, and outcomes in one PostgreSQL transaction; keep the Device → Project → Tenant scope at every write.
 - Handle reconnect and QoS 1 redelivery with the persistent MQTT session and application-level idempotency.
 
 Failure exercise: malformed JSON, wrong tenant or Device, duplicate message_id, revoked credential, broker restart, and consumer reconnect.
 
-L0 gate: 10 simulated devices at 1 message/second each for 5 minutes; reconcile sent, accepted, rejected, persisted, and duplicate messages; bounded memory/queue; no unexplained loss; record end-to-end p50/p95/p99 and recovery behavior. This is a development gate, not a production capacity claim.
+L0 gate: 10 simulated devices at 1 message/second each for 5 minutes; reconcile sent, accepted, rejected, skipped, persisted, and duplicate messages; bounded memory/queue; no unexplained loss; record end-to-end p50/p95/p99 and recovery behavior. This is a development gate, not a production capacity claim.
 
 ### Phase 3 — Schema validation and durable time-series ingestion
 
-- Device Profile schema validation and structured rejection reasons are implemented under IT-2.
-- Persist valid measurements with Device, Project, assigned Profile Version, message identity, event time, receive time, and processing status; record rejected, duplicate, and conflict outcomes without raw payloads.
+- Device Profile schema validation and structured rejection reasons are implemented under IT-2. Devices without an assigned Profile Version persist basic telemetry after scalar-payload validation and skip only profile-schema validation.
+- Persist valid measurements with Device, Project, nullable Profile Version, message identity, event time, receive time, and processing status; record rejected, duplicate, and conflict outcomes without raw payloads.
 - Keep PostgreSQL as the initial store. Do not add automatic deletion, TimescaleDB, partitioning, downsampling, or batching before measured workload and retention policy justify them.
 - Move tenant-authorized REST history/latest to IT-4 so ingestion durability can be verified before query/API work.
 

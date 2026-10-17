@@ -16,6 +16,10 @@ const adminLinks = [{
   icon: 'i-lucide-network',
   to: '/admin/iiot-tree'
 }, {
+  label: 'Telemetry',
+  icon: 'i-lucide-radio-tower',
+  to: '/admin/telemetry'
+}, {
   label: 'Masterdata',
   type: 'label' as const
 }, {

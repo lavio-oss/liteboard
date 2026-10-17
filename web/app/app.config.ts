@@ -4,6 +4,12 @@ export default defineAppConfig({
       primary: 'green',
       neutral: 'gray'
     },
+    table: {
+      slots: {
+        root: 'relative overflow-auto outline-primary/25 focus-visible:outline-3 w-full',
+        base: 'w-max min-w-full overflow-clip table-auto'
+      }
+    },
     modal: {
       slots: {
         overlay: 'fixed inset-0',

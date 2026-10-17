@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 from collections.abc import Mapping, Sequence
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
@@ -13,11 +14,14 @@ from gmqtt.mqtt.constants import MQTTv50
 from app.mqtt_tls import build_mqtt_ssl_context
 from app.pipeline.context import MessageContext
 from app.pipeline.runner import Stage, run_pipeline
+from app.realtime.hub import RealtimeHub, outcome_event, sample_event
+from app.realtime.presence_hub import PresenceHub
 from app.storage.telemetry_ingest import IngestResult, PostgresTelemetryIngestor
 
 TELEMETRY_TOPIC = 'liteboard/+/devices/+/telemetry'
 HEARTBEAT_TOPIC = 'liteboard/+/devices/+/heartbeat'
 SUCCESSFUL_PUBACK = 0
+MAX_PENDING_BROADCAST_RECORDS = 256
 LOGGER = logging.getLogger(__name__)
 
 
@@ -45,6 +49,8 @@ class MqttSubscriber:
         *,
         heartbeat_pipeline: Sequence[Stage],
         telemetry_ingestor: PostgresTelemetryIngestor,
+        realtime_hub: RealtimeHub,
+        presence_hub: PresenceHub,
     ) -> None:
         session_expiry_interval = int(os.getenv('MQTT_SESSION_EXPIRY_SECONDS', '2147483647'))
         receive_maximum = int(os.getenv('MQTT_RECEIVE_MAXIMUM', '20'))
@@ -55,6 +61,9 @@ class MqttSubscriber:
 
         self._heartbeat_pipeline = heartbeat_pipeline
         self._telemetry_ingestor = telemetry_ingestor
+        self._realtime_hub = realtime_hub
+        self._presence_hub = presence_hub
+        self._broadcast_records: set[asyncio.Task[None]] = set()
         self._is_connected = False
         self._reconnect_task: asyncio.Task[None] | None = None
         self.client = MQTTClient(
@@ -113,8 +122,19 @@ class MqttSubscriber:
         _qos: int,
         properties: Mapping[str, Any] | None,
     ) -> int:
+        received_wall = datetime.now(timezone.utc)
         parsed = parse_device_topic(topic)
         if parsed is None:
+            # Only the trace record is at stake here, never telemetry, so a failed write is logged and acked.
+            try:
+                processing_id = await self._telemetry_ingestor.record_invalid_topic(
+                    topic=topic,
+                    payload_size=len(payload),
+                    received_wall=received_wall,
+                )
+                LOGGER.info('telemetry_invalid_topic', extra={'processing_id': processing_id})
+            except Exception:
+                LOGGER.exception('telemetry_invalid_topic_record_failed', extra={'payload_size': len(payload)})
             return SUCCESSFUL_PUBACK
 
         project_id, device_id, channel = parsed
@@ -125,7 +145,9 @@ class MqttSubscriber:
                     device_id=device_id,
                     raw=payload,
                     retained=properties is not None and bool(properties.get('retain', False)),
+                    received_wall=received_wall,
                 )
+                self._broadcast(result)
                 self._log_telemetry_outcome(
                     project_id=project_id,
                     device_id=device_id,
@@ -151,6 +173,42 @@ class MqttSubscriber:
             raise
 
         return SUCCESSFUL_PUBACK
+
+    def _broadcast(self, result: IngestResult) -> None:
+        # Runs after COMMIT; delivery is best-effort because clients recover gaps over REST.
+        delivered = 0
+        if result.presence is not None:
+            self._presence_hub.publish_device_presence(result.presence)
+        if result.outcome is not None:
+            delivered = self._realtime_hub.publish(
+                result.outcome.project_id,
+                result.outcome.device_id,
+                outcome_event(result.outcome),
+            )
+        if result.sample is not None:
+            delivered = max(
+                delivered,
+                self._realtime_hub.publish(
+                    result.sample.project_id,
+                    result.sample.device_id,
+                    sample_event(result.sample),
+                ),
+            )
+        if delivered == 0:
+            return
+        # shortcut: broadcast stages beyond this many in-flight writes are dropped, move to a batched writer if it happens under load.
+        if len(self._broadcast_records) >= MAX_PENDING_BROADCAST_RECORDS:
+            LOGGER.warning('telemetry_broadcast_record_dropped', extra={'processing_id': result.processing_id})
+            return
+        task = asyncio.create_task(self._record_broadcast(result.processing_id, delivered))
+        self._broadcast_records.add(task)
+        task.add_done_callback(self._broadcast_records.discard)
+
+    async def _record_broadcast(self, processing_id: str, delivered: int) -> None:
+        try:
+            await self._telemetry_ingestor.record_broadcast(processing_id, delivered)
+        except Exception:
+            LOGGER.exception('telemetry_broadcast_record_failed', extra={'processing_id': processing_id})
 
     async def disconnect(self) -> None:
         if self._reconnect_task is not None and not self._reconnect_task.done():
@@ -187,6 +245,7 @@ class MqttSubscriber:
                 'channel': 'telemetry',
                 'payload_size': payload_size,
                 'outcome': result.status,
+                'processing_id': result.processing_id,
                 'reasons': [{'code': reason.code, 'field': reason.field} for reason in result.reasons],
             },
         )

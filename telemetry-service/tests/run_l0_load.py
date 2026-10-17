@@ -18,6 +18,8 @@ from gmqtt import Client
 from gmqtt.mqtt.constants import MQTTv50
 
 from app.ingress.mqtt_subscriber import MqttSubscriber
+from app.realtime.hub import RealtimeHub
+from app.realtime.presence_hub import PresenceHub
 from app.mqtt_tls import build_mqtt_ssl_context
 from app.storage.telemetry_ingest import IngestResult, PostgresTelemetryIngestor
 
@@ -70,11 +72,11 @@ async def main() -> None:
     try:
         with patch.dict(os.environ, environment):
             if tls_patch is None:
-                subscriber = MqttSubscriber(heartbeat_pipeline=[], telemetry_ingestor=measured_ingestor)
+                subscriber = MqttSubscriber(heartbeat_pipeline=[], telemetry_ingestor=measured_ingestor, realtime_hub=RealtimeHub(), presence_hub=PresenceHub())
                 await subscriber.connect_and_subscribe()
             else:
                 with tls_patch:
-                    subscriber = MqttSubscriber(heartbeat_pipeline=[], telemetry_ingestor=measured_ingestor)
+                    subscriber = MqttSubscriber(heartbeat_pipeline=[], telemetry_ingestor=measured_ingestor, realtime_hub=RealtimeHub(), presence_hub=PresenceHub())
                     await subscriber.connect_and_subscribe()
 
         publisher = Client(f'{client_id}-publisher', clean_session=True)
@@ -136,7 +138,7 @@ async def main() -> None:
                 'samples_committed': samples,
                 'delivery_attempts': measured_ingestor.delivery_attempts,
                 'outcomes': {status: outcomes.get(status, 0) for status in (
-                    'persisted', 'rejected', 'duplicate', 'idempotency_conflict',
+                    'persisted', 'rejected', 'duplicate', 'idempotency_conflict', 'skipped',
                 )},
                 'messages_with_terminal_outcome': len(measured_ingestor.terminal_message_ids),
                 'failed': measured_ingestor.failed,
@@ -227,6 +229,7 @@ class _MeasuredIngestor:
         device_id: str,
         raw: bytes,
         retained: bool,
+        received_wall: datetime,
     ) -> IngestResult:
         if project_id != self._project_id or device_id not in self._device_ids:
             return await self._ingestor.ingest(
@@ -234,6 +237,7 @@ class _MeasuredIngestor:
                 device_id=device_id,
                 raw=raw,
                 retained=retained,
+                received_wall=received_wall,
             )
 
         payload = json.loads(raw)
@@ -253,6 +257,7 @@ class _MeasuredIngestor:
                 device_id=device_id,
                 raw=raw,
                 retained=retained,
+                received_wall=received_wall,
             )
         except Exception:
             self.failed += 1

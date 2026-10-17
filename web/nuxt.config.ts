@@ -20,7 +20,10 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
-    laravelApiBase: 'http://localhost:8800'
+    laravelApiBase: 'http://localhost:8800',
+    public: {
+      telemetryWsBase: 'ws://localhost:8100'
+    }
   },
 
   compatibilityDate: '2026-06-30',

@@ -14,6 +14,8 @@ from gmqtt import Client
 from gmqtt.mqtt.constants import MQTTv50
 
 from app.ingress.mqtt_subscriber import MqttSubscriber
+from app.realtime.hub import RealtimeHub
+from app.realtime.presence_hub import PresenceHub
 from app.storage.telemetry_ingest import IngestResult, PostgresTelemetryIngestor
 
 MQTT_HOST = os.getenv('TELEMETRY_TEST_MQTT_HOST')
@@ -55,7 +57,7 @@ class MosquittoDeliveryIntegrationTest(unittest.IsolatedAsyncioTestCase):
 
         try:
             with patch.dict(os.environ, environment):
-                subscriber = MqttSubscriber(heartbeat_pipeline=[], telemetry_ingestor=ingestor)
+                subscriber = MqttSubscriber(heartbeat_pipeline=[], telemetry_ingestor=ingestor, realtime_hub=RealtimeHub(), presence_hub=PresenceHub())
                 await subscriber.connect_and_subscribe()
 
             publisher = Client(f'{client_id}-publisher', clean_session=True)
@@ -126,7 +128,7 @@ class MosquittoDeliveryIntegrationTest(unittest.IsolatedAsyncioTestCase):
 
         try:
             with patch.dict(os.environ, environment):
-                subscriber = MqttSubscriber(heartbeat_pipeline=[], telemetry_ingestor=ingestor)
+                subscriber = MqttSubscriber(heartbeat_pipeline=[], telemetry_ingestor=ingestor, realtime_hub=RealtimeHub(), presence_hub=PresenceHub())
                 await subscriber.connect_and_subscribe()
 
             publisher = Client(f'{client_id}-publisher', clean_session=True)
@@ -177,6 +179,8 @@ class MosquittoDeliveryIntegrationTest(unittest.IsolatedAsyncioTestCase):
                 subscriber = MqttSubscriber(
                     heartbeat_pipeline=[receive_heartbeat],
                     telemetry_ingestor=ingestor,
+                    realtime_hub=RealtimeHub(),
+                    presence_hub=PresenceHub(),
                 )
                 await subscriber.connect_and_subscribe()
 
@@ -222,14 +226,14 @@ class _FailOnceIngestor:
         **_kwargs: object,
     ) -> IngestResult:
         if project_id != self.project_id or device_id != self.device_id:
-            return IngestResult('unresolved')
+            return IngestResult('unresolved', 'processing-test')
 
         self.calls += 1
         self.retained_flags.append(retained)
         if self.calls == 1:
             raise RuntimeError('simulated database outage')
         self.persisted.set()
-        return IngestResult('persisted')
+        return IngestResult('persisted', 'processing-test')
 
 
 class _RecordingIngestor:
@@ -248,11 +252,11 @@ class _RecordingIngestor:
         **_kwargs: object,
     ) -> IngestResult:
         if project_id != self.project_id or device_id != self.device_id:
-            return IngestResult('unresolved')
+            return IngestResult('unresolved', 'processing-test')
 
         self.retained_flags.append(retained)
         self.received.set()
-        return IngestResult('rejected', ())
+        return IngestResult('rejected', 'processing-test')
 
 
 class _CommitThenFailIngestor:
@@ -271,9 +275,10 @@ class _CommitThenFailIngestor:
         device_id: str,
         raw: bytes,
         retained: bool,
+        received_wall: datetime,
     ) -> IngestResult:
         if project_id != self.project_id or device_id != self.device_id:
-            return IngestResult('unresolved')
+            return IngestResult('unresolved', 'processing-test')
 
         self.calls += 1
         result = await self._ingestor.ingest(
@@ -281,6 +286,7 @@ class _CommitThenFailIngestor:
             device_id=device_id,
             raw=raw,
             retained=retained,
+            received_wall=received_wall,
         )
         self.statuses.append(result.status)
         if self.calls == 1:

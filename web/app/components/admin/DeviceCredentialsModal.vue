@@ -40,7 +40,7 @@ const firmwareConfig = computed(() => {
   return `const char* LB_PROJECT_ID = "${credential.value.project_id}";
 const char* LB_DEVICE_ID = "${credential.value.device_id}";
 const char* LB_ACCESS_TOKEN = "${credential.value.access_token}";
-const char* LB_MQTT_HOST = "${credential.value.mqtt.host}";
+const char* LB_MQTT_HOST = "";
 const uint16_t LB_MQTT_PORT = ${credential.value.mqtt.port};
 const bool LB_MQTT_TLS = ${credential.value.mqtt.tls};
 const char* LB_TELEMETRY_TOPIC = "${credential.value.mqtt.topics.telemetry}";`
@@ -245,14 +245,6 @@ async function toggleCredentialStatus(): Promise<void> {
           <dl class="grid gap-3 text-sm sm:grid-cols-2">
             <div>
               <dt class="text-muted">
-                Host
-              </dt>
-              <dd class="mt-1 break-all font-mono text-highlighted">
-                {{ credential.mqtt.host }}
-              </dd>
-            </div>
-            <div>
-              <dt class="text-muted">
                 Port
               </dt>
               <dd class="mt-1 font-mono text-highlighted">
@@ -267,7 +259,7 @@ async function toggleCredentialStatus(): Promise<void> {
                 {{ credential.mqtt.tls ? 'TLS enabled' : 'TLS disabled' }}
               </dd>
             </div>
-            <div>
+            <div class="sm:col-span-2">
               <dt class="text-muted">
                 Telemetry topic
               </dt>
