@@ -372,7 +372,7 @@ const errorColors = ['#ef4444', '#f97316', '#eab308', '#8b5cf6', '#0ea5e9']
 const persistedColor = '#22c55e'
 const summary = computed(() => summarizeOutcomes(outcomes.value))
 const recentColumns = computed(() => outcomeColumns.value
-  .filter(column => column.id !== 'details')
+  .filter(column => column.id !== 'message_id')
   .map(column => column.id === 'status' ? { ...column, header: 'Status' } : column.id === 'reasons' ? { ...column, header: 'Reasons' } : column))
 const donutSlices = computed(() => [
   ...summary.value.persistedCount > 0 ? [{ label: 'Persisted', count: summary.value.persistedCount, color: persistedColor }] : [],
@@ -831,168 +831,168 @@ async function openTrace(message: string): Promise<void> {
               />
             </div>
           </div>
-
-          <UDrawer
-            v-model:open="traceDrawerOpen"
-            direction="right"
-            :handle="false"
-            handle-only
-            :dismissible="false"
-            close
-            :description="traceQuery"
-            :ui="{
-              content: 'w-full sm:max-w-3xl select-text',
-              container: 'flex h-full flex-col select-text',
-              body: 'flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 select-text',
-              footer: 'flex w-full items-center justify-end border-t border-default p-4 sm:p-6'
-            }"
-          >
-            <template #title>
-              <div class="flex items-center gap-2.5">
-                <UIcon name="i-lucide-radio-tower" class="size-5 shrink-0 text-primary" />
-                <div class="flex min-w-0 items-center gap-2">
-                  <span class="truncate font-semibold">Message trace</span>
-                  <TelemetryOutcomeStatus
-                    v-if="trace?.outcomes[0]"
-                    :status="trace.outcomes[0].status"
-                  />
-                </div>
-              </div>
-            </template>
-
-            <template #body>
-              <div v-if="traceLoading" class="flex min-h-48 items-center justify-center">
-                <UIcon name="i-lucide-loader-circle" class="size-6 animate-spin text-primary" />
-                <span class="sr-only">Loading message trace</span>
-              </div>
-              <UEmpty
-                v-else-if="trace === null || trace.outcomes.length === 0"
-                icon="i-lucide-message-circle-warning"
-                title="No trace found"
-                description="No processing outcomes were returned for this message ID."
-                variant="naked"
-              />
-              <div v-else class="space-y-6">
-                <section
-                  v-for="outcome in trace.outcomes"
-                  :key="outcome.id"
-                  class="space-y-4"
-                >
-                  <div class="flex flex-wrap items-center justify-between gap-3">
-                    <div class="min-w-0">
-                      <p class="text-xs text-muted">
-                        Processing ID
-                      </p>
-                      <p class="break-all font-mono text-sm">
-                        {{ outcome.processing_id }}
-                      </p>
-                    </div>
-                    <TelemetryOutcomeStatus :status="outcome.status" />
-                  </div>
-
-                  <section>
-                    <h3 class="mb-2 text-sm font-medium">
-                      Validation reasons
-                    </h3>
-                    <p v-if="!hasValidationErrors(outcome)" class="text-sm text-muted">
-                      No validation errors.
-                    </p>
-                    <div v-else class="overflow-x-auto rounded-lg border border-default">
-                      <table class="w-full text-sm">
-                        <thead class="border-b border-default bg-elevated/50 text-left text-xs text-muted">
-                          <tr>
-                            <th scope="col" class="px-3 py-2 font-medium">
-                              Code
-                            </th>
-                            <th scope="col" class="px-3 py-2 font-medium">
-                              Field
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody class="divide-y divide-default">
-                          <tr v-for="reason in outcome.reason_codes" :key="`${reason.code}:${reason.field}`">
-                            <td class="px-3 py-2 font-mono text-error">
-                              {{ reason.code }}
-                            </td>
-                            <td class="px-3 py-2 font-mono">
-                              {{ reason.field ?? '—' }}
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </section>
-
-                  <section>
-                    <h3 class="mb-2 text-sm font-medium">
-                      Processing stages
-                    </h3>
-                    <p v-if="outcome.stages.length === 0" class="text-sm text-muted">
-                      No processing stages recorded.
-                    </p>
-                    <div v-else class="overflow-x-auto rounded-lg border border-default">
-                      <table class="w-full text-sm">
-                        <thead class="border-b border-default bg-elevated/50 text-left text-xs text-muted">
-                          <tr>
-                            <th scope="col" class="px-3 py-2 font-medium">
-                              Stage
-                            </th>
-                            <th scope="col" class="px-3 py-2 font-medium">
-                              Elapsed
-                            </th>
-                            <th scope="col" class="px-3 py-2 font-medium">
-                              Time
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody class="divide-y divide-default">
-                          <tr v-for="stage in outcome.stages" :key="`${outcome.id}:${stage.stage}`">
-                            <td class="px-3 py-2 font-medium">
-                              {{ stage.stage === 'schema_validation_skipped' ? 'schema validation skipped' : stage.stage }}
-                              <span v-if="stage.subscribers !== undefined" class="font-normal text-muted">
-                                · {{ stage.subscribers }} subscribers
-                              </span>
-                            </td>
-                            <td class="whitespace-nowrap px-3 py-2 font-mono text-xs text-muted">
-                              <template v-if="outcome.stages[0]">
-                                +{{ (Date.parse(stage.at) - Date.parse(outcome.stages[0].at)).toFixed(0) }} ms
-                              </template>
-                            </td>
-                            <td class="whitespace-nowrap px-3 py-2 text-muted">
-                              {{ formatDateTime(stage.at) }}
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </section>
-                </section>
-
-                <section v-if="trace.sample" class="space-y-2">
-                  <h3 class="text-sm font-medium">
-                    Stored sample
-                  </h3>
-                  <p class="text-xs text-muted">
-                    Occurred {{ formatDateTime(trace.sample.occurred_at) }}
-                  </p>
-                  <pre class="overflow-x-auto rounded-lg border border-default bg-elevated/30 p-3 text-xs">{{ JSON.stringify(trace.sample.values, null, 2) }}</pre>
-                </section>
-              </div>
-            </template>
-
-            <template #footer>
-              <div class="flex w-full items-center justify-end">
-                <UButton
-                  label="Close"
-                  color="neutral"
-                  variant="subtle"
-                  @click="traceDrawerOpen = false"
-                />
-              </div>
-            </template>
-          </UDrawer>
         </template>
       </UTabs>
+
+      <UDrawer
+        v-model:open="traceDrawerOpen"
+        direction="right"
+        :handle="false"
+        handle-only
+        :dismissible="false"
+        close
+        :description="traceQuery"
+        :ui="{
+          content: 'w-full sm:max-w-3xl select-text',
+          container: 'flex h-full flex-col select-text',
+          body: 'flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 select-text',
+          footer: 'flex w-full items-center justify-end border-t border-default p-4 sm:p-6'
+        }"
+      >
+        <template #title>
+          <div class="flex items-center gap-2.5">
+            <UIcon name="i-lucide-radio-tower" class="size-5 shrink-0 text-primary" />
+            <div class="flex min-w-0 items-center gap-2">
+              <span class="truncate font-semibold">Message trace</span>
+              <TelemetryOutcomeStatus
+                v-if="trace?.outcomes[0]"
+                :status="trace.outcomes[0].status"
+              />
+            </div>
+          </div>
+        </template>
+
+        <template #body>
+          <div v-if="traceLoading" class="flex min-h-48 items-center justify-center">
+            <UIcon name="i-lucide-loader-circle" class="size-6 animate-spin text-primary" />
+            <span class="sr-only">Loading message trace</span>
+          </div>
+          <UEmpty
+            v-else-if="trace === null || trace.outcomes.length === 0"
+            icon="i-lucide-message-circle-warning"
+            title="No trace found"
+            description="No processing outcomes were returned for this message ID."
+            variant="naked"
+          />
+          <div v-else class="space-y-6">
+            <section
+              v-for="outcome in trace.outcomes"
+              :key="outcome.id"
+              class="space-y-4"
+            >
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="text-xs text-muted">
+                    Processing ID
+                  </p>
+                  <p class="break-all font-mono text-sm">
+                    {{ outcome.processing_id }}
+                  </p>
+                </div>
+                <TelemetryOutcomeStatus :status="outcome.status" />
+              </div>
+
+              <section>
+                <h3 class="mb-2 text-sm font-medium">
+                  Validation reasons
+                </h3>
+                <p v-if="!hasValidationErrors(outcome)" class="text-sm text-muted">
+                  No validation errors.
+                </p>
+                <div v-else class="overflow-x-auto rounded-lg border border-default">
+                  <table class="w-full text-sm">
+                    <thead class="border-b border-default bg-elevated/50 text-left text-xs text-muted">
+                      <tr>
+                        <th scope="col" class="px-3 py-2 font-medium">
+                          Code
+                        </th>
+                        <th scope="col" class="px-3 py-2 font-medium">
+                          Field
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-default">
+                      <tr v-for="reason in outcome.reason_codes" :key="`${reason.code}:${reason.field}`">
+                        <td class="px-3 py-2 font-mono text-error">
+                          {{ reason.code }}
+                        </td>
+                        <td class="px-3 py-2 font-mono">
+                          {{ reason.field ?? '—' }}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section>
+                <h3 class="mb-2 text-sm font-medium">
+                  Processing stages
+                </h3>
+                <p v-if="outcome.stages.length === 0" class="text-sm text-muted">
+                  No processing stages recorded.
+                </p>
+                <div v-else class="overflow-x-auto rounded-lg border border-default">
+                  <table class="w-full text-sm">
+                    <thead class="border-b border-default bg-elevated/50 text-left text-xs text-muted">
+                      <tr>
+                        <th scope="col" class="px-3 py-2 font-medium">
+                          Stage
+                        </th>
+                        <th scope="col" class="px-3 py-2 font-medium">
+                          Elapsed
+                        </th>
+                        <th scope="col" class="px-3 py-2 font-medium">
+                          Time
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-default">
+                      <tr v-for="stage in outcome.stages" :key="`${outcome.id}:${stage.stage}`">
+                        <td class="px-3 py-2 font-medium">
+                          {{ stage.stage === 'schema_validation_skipped' ? 'schema validation skipped' : stage.stage }}
+                          <span v-if="stage.subscribers !== undefined" class="font-normal text-muted">
+                            · {{ stage.subscribers }} subscribers
+                          </span>
+                        </td>
+                        <td class="whitespace-nowrap px-3 py-2 font-mono text-xs text-muted">
+                          <template v-if="outcome.stages[0]">
+                            +{{ (Date.parse(stage.at) - Date.parse(outcome.stages[0].at)).toFixed(0) }} ms
+                          </template>
+                        </td>
+                        <td class="whitespace-nowrap px-3 py-2 text-muted">
+                          {{ formatDateTime(stage.at) }}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </section>
+
+            <section v-if="trace.sample" class="space-y-2">
+              <h3 class="text-sm font-medium">
+                Stored sample
+              </h3>
+              <p class="text-xs text-muted">
+                Occurred {{ formatDateTime(trace.sample.occurred_at) }}
+              </p>
+              <pre class="overflow-x-auto rounded-lg border border-default bg-elevated/30 p-3 text-xs">{{ JSON.stringify(trace.sample.values, null, 2) }}</pre>
+            </section>
+          </div>
+        </template>
+
+        <template #footer>
+          <div class="flex w-full items-center justify-end">
+            <UButton
+              label="Close"
+              color="neutral"
+              variant="subtle"
+              @click="traceDrawerOpen = false"
+            />
+          </div>
+        </template>
+      </UDrawer>
     </template>
   </UDashboardPanel>
 </template>
