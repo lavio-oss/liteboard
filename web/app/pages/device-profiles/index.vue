@@ -9,7 +9,6 @@ import type {
   Device,
   DeviceProfile,
   DeviceProfileInput,
-  DeviceProfileVersionInput,
   Project
 } from '~/types/admin'
 
@@ -34,7 +33,6 @@ const toast = useToast()
 const { activeTenantId, canManageActiveTenant, loadTenants } = useTenantContext()
 const {
   createDeviceProfile,
-  createDeviceProfileVersion,
   deleteDeviceProfile,
   loadDeviceProfiles,
   loadDevices,
@@ -118,10 +116,6 @@ const editingProfile = ref<DeviceProfile | null>(null)
 const deleteOpen = ref(false)
 const deleteLoading = ref(false)
 const deletingProfile = ref<DeviceProfile | null>(null)
-const versionsOpen = ref(false)
-const versionsLoading = ref(false)
-const versionsView = ref<'versions' | 'form'>('versions')
-const versionsProfile = ref<DeviceProfile | null>(null)
 
 watch(activeTenantId, () => {
   projectFilter.value = null
@@ -129,9 +123,6 @@ watch(activeTenantId, () => {
   editingProfile.value = null
   deleteOpen.value = false
   deletingProfile.value = null
-  versionsOpen.value = false
-  versionsView.value = 'versions'
-  versionsProfile.value = null
 })
 
 function projectFor(projectId: string): Project {
@@ -191,16 +182,14 @@ function openDelete(profileId: string): void {
   deleteOpen.value = true
 }
 
-function openVersions(profileId: string): void {
+async function openVersions(profileId: string): Promise<void> {
   const profile = profiles.value.find(item => item.id === profileId)
 
   if (profile === undefined) {
     throw new Error('The selected profile is not available.')
   }
 
-  versionsProfile.value = profile
-  versionsView.value = 'versions'
-  versionsOpen.value = true
+  await navigateTo(`/device-profiles/${profile.project_id}/${profile.id}`)
 }
 
 async function saveProfile(payload: DeviceProfileInput): Promise<void> {
@@ -282,58 +271,6 @@ async function deleteSelectedProfile(): Promise<void> {
   }
 }
 
-async function createSelectedVersion(payload: DeviceProfileVersionInput): Promise<void> {
-  const profile = versionsProfile.value
-
-  if (profile === null) {
-    throw new Error('A device profile is required before creating a version.')
-  }
-
-  const project = projectFor(profile.project_id)
-  versionsLoading.value = true
-
-  try {
-    const version = await createDeviceProfileVersion(
-      project.tenant_id,
-      project.id,
-      profile.id,
-      payload
-    )
-
-    if (activeTenantId.value !== project.tenant_id) {
-      return
-    }
-
-    await refresh()
-
-    const refreshedProfile = profiles.value.find(item => item.id === profile.id)
-
-    if (refreshedProfile === undefined) {
-      throw new Error('The saved profile is no longer available.')
-    }
-
-    versionsProfile.value = refreshedProfile
-    versionsView.value = 'versions'
-    toast.add({
-      title: 'Version created',
-      description: `Created ${refreshedProfile.code} version ${version.version}.`,
-      color: 'success'
-    })
-  } catch (error: unknown) {
-    if (!(error instanceof ApiError)) {
-      throw error
-    }
-
-    toast.add({
-      title: 'Unable to create version',
-      description: error.message,
-      color: 'error'
-    })
-  } finally {
-    versionsLoading.value = false
-  }
-}
-
 const columns: TableColumn<AdminTableRow>[] = [
   {
     id: 'name',
@@ -407,6 +344,12 @@ const columns: TableColumn<AdminTableRow>[] = [
   {
     id: 'actions',
     header: 'Actions',
+    meta: {
+      class: {
+        th: 'w-px',
+        td: 'w-px'
+      }
+    },
     cell: ({ row }) => {
       const projectId = row.original.project_id
 
@@ -539,15 +482,6 @@ const errorMessage = computed(() => {
         description="Profiles with published versions cannot be deleted."
         :loading="deleteLoading"
         @confirm="deleteSelectedProfile"
-      />
-
-      <AdminDeviceProfileVersionsDrawer
-        v-model:open="versionsOpen"
-        v-model:view="versionsView"
-        :profile="versionsProfile"
-        :can-write="versionsProfile !== null && canWriteInProject(versionsProfile.project_id)"
-        :creating="versionsLoading"
-        @create="createSelectedVersion"
       />
     </template>
   </UDashboardPanel>
