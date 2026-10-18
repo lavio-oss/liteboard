@@ -4,6 +4,7 @@ import { getPaginationRowModel } from '@tanstack/table-core'
 import { VisAxis, VisDonut, VisLine, VisSingleContainer, VisXYContainer } from '@unovis/vue'
 import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
+import { useAlerting } from '~/composables/useAlerting'
 import { useTelemetry } from '~/composables/useTelemetry'
 import { useDevicePresenceStream } from '~/composables/useDevicePresenceStream'
 import type { TelemetryDeviceScope } from '~/composables/useTelemetry'
@@ -11,6 +12,7 @@ import { useTelemetryStream } from '~/composables/useTelemetryStream'
 import { useTenantContext } from '~/composables/useTenantContext'
 import { canWriteProjectData } from '~/utils/projectPermissions'
 import type { DeviceInput } from '~/types/admin'
+import type { Alert, AlertRule } from '~/types/alerting'
 import DevicePresenceStatus from '~/components/realtime/DevicePresenceStatus.vue'
 import TelemetryOutcomeStatus from '~/components/realtime/TelemetryOutcomeStatus.vue'
 import type {
@@ -175,9 +177,168 @@ const presenceStream = useDevicePresenceStream(() => activeTenantId.value, {
   }
 })
 
+// Alerts raised for this device. Writers (the ones who see Settings) may also acknowledge them.
+const { acknowledgeAlert, loadAlert, loadAlertRules, loadAlerts } = useAlerting()
+const { data: alertsData, status: alertsStatus, refresh: refreshAlerts } = await useAsyncData(
+  `device-alerts-${deviceId}`,
+  async () => {
+    const tenantId = activeTenantId.value
+
+    if (tenantId === null) {
+      return { alerts: [] as Alert[], rules: [] as AlertRule[] }
+    }
+
+    const [alerts, rules] = await Promise.all([
+      loadAlerts(tenantId, projectId, { state: null, deviceId }),
+      loadAlertRules(tenantId, projectId)
+    ])
+
+    return { alerts, rules }
+  },
+  { watch: [activeTenantId] }
+)
+const deviceAlerts = computed(() => alertsData.value?.alerts ?? [])
+const alertRuleNames = computed(() => new Map((alertsData.value?.rules ?? []).map(rule => [rule.id, rule.name])))
+const activeAlertCount = computed(() => deviceAlerts.value.filter(alert => alert.cleared_at === null).length)
+const SeverityBadge = resolveComponent('AlertingSeverityBadge')
+// AdminTable searches by name, so each row carries its rule name.
+type AlertRow = Alert & { name: string }
+const sortableHeader = useSortableHeader()
+const alertRows = computed<AlertRow[]>(() => deviceAlerts.value.map(alert => ({
+  ...alert,
+  name: alertRuleNames.value.get(alert.alert_rule_id) ?? '—'
+})))
+const alertViewOpen = ref(false)
+const alertViewLoading = ref(false)
+const viewingAlert = ref<Alert | null>(null)
+
+async function openAlert(alert: Alert): Promise<void> {
+  const tenantId = activeTenantId.value
+
+  if (tenantId === null) {
+    return
+  }
+
+  viewingAlert.value = alert
+  alertViewOpen.value = true
+  alertViewLoading.value = true
+
+  try {
+    viewingAlert.value = await loadAlert(tenantId, projectId, alert.id)
+  } catch (error: unknown) {
+    notifyError(error, 'Unable to load alert history')
+  } finally {
+    alertViewLoading.value = false
+  }
+}
+
+async function acknowledge(alert: Alert): Promise<void> {
+  const tenantId = activeTenantId.value
+
+  if (tenantId === null) {
+    return
+  }
+
+  alertViewLoading.value = true
+
+  try {
+    await acknowledgeAlert(tenantId, projectId, alert.id)
+    if (viewingAlert.value?.id === alert.id) {
+      viewingAlert.value = await loadAlert(tenantId, projectId, alert.id)
+    }
+    await refreshAlerts()
+    toast.add({ title: 'Alert acknowledged', description: 'The alert stays active until it recovers.', color: 'success' })
+  } catch (error: unknown) {
+    notifyError(error, 'Unable to acknowledge alert')
+  } finally {
+    alertViewLoading.value = false
+  }
+}
+
+const alertColumns: TableColumn<AlertRow>[] = [
+  {
+    id: 'sequence',
+    header: 'No.',
+    cell: ({ row }) => row.index + 1
+  },
+  {
+    id: 'severity',
+    accessorKey: 'severity',
+    header: sortableHeader('Severity'),
+    cell: ({ row }) => h(SeverityBadge, { severity: row.original.severity })
+  },
+  {
+    id: 'name',
+    accessorKey: 'name',
+    header: 'Rule',
+    cell: ({ row }) => h('span', { class: 'font-medium text-highlighted' }, row.original.name)
+  },
+  {
+    id: 'value',
+    header: 'Value',
+    cell: ({ row }) => {
+      const { field, value } = row.original.evidence
+
+      return typeof field === 'string' ? `${field} = ${String(value)}` : '—'
+    }
+  },
+  {
+    id: 'state',
+    header: 'Status',
+    cell: ({ row }) => h('div', { class: 'flex gap-1' }, [
+      h(
+        UBadge,
+        { class: 'capitalize', color: row.original.cleared_at === null ? 'error' : 'success', variant: 'subtle' },
+        () => row.original.cleared_at === null ? 'active' : 'cleared'
+      ),
+      row.original.acknowledged_at === null ? null : h(UBadge, { color: 'info', variant: 'outline' }, () => 'Ack')
+    ])
+  },
+  {
+    id: 'opened_at',
+    accessorKey: 'opened_at',
+    header: sortableHeader('Opened'),
+    cell: ({ row }) => formatDateTime(row.original.opened_at)
+  },
+  {
+    id: 'cleared_at',
+    accessorKey: 'cleared_at',
+    header: sortableHeader('Cleared'),
+    cell: ({ row }) => formatDateTime(row.original.cleared_at)
+  },
+  {
+    id: 'actions',
+    header: 'Actions',
+    cell: ({ row }) => {
+      const buttons = [
+        h(UButton, {
+          'icon': 'i-lucide-eye',
+          'color': 'neutral',
+          'variant': 'ghost',
+          'aria-label': 'View alert',
+          'onClick': () => openAlert(row.original)
+        })
+      ]
+
+      if (editContext.value && row.original.acknowledged_at === null) {
+        buttons.push(h(UButton, {
+          'icon': 'i-lucide-check',
+          'color': 'neutral',
+          'variant': 'ghost',
+          'aria-label': 'Acknowledge alert',
+          'onClick': () => acknowledge(row.original)
+        }))
+      }
+
+      return h('div', { class: 'flex justify-end gap-1' }, buttons)
+    }
+  }
+]
+
 const tabs = computed(() => [
   { label: 'Overview', value: 'overview', slot: 'overview' },
   { label: 'Telemetry', value: 'telemetry', slot: 'telemetry' },
+  { label: 'Alerts', value: 'alerts', slot: 'alerts', badge: activeAlertCount.value > 0 ? activeAlertCount.value : undefined },
   { label: 'Message Inspector', value: 'inspector', slot: 'inspector' },
   ...(editContext.value ? [{ label: 'Settings', value: 'settings', slot: 'settings' }] : [])
 ])
@@ -825,6 +986,18 @@ async function openTrace(message: string): Promise<void> {
           </div>
         </template>
 
+        <template #alerts>
+          <div class="flex flex-col gap-4 pt-4">
+            <AdminTable
+              :columns="alertColumns"
+              :data="alertRows"
+              :loading="alertsStatus === 'pending'"
+              :show-status-filter="false"
+              search-placeholder="Search alerts..."
+            />
+          </div>
+        </template>
+
         <template #settings>
           <AdminDeviceEditForm
             v-if="editContext && device"
@@ -903,6 +1076,17 @@ async function openTrace(message: string): Promise<void> {
         </template>
       </UTabs>
 
+      <AlertingAlertDetailModal
+        v-model:open="alertViewOpen"
+        :alert="viewingAlert"
+        :device-name="device?.name ?? deviceId"
+        :rule-name="viewingAlert === null ? 'Alert' : alertRuleNames.get(viewingAlert.alert_rule_id) ?? 'Alert'"
+        :project-name="editContext?.project.name"
+        :can-acknowledge="editContext !== null && editContext !== undefined"
+        :loading="alertViewLoading"
+        @acknowledge="viewingAlert !== null && acknowledge(viewingAlert)"
+      />
+
       <UDrawer
         v-model:open="traceDrawerOpen"
         direction="right"
@@ -915,7 +1099,7 @@ async function openTrace(message: string): Promise<void> {
           content: 'w-full sm:max-w-3xl select-text',
           container: 'flex h-full flex-col select-text',
           body: 'flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 select-text',
-          footer: 'flex w-full items-center justify-end border-t border-default p-4 sm:p-6'
+          footer: 'flex w-full items-center justify-start border-t border-default p-4 sm:p-6'
         }"
       >
         <template #title>
@@ -1052,7 +1236,7 @@ async function openTrace(message: string): Promise<void> {
         </template>
 
         <template #footer>
-          <div class="flex w-full items-center justify-end">
+          <div class="flex w-full items-center justify-start">
             <UButton
               label="Close"
               color="neutral"

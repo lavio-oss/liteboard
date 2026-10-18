@@ -16,10 +16,6 @@ const adminLinks = [{
   icon: 'i-lucide-network',
   to: '/admin/iiot-tree'
 }, {
-  label: 'Telemetry',
-  icon: 'i-lucide-radio-tower',
-  to: '/admin/telemetry'
-}, {
   label: 'Masterdata',
   type: 'label' as const
 }, {
@@ -42,6 +38,8 @@ const adminLinks = [{
 
 const route = useRoute()
 
+const configurationPaths = ['/device-profiles', '/alert-rules', '/webhooks']
+
 const liteboardLinks = computed<NavigationMenuItem[]>(() => [{
   label: 'Dashboard',
   icon: 'i-lucide-layout-dashboard',
@@ -53,8 +51,12 @@ const liteboardLinks = computed<NavigationMenuItem[]>(() => [{
 }, {
   label: 'Devices',
   icon: 'i-lucide-router',
-  to: '/devices',
-  active: route.path.startsWith('/devices') || route.path.startsWith('/device-profiles')
+  to: '/devices'
+}, {
+  label: 'Rules & schemas',
+  icon: 'i-lucide-settings-2',
+  to: '/device-profiles',
+  active: configurationPaths.some(path => route.path.startsWith(path))
 }, {
   label: 'Alerts',
   icon: 'i-lucide-bell-ring',
@@ -75,11 +77,11 @@ const groups = computed(() => [{
       to: item.to
     })),
     ...(!isAdminWorkspace.value
-      ? [{
-          label: 'Device Profiles',
-          icon: 'i-lucide-file-cog',
-          to: '/device-profiles'
-        }]
+      ? [
+          { label: 'Device profiles', icon: 'i-lucide-file-cog', to: '/device-profiles' },
+          { label: 'Alert rules', icon: 'i-lucide-list-checks', to: '/alert-rules' },
+          { label: 'Webhooks', icon: 'i-lucide-webhook', to: '/webhooks' }
+        ]
       : [])
   ]
 }, {

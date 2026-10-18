@@ -71,6 +71,10 @@ export function useAlerting() {
       query.set('state', filters.state)
     }
 
+    if (filters.deviceId !== undefined) {
+      query.set('device_id', filters.deviceId)
+    }
+
     return (await api.request(`${projectPath(tenantId, projectId)}/alerts?${query}`, alertsResponseSchema)).data
   }
 

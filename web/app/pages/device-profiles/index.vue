@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { NavigationMenuItem, TableColumn } from '@nuxt/ui'
+import type { TableColumn } from '@nuxt/ui'
 import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
 import { useTenantContext } from '~/composables/useTenantContext'
@@ -15,17 +15,6 @@ import type {
 definePageMeta({
   middleware: 'auth'
 })
-
-const deviceLinks = [[{
-  label: 'Devices',
-  icon: 'i-lucide-router',
-  to: '/devices',
-  exact: true
-}, {
-  label: 'Device Profiles',
-  icon: 'i-lucide-file-cog',
-  to: '/device-profiles'
-}]] satisfies NavigationMenuItem[][]
 
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
@@ -273,6 +262,11 @@ async function deleteSelectedProfile(): Promise<void> {
 
 const columns: TableColumn<AdminTableRow>[] = [
   {
+    id: 'sequence',
+    header: 'No.',
+    cell: ({ row }) => row.index + 1
+  },
+  {
     id: 'name',
     accessorKey: 'name',
     header: 'Name',
@@ -408,7 +402,7 @@ const errorMessage = computed(() => {
 <template>
   <UDashboardPanel id="device-profiles" :ui="{ body: 'lg:pt-4 lg:pb-12' }">
     <template #header>
-      <UDashboardNavbar title="Device Profiles">
+      <UDashboardNavbar title="Rules & schemas">
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
@@ -424,7 +418,7 @@ const errorMessage = computed(() => {
       </UDashboardNavbar>
 
       <UDashboardToolbar>
-        <UNavigationMenu :items="deviceLinks" highlight class="-mx-1 flex-1" />
+        <ConfigurationMenu />
       </UDashboardToolbar>
     </template>
 

@@ -6,9 +6,7 @@ import {
   telemetryOutcomesResponseSchema,
   telemetryStreamTicketResponseSchema,
   telemetryTraceResponseSchema,
-  devicePresenceStreamTicketResponseSchema,
-  telemetryUnresolvedMessageResponseSchema,
-  telemetryUnresolvedMessagesResponseSchema
+  devicePresenceStreamTicketResponseSchema
 } from '~/types/telemetry'
 import type {
   TelemetryAggregate,
@@ -16,8 +14,7 @@ import type {
   TelemetryInterval,
   TelemetryLatestValue,
   TelemetrySample,
-  TelemetryTrace,
-  TelemetryUnresolvedMessage
+  TelemetryTrace
 } from '~/types/telemetry'
 
 export interface TelemetryDeviceScope {
@@ -121,24 +118,6 @@ export function useTelemetry() {
     return response.data.ticket
   }
 
-  async function loadUnresolvedMessages(limit: number): Promise<TelemetryUnresolvedMessage[]> {
-    const response = await api.request(
-      `/api/platform/telemetry/unresolved-messages?limit=${limit}`,
-      telemetryUnresolvedMessagesResponseSchema
-    )
-
-    return response.data
-  }
-
-  async function loadUnresolvedMessage(processingId: string): Promise<TelemetryUnresolvedMessage> {
-    const response = await api.request(
-      `/api/platform/telemetry/unresolved-messages/${encodeURIComponent(processingId)}`,
-      telemetryUnresolvedMessageResponseSchema
-    )
-
-    return response.data
-  }
-
   return {
     issueStreamTicket,
     issueDevicePresenceStreamTicket,
@@ -146,8 +125,6 @@ export function useTelemetry() {
     loadMessageOutcomes,
     loadMessageTrace,
     loadTelemetryAggregates,
-    loadTelemetryHistory,
-    loadUnresolvedMessage,
-    loadUnresolvedMessages
+    loadTelemetryHistory
   }
 }
