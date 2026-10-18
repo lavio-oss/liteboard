@@ -87,26 +87,6 @@ export const telemetryStreamTicketResponseSchema = z.object({
 
 export const devicePresenceStreamTicketResponseSchema = telemetryStreamTicketResponseSchema
 
-export const telemetryUnresolvedMessageSchema = z.object({
-  processing_id: z.string().uuid(),
-  topic: z.string(),
-  reason: z.enum(['invalid_topic', 'device_not_found', 'project_mismatch']),
-  payload_size: z.number().int().nonnegative(),
-  stages: z.array(z.object({
-    stage: z.string(),
-    at: z.string()
-  })),
-  received_at: z.string()
-})
-
-export const telemetryUnresolvedMessagesResponseSchema = z.object({
-  data: z.array(telemetryUnresolvedMessageSchema)
-})
-
-export const telemetryUnresolvedMessageResponseSchema = z.object({
-  data: telemetryUnresolvedMessageSchema
-})
-
 export const telemetryStreamEventSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('telemetry.sample'),
@@ -134,7 +114,6 @@ export const devicePresenceStreamEventSchema = z.object({
 export type TelemetryInterval = z.infer<typeof telemetryIntervalSchema>
 export type TelemetrySample = z.infer<typeof telemetrySampleSchema>
 export type TelemetryLatestValue = z.infer<typeof telemetryLatestValueSchema>
-export type TelemetryUnresolvedMessage = z.infer<typeof telemetryUnresolvedMessageSchema>
 export type TelemetryIngestStatus = z.infer<typeof telemetryIngestStatusSchema>
 export type TelemetryAggregate = z.infer<typeof telemetryAggregateSchema>
 export type TelemetryIngestOutcome = z.infer<typeof telemetryIngestOutcomeSchema>

@@ -332,14 +332,13 @@ async function createVersion(payload: DeviceProfileVersionInput): Promise<void> 
               @click="selectedId = version.id"
             >
               <span class="flex w-full items-center justify-between gap-2">
-                <span class="font-mono text-sm font-semibold text-highlighted">v{{ version.version }}</span>
+                <span class="font-mono text-sm font-semibold text-highlighted">{{ version.schema_code }}</span>
                 <UIcon
                   v-if="version.definition.strict_mode"
                   name="i-lucide-shield-check"
                   class="size-4 text-success"
                 />
               </span>
-              <span class="w-full truncate text-xs text-muted">{{ version.schema_code }}</span>
               <span class="text-xs text-dimmed">{{ formatDateTime(version.created_at) }}</span>
             </button>
 
@@ -395,7 +394,7 @@ async function createVersion(payload: DeviceProfileVersionInput): Promise<void> 
               />
             </UFormField>
 
-            <UFormField name="strict_mode" label="Strict mode" description="Reject telemetry containing fields not defined in the schema.">
+            <UFormField name="strict_mode" label="Strict mode">
               <USwitch v-model="metaState.strict_mode" />
             </UFormField>
 

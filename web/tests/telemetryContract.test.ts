@@ -5,8 +5,7 @@ import {
   telemetryLatestResponseSchema,
   telemetryIngestStatusSchema,
   telemetryStreamEventSchema,
-  telemetryTraceResponseSchema,
-  telemetryUnresolvedMessageResponseSchema
+  telemetryTraceResponseSchema
 } from '../app/types/telemetry.ts'
 import type { TelemetryIngestOutcome, TelemetrySample } from '../app/types/telemetry.ts'
 import { hasValidationErrors, mergeTelemetryOutcomes } from '../app/utils/telemetryOutcomes.ts'
@@ -152,20 +151,6 @@ test('latest contract is one entry per metric', () => {
   })
 
   assert.equal(parsed.success, true)
-})
-
-test('unresolved message contract only accepts central reasons', () => {
-  const message = {
-    processing_id: '00000000-0000-4000-8000-000000000020',
-    topic: 'liteboard/x/devices/y/telemetry',
-    reason: 'invalid_topic',
-    payload_size: 12,
-    stages: [{ stage: 'received', at: '2026-10-13T10:00:00+00:00' }],
-    received_at: '2026-10-13T10:00:00.000000Z'
-  }
-
-  assert.equal(telemetryUnresolvedMessageResponseSchema.safeParse({ data: message }).success, true)
-  assert.equal(telemetryUnresolvedMessageResponseSchema.safeParse({ data: { ...message, reason: 'device_not_approved' } }).success, false)
 })
 
 test('latest values keep a metric the newest sample omits and ignore late samples', () => {

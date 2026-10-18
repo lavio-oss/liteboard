@@ -157,4 +157,5 @@ export interface WebhookEndpointInput {
 
 export interface AlertFilters {
   state: 'active' | 'cleared' | null
+  deviceId?: string
 }

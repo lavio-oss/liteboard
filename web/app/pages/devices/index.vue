@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { DropdownMenuItem, NavigationMenuItem, TableColumn } from '@nuxt/ui'
+import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
 import { useMqttCaCertificateDownload } from '~/composables/useMqttCaCertificateDownload'
@@ -22,17 +22,6 @@ import type { DevicePresenceEventData } from '~/types/telemetry'
 definePageMeta({
   middleware: 'auth'
 })
-
-const deviceLinks = [[{
-  label: 'Devices',
-  icon: 'i-lucide-router',
-  to: '/devices',
-  exact: true
-}, {
-  label: 'Device Profiles',
-  icon: 'i-lucide-file-cog',
-  to: '/device-profiles'
-}]] satisfies NavigationMenuItem[][]
 
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
@@ -695,10 +684,6 @@ const errorMessage = computed(() => {
           </UDropdownMenu>
         </template>
       </UDashboardNavbar>
-
-      <UDashboardToolbar>
-        <UNavigationMenu :items="deviceLinks" highlight class="-mx-1 flex-1" />
-      </UDashboardToolbar>
     </template>
 
     <template #body>

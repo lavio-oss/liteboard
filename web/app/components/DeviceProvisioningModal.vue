@@ -50,9 +50,26 @@ watch(() => props.tenantId, () => {
 <template>
   <UModal
     v-model:open="open"
-    title="Provision devices"
     :ui="{ content: 'max-w-3xl' }"
   >
+    <template #title>
+      <div class="flex items-center gap-3">
+        <span>Provision devices</span>
+        <div
+          class="inline-flex items-center gap-2 rounded-md border border-default bg-elevated/40 px-3 py-1 text-sm font-normal"
+        >
+          <span class="font-mono font-semibold text-highlighted">HTTPS</span>
+          <span class="text-muted/60">·</span>
+          <UBadge
+            color="primary"
+            variant="subtle"
+            size="sm"
+          >
+            TLS
+          </UBadge>
+        </div>
+      </div>
+    </template>
     <template #body>
       <div class="space-y-5">
         <UFormField label="Project">
@@ -89,7 +106,7 @@ watch(() => props.tenantId, () => {
         <UButton
           label="Close"
           color="neutral"
-          variant="outline"
+          variant="subtle"
           @click="open = false"
         />
       </div>

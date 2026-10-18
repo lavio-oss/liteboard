@@ -77,7 +77,7 @@ const quotaFull = computed(() => props.project.max_devices_quota !== null
   && props.project.device_count >= props.project.max_devices_quota)
 
 const quotaLabel = computed(() => props.project.max_devices_quota === null
-  ? `${props.project.device_count} devices · Unlimited`
+  ? 'Unlimited'
   : `${props.project.device_count}/${props.project.max_devices_quota} devices`)
 
 function clearSensitiveState(): void {
@@ -144,7 +144,7 @@ async function createProfile(): Promise<void> {
   profile.value = result.data
   provisionSecret.value = result.provision_secret
   setCachedSecret(props.project.id, result.provision_secret)
-  secretVisible.value = true
+  secretVisible.value = false
   emit('updated')
   toast.add({
     title: 'Provisioning profile created',
@@ -185,7 +185,7 @@ async function rotateSecret(): Promise<void> {
   profile.value = result.data
   provisionSecret.value = result.provision_secret
   setCachedSecret(props.project.id, result.provision_secret)
-  secretVisible.value = true
+  secretVisible.value = false
   rotateConfirmOpen.value = false
   emit('updated')
   toast.add({
@@ -234,40 +234,26 @@ watch(
 
 <template>
   <div class="space-y-5">
-    <div class="rounded-lg border border-default bg-elevated/30 p-4 space-y-4">
-      <div class="flex items-center justify-between gap-4">
-        <div>
-          <h3 class="text-sm font-semibold text-highlighted">
-            Provisioning profile
-          </h3>
-          <p class="text-sm text-muted">
-            Enroll new devices in {{ project.name }} over HTTPS.
-          </p>
-        </div>
-        <UBadge :color="profileBadge.color" variant="subtle">
+    <div class="flex flex-wrap items-center justify-between gap-3 text-sm">
+      <div class="flex items-center gap-2">
+        <span class="text-muted">Profile</span>
+        <UBadge :color="profileBadge.color" variant="subtle" size="md" class="text-sm">
           {{ profileBadge.text }}
         </UBadge>
       </div>
 
-      <div v-if="showQuota" class="border-t border-default pt-4">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p class="text-sm font-medium text-highlighted">
-              Device capacity
-            </p>
-            <p class="text-sm text-muted">
-              {{ quotaLabel }}
-            </p>
-          </div>
-          <UBadge :color="quotaFull ? 'error' : 'neutral'" variant="subtle">
-            {{ quotaFull ? 'Full' : 'Read only' }}
-          </UBadge>
-        </div>
-        <p v-if="quotaFull" class="mt-2 text-sm text-error">
-          This project has reached its device limit. Contact a tenant administrator to increase the quota.
-        </p>
+      <div v-if="showQuota" class="flex items-center gap-2">
+        <span class="text-muted">Capacity</span>
+        <span class="font-medium text-highlighted">{{ quotaLabel }}</span>
+        <UBadge v-if="quotaFull" color="error" variant="subtle" size="md" class="text-sm">
+          Full
+        </UBadge>
       </div>
     </div>
+
+    <p v-if="showQuota && quotaFull" class="text-sm text-error">
+      This project has reached its device limit. Contact a tenant administrator to increase the quota.
+    </p>
 
     <div v-if="loading" class="space-y-3">
       <USkeleton class="h-10 w-full" />
@@ -275,19 +261,21 @@ watch(
     </div>
 
     <template v-else>
-      <UFormField label="HTTPS bootstrap endpoint">
-        <div class="flex items-center gap-2">
-          <UInput :model-value="bootstrapEndpoint" readonly class="w-full font-mono text-xs" />
+      <div class="space-y-1.5">
+        <span class="block text-sm text-muted">HTTPS bootstrap endpoint</span>
+        <div class="flex items-center gap-1">
+          <div class="min-w-0 flex-1 overflow-x-auto rounded-md border border-default bg-elevated/40 px-3 py-1.5 font-mono text-sm text-highlighted whitespace-nowrap">
+            {{ bootstrapEndpoint }}
+          </div>
           <UButton
-            label="Copy"
             icon="i-lucide-copy"
             color="neutral"
-            variant="outline"
-            class="shrink-0"
+            variant="ghost"
+            aria-label="Copy bootstrap endpoint"
             @click="copyBootstrapEndpoint"
           />
         </div>
-      </UFormField>
+      </div>
 
       <div v-if="profile === null" class="space-y-3">
         <UButton
@@ -300,52 +288,51 @@ watch(
       </div>
 
       <template v-else>
-        <UFormField label="Provision key">
-          <div class="flex items-center gap-2">
-            <UInput :model-value="profile.provision_key" readonly class="w-full font-mono text-xs" />
+        <div class="space-y-1.5">
+          <span class="block text-sm text-muted">Provision key</span>
+          <div class="flex items-center gap-1">
+            <UInput
+              :model-value="profile.provision_key"
+              readonly
+              class="min-w-0 flex-1 font-mono text-sm"
+            />
             <UButton
-              label="Copy"
               icon="i-lucide-copy"
               color="neutral"
-              variant="outline"
-              class="shrink-0"
+              variant="ghost"
+              aria-label="Copy provision key"
               @click="copyKey"
             />
           </div>
-        </UFormField>
+        </div>
 
-        <UFormField label="Provision secret">
-          <div class="flex items-center gap-2">
+        <div class="space-y-1.5">
+          <span class="block text-sm text-muted">Provision secret</span>
+          <div class="flex items-center gap-1">
             <UInput
               :model-value="secretDisplayValue"
               :type="secretVisible ? 'text' : 'password'"
               readonly
-              class="w-full font-mono text-xs"
-            >
-              <template #trailing>
-                <UButton
-                  color="neutral"
-                  variant="link"
-                  size="sm"
-                  :icon="secretVisible ? 'i-lucide-eye-off' : 'i-lucide-eye'"
-                  :aria-label="secretVisible ? 'Hide secret' : 'Show secret'"
-                  :aria-pressed="secretVisible"
-                  :disabled="provisionSecret === null"
-                  @click="secretVisible = !secretVisible"
-                />
-              </template>
-            </UInput>
+              class="min-w-0 flex-1 font-mono text-sm"
+            />
             <UButton
-              label="Copy"
+              :icon="secretVisible ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+              color="neutral"
+              variant="ghost"
+              :aria-label="secretVisible ? 'Hide secret' : 'Show secret'"
+              :disabled="provisionSecret === null"
+              @click="secretVisible = !secretVisible"
+            />
+            <UButton
               icon="i-lucide-copy"
               color="neutral"
-              variant="outline"
-              class="shrink-0"
+              variant="ghost"
+              aria-label="Copy provision secret"
               :disabled="provisionSecret === null"
               @click="copySecret"
             />
           </div>
-        </UFormField>
+        </div>
 
         <div class="flex flex-wrap items-center gap-2">
           <UButton
