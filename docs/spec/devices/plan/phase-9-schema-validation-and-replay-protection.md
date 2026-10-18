@@ -1,9 +1,9 @@
 # Phase 9: Telemetry Schema Validation & Chống Replay / Trùng lặp Gói tin
 
-> Trạng thái: Future plan — chưa triển khai.  
+> Trạng thái: Future plan. Cập nhật 2026-10-18: kiểm tra payload theo schema có version và khử trùng lặp đã được triển khai theo thiết kế khác với tài liệu này (Profile Version trong PostgreSQL, bảng định danh message và ràng buộc unique, không dùng Redis hay `telemetry_schemas`), xem [telemetry flow hiện hành](../../industrial-telemetry/current/telemetry-flow.md#5-contract-payload). Tài liệu này cần được rà lại hoặc rút gọn.  
 > Thuộc kế hoạch: [future_device_security_and_ingestion_plan.md](./future_device_security_and_ingestion_plan.md)  
 > Tầng kiến trúc: **Laravel Control Plane (`telemetry_schemas`) + Python Data Plane (`telemetry-service`) + Redis + PostgreSQL**  
-> Phụ thuộc: [luồng MQTT Access Token hiện hành](../devices_access_token.md#mqtt-authentication), [Phase 8](./phase-8-quotas-and-rate-limiting.md)
+> Phụ thuộc: [luồng MQTT Access Token hiện hành](../current/devices_access_token.md#mqtt-authentication), [Phase 8](./phase-8-quotas-and-rate-limiting.md)
 
 ---
 

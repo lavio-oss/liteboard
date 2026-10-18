@@ -20,7 +20,7 @@ LiteBoard là hệ thống multi-tenant: cấu hình/model dùng chung và worke
 | Broker/security audit | Kết nối, xác thực, subscribe/ACL, disconnect và thông tin client mà broker ghi nhận | Phát hiện brute-force hoặc hành vi bất thường quanh broker | Adapter/worker security riêng |
 | Network/flow | Thời gian, kích thước, hướng, địa chỉ/port và đặc trưng flow; có thể gồm packet metadata | Phát hiện scan và mẫu tấn công ở tầng mạng | Sensor/extractor tách biệt tại broker/host hoặc môi trường capture được kiểm soát |
 
-`telemetry-service` hiện nhận telemetry/heartbeat để kiểm tra topic/JSON và cập nhật presence; nó không phải sensor mạng và không nhìn thấy CONNECT thất bại, scan hoặc toàn bộ metadata kết nối. Vì vậy không thể lấy riêng subscriber PUBLISH làm nguồn dữ liệu đầy đủ cho paper IDS. Xem [plan tổng thể](../../plan.md) để biết trạng thái Data Plane.
+`telemetry-service` hiện nhận telemetry/heartbeat để kiểm tra topic/JSON và cập nhật presence; nó không phải sensor mạng và không nhìn thấy CONNECT thất bại, scan hoặc toàn bộ metadata kết nối. Vì vậy không thể lấy riêng subscriber PUBLISH làm nguồn dữ liệu đầy đủ cho paper IDS. Xem [plan tổng thể](../../../plan.md) để biết trạng thái Data Plane.
 
 LiteBoard hiện dùng MQTT TLS trên cổng `8883`. Không hạ TLS hoặc mở plaintext để giúp model đọc traffic. Capture trên đường truyền TLS không tự cung cấp MQTT payload đã giải mã; nếu cần feature ở tầng broker, hãy thu event tại điểm broker kết thúc TLS hoặc dùng audit/flow source phù hợp. Chỉ lưu feature cần thiết; giới hạn quyền đọc, retention và export của PCAP/log thô.
 
@@ -122,9 +122,9 @@ Nếu không đạt, giữ POC như công cụ nghiên cứu/điều tra offline
 
 ## 8. Quan hệ với các spec hiện có
 
-- [Telemetry service flow hiện tại](../industrial-telemetry/telemetry-flow-current.md): contract ingest, trace, REST và WebSocket của LiteBoard.
-- [Industrial telemetry — Rule, alert và webhook (mục 12)](../industrial-telemetry/telemetry-flow-current.md): alert nghiệp vụ theo rule; ML IDS không nằm trong slice này.
-- [Kế hoạch tổng thể](../../plan.md): IDS vẫn là hướng nghiên cứu tùy chọn; không đổi non-goal ML của các release đầu cho đến khi có POC và quyết định productization.
+- [Telemetry service flow hiện tại](../../industrial-telemetry/current/telemetry-flow.md): contract ingest, trace, REST và WebSocket của LiteBoard.
+- [Industrial telemetry — Rule, alert và webhook (mục 12)](../../industrial-telemetry/current/telemetry-flow.md): alert nghiệp vụ theo rule; ML IDS không nằm trong slice này.
+- [Kế hoạch tổng thể](../../../plan.md): IDS vẫn là hướng nghiên cứu tùy chọn; không đổi non-goal ML của các release đầu cho đến khi có POC và quyết định productization.
 
 ## 9. Tài liệu tham khảo
 

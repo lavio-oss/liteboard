@@ -6,7 +6,7 @@
 
 ## 1. Mục tiêu
 
-Broker hiện cấu hình listener TLS `8883` và xác thực Access Token theo [luồng MQTT hiện hành](../devices_access_token.md#mqtt-authentication). Phase 7 tập trung kiểm tra cấu hình production-equivalent, phân phối CA và thay chứng chỉ máy chủ mà không làm gián đoạn Device quá thời gian cho phép. Đây là TLS server-auth; Access Token vẫn là credential đăng nhập MQTT của Device.
+Broker hiện cấu hình listener TLS `8883` và xác thực Access Token theo [luồng MQTT hiện hành](../current/devices_access_token.md#mqtt-authentication). Phase 7 tập trung kiểm tra cấu hình production-equivalent, phân phối CA và thay chứng chỉ máy chủ mà không làm gián đoạn Device quá thời gian cho phép. Đây là TLS server-auth; Access Token vẫn là credential đăng nhập MQTT của Device.
 
 ## 2. Việc thực hiện
 

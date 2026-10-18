@@ -482,7 +482,7 @@ Simulator (optional tools profile)
 - Keep application, database, Redis, and broker secrets separate. Use persistent volumes for state that must survive container restarts.
 - Every service has meaningful health/readiness checks. Broker readiness does not prove telemetry has been ingested or stored.
 - Record the real local startup workflow only after checking it against the repository and Compose paths.
-- For a local ESP32 enrollment smoke test, HTTP is available only when Laravel runs with `APP_ENV=local` and `DEVICE_PROVISIONING_ALLOW_INSECURE_HTTP=true`. The simulator requires HTTPS. Use an HTTPS staging endpoint to verify certificate handling; see the [Access Token provisioning flow](./spec/devices/devices_access_token.md#provisioning-device-flow).
+- For a local ESP32 enrollment smoke test, HTTP is available only when Laravel runs with `APP_ENV=local` and `DEVICE_PROVISIONING_ALLOW_INSECURE_HTTP=true`. The simulator requires HTTPS. Use an HTTPS staging endpoint to verify certificate handling; see the [Access Token provisioning flow](./spec/devices/current/devices_access_token.md#provisioning-device-flow).
 
 ### Production deployment on a Linux host
 

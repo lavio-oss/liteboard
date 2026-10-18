@@ -6,7 +6,7 @@
 
 ## 1. Hiện trạng và thứ tự
 
-Device hiện xác thực MQTT bằng Access Token; mô hình credential, hai luồng tạo Device và tenant boundary được mô tả trong [tài liệu Access Token](../devices_access_token.md). Kế hoạch này chỉ theo dõi các phần hardening tiếp theo, gồm TLS production, quota kết nối/tốc độ và toàn vẹn telemetry.
+Device hiện xác thực MQTT bằng Access Token; mô hình credential, hai luồng tạo Device và tenant boundary được mô tả trong [tài liệu Access Token](../current/devices_access_token.md). Kế hoạch này chỉ theo dõi các phần hardening tiếp theo, gồm TLS production, quota kết nối/tốc độ và toàn vẹn telemetry.
 
 | Phase | Phạm vi | Trạng thái | Đặc tả |
 |---|---|---|---|

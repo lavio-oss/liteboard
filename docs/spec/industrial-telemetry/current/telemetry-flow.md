@@ -1,6 +1,6 @@
 # Telemetry service và các luồng liên quan — trạng thái hiện tại
 
-> Đối chiếu code và contract trong repository ngày 2026-10-18. Tài liệu này mô tả implementation hiện tại, không xác nhận môi trường pilot hay production. Tài liệu IT-1 đến IT-5 cũ được thay bằng file này; roadmap IT-6 vẫn để riêng.
+> Đối chiếu code và contract trong repository ngày 2026-10-18. Tài liệu này mô tả implementation hiện tại, không xác nhận môi trường pilot hay production. Tài liệu IT-1 đến IT-5 cũ được thay bằng file này; Phase 6 (giao event cho EAMO qua hàng đợi) vẫn để riêng ở [phase-06-eamo-integration.md](../plan/phase-06-eamo-integration.md).
 
 ## 1. Sơ đồ tổng thể
 
@@ -333,7 +333,7 @@ Mỗi lần thử ghi webhook_delivery_attempts (mã HTTP, lỗi đã cắt 500 
 - Nghiệm thu E2E của IT-5 (mục 12.8) và đo tải chưa chạy. Rule chỉ so sánh scalar trên một field số (chưa có `==`/`!=`, boolean/chuỗi, nhiều field); chưa có timer riêng cho Device ngừng gửi nhưng vẫn online (alert chỉ đóng bởi điều kiện clear, offline hoặc archive); evaluator poll thay vì LISTEN/NOTIFY; chưa có thao tác xóa rule.
 - ML anomaly detection, predictive maintenance và work-order workflow không thuộc IT-5; EAMO sở hữu maintenance workflow.
 - Command/RPC có topic/ACL nền nhưng command API, trạng thái command và ACK processing chưa thuộc implementation telemetry hiện tại.
-- IT-6 event contract/integration EAMO phụ thuộc alert/outbox và vẫn là roadmap.
+- [Phase 6](../plan/phase-06-eamo-integration.md): giao alert event cho EAMO qua hàng đợi (Redis Streams) dựa trên alert/outbox hiện có; envelope có version, `sequence` theo alert, consumer contract, DLQ và mapping Equipment vẫn là kế hoạch.
 - Chưa có retention/partitioning/downsampling policy cho samples, dedup identity và outcomes.
 - In-process event hubs cần thay hoặc bổ sung shared fan-out nếu chạy nhiều service replica.
 

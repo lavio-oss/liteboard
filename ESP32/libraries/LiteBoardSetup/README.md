@@ -54,7 +54,7 @@ Trong môi trường local, `infrastructure/mosquitto/generate-dev-certs.ps1` c�
 5. Cấu hình `ESP32/AccessToken/mqtt_ca_cert.h` như ở phần trên. Provisioning dùng CA MQTT chung đó để kết nối broker sau khi bootstrap.
 6. Mở `Provisioning.ino`, biên dịch và nạp firmware. Sau lần bootstrap đầu, credential được lưu trong Preferences/NVS để dùng lại sau reboot.
 
-Xem [luồng provisioning Access Token](../../../docs/spec/devices/devices_access_token.md#provisioning-device-flow). Khi chuyển môi trường, cập nhật provisioning URL và CA trong simulator/firmware. Chỉ nhúng public CA certificate, không nhúng private key.
+Xem [luồng provisioning Access Token](../../../docs/spec/devices/current/devices_access_token.md#provisioning-device-flow). Khi chuyển môi trường, cập nhật provisioning URL và CA trong simulator/firmware. Chỉ nhúng public CA certificate, không nhúng private key.
 
 ## File local và bảo mật
 
