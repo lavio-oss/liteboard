@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
@@ -7,7 +8,14 @@ from datetime import datetime, timedelta, timezone
 from app.realtime.presence_hub import PresenceHub
 from app.storage.presence import DevicePresence
 from app.storage.presence_monitor import PostgresDevicePresenceMonitor, connection_state_for_age
-from app.storage.queries import UPDATE_STALE_DEVICE_PRESENCE_SQL
+from app.storage.queries import (
+    CLEAR_OFFLINE_ALERTS_SQL,
+    INSERT_ALERT_EVENT_SQL,
+    INSERT_OUTBOX_EVENT_SQL,
+    RESET_OFFLINE_EVALUATION_STATES_SQL,
+    SELECT_ALERT_SNAPSHOT_SQL,
+    UPDATE_STALE_DEVICE_PRESENCE_SQL,
+)
 
 TENANT_ID = '123e4567-e89b-12d3-a456-426614174010'
 OTHER_TENANT_ID = '123e4567-e89b-12d3-a456-426614174011'
@@ -68,6 +76,50 @@ class PostgresDevicePresenceMonitorTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("INTERVAL '30 seconds'", UPDATE_STALE_DEVICE_PRESENCE_SQL)
         self.assertIn("INTERVAL '90 seconds'", UPDATE_STALE_DEVICE_PRESENCE_SQL)
 
+    async def test_offline_transition_clears_alerts_and_writes_outbox_before_commit(self) -> None:
+        offline_device = '123e4567-e89b-12d3-a456-426614174002'
+        alert_id = '123e4567-e89b-12d3-a456-426614174020'
+        connection = _Connection(
+            [_row(TENANT_ID, 'unstable'), _row(TENANT_ID, 'offline', device_id=offline_device)],
+            on_commit=lambda: connection.events.append('commit'),
+            cleared_alerts=[{
+                'id': alert_id,
+                'project_id': PROJECT_ID,
+                'alert_rule_revision_id': '123e4567-e89b-12d3-a456-426614174021',
+                'cleared_at': UPDATED_AT,
+            }],
+        )
+
+        await PostgresDevicePresenceMonitor(_Pool(connection), PresenceHub()).refresh()
+
+        self.assertEqual(
+            [
+                'fetch:stale',
+                'execute:reset_states',
+                'fetch:clear_alerts',
+                'execute:alert_event',
+                'fetchrow:snapshot',
+                'execute:outbox',
+                'commit',
+            ],
+            connection.events,
+        )
+        # Only the offline device is reset and cleared; the unstable one keeps its alerts.
+        self.assertEqual([([offline_device],), ([offline_device],)], connection.args[1:3])
+        outbox = connection.executed[INSERT_OUTBOX_EVENT_SQL]
+        self.assertEqual(f'alert:{alert_id}:cleared', outbox[4])
+        payload = json.loads(outbox[5])
+        self.assertEqual('alert.cleared', payload['type'])
+        self.assertEqual('device_offline', payload['alert']['clear_reason'])
+        self.assertEqual(TENANT_ID, payload['tenant_id'])
+
+    async def test_non_offline_transitions_do_not_touch_alerts(self) -> None:
+        connection = _Connection([_row(TENANT_ID, 'unstable'), _row(TENANT_ID, 'online')], on_commit=lambda: None)
+
+        await PostgresDevicePresenceMonitor(_Pool(connection), PresenceHub()).refresh()
+
+        self.assertEqual(['fetch:stale'], connection.events)
+
 
 def _row(tenant_id: str, state: str, *, device_id: str = DEVICE_ID) -> dict[str, object]:
     return {
@@ -111,13 +163,52 @@ class _Transaction:
 
 
 class _Connection:
-    def __init__(self, rows: list[dict[str, object]], on_commit: Callable[[], None]) -> None:
+    def __init__(
+        self,
+        rows: list[dict[str, object]],
+        on_commit: Callable[[], None],
+        cleared_alerts: list[dict[str, object]] | None = None,
+    ) -> None:
         self.rows = rows
         self.on_commit = on_commit
+        self.cleared_alerts = cleared_alerts or []
+        self.events: list[str] = []
+        self.args: list[tuple[object, ...]] = []
+        self.executed: dict[str, tuple[object, ...]] = {}
 
     def transaction(self) -> _Transaction:
         return _Transaction(self)
 
-    async def fetch(self, sql: str) -> list[dict[str, object]]:
-        self.sql = sql
-        return self.rows
+    async def fetch(self, sql: str, *args: object) -> list[dict[str, object]]:
+        self.args.append(args)
+        if sql == UPDATE_STALE_DEVICE_PRESENCE_SQL:
+            self.events.append('fetch:stale')
+            return self.rows
+        if sql == CLEAR_OFFLINE_ALERTS_SQL:
+            self.events.append('fetch:clear_alerts')
+            return self.cleared_alerts
+        raise AssertionError(f'Unexpected fetch SQL: {sql}')
+
+    async def fetchrow(self, sql: str, *args: object) -> dict[str, object]:
+        if sql != SELECT_ALERT_SNAPSHOT_SQL:
+            raise AssertionError(f'Unexpected fetchrow SQL: {sql}')
+        self.events.append('fetchrow:snapshot')
+        return {
+            'id': args[0], 'project_id': PROJECT_ID, 'tenant_id': TENANT_ID, 'alert_rule_id': 'rule-1',
+            'rule_code': 'high_temperature', 'rule_revision': 1, 'severity': 'critical', 'device_id': DEVICE_ID,
+            'equipment_asset_id': None, 'opened_at': UPDATED_AT, 'cleared_at': UPDATED_AT,
+            'clear_reason': 'device_offline', 'acknowledged_at': None,
+        }
+
+    async def execute(self, sql: str, *args: object) -> str:
+        names = {
+            RESET_OFFLINE_EVALUATION_STATES_SQL: 'reset_states',
+            INSERT_ALERT_EVENT_SQL: 'alert_event',
+            INSERT_OUTBOX_EVENT_SQL: 'outbox',
+        }
+        if sql not in names:
+            raise AssertionError(f'Unexpected execute SQL: {sql}')
+        self.events.append(f'execute:{names[sql]}')
+        self.args.append(args)
+        self.executed[sql] = args
+        return 'OK'

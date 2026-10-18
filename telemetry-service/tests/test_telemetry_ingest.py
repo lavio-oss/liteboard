@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from app.storage.queries import (
+    INSERT_EVALUATION_JOB_SQL,
     INSERT_INGEST_OUTCOME_SQL,
     INSERT_MESSAGE_IDENTITY_SQL,
     INSERT_SAMPLE_SQL,
@@ -68,10 +69,17 @@ class PostgresTelemetryIngestorTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(1, connection.events.count('transaction.begin'))
         self.assertEqual(MARK_DEVICE_PRESENCE_SQL, connection.presence_sql)
         self.assertEqual(
-            [INSERT_SAMPLE_SQL, UPSERT_LATEST_VALUES_SQL, INSERT_MESSAGE_IDENTITY_SQL, INSERT_INGEST_OUTCOME_SQL],
+            [
+                INSERT_SAMPLE_SQL,
+                UPSERT_LATEST_VALUES_SQL,
+                INSERT_MESSAGE_IDENTITY_SQL,
+                INSERT_EVALUATION_JOB_SQL,
+                INSERT_INGEST_OUTCOME_SQL,
+            ],
             connection.executed_sql,
         )
         sample = connection.executed[0]
+        self.assertEqual((sample[0], PROJECT_ID, DEVICE_ID, PROFILE_VERSION_ID, None, RECEIVED_AT), connection.executed[3])
         latest = connection.executed[1]
         self.assertEqual((PROJECT_ID, DEVICE_ID, sample[0], 'msg-1', sample[5], sample[6], sample[7]), latest)
         self.assertEqual(PROJECT_ID, sample[1])
@@ -122,6 +130,27 @@ class PostgresTelemetryIngestorTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual('idempotency_conflict', result.status)
         self.assertEqual(['idempotency_conflict'], [reason.code for reason in result.reasons])
         self.assertEqual([INSERT_INGEST_OUTCOME_SQL], connection.executed_sql)
+
+    async def test_evaluation_job_snapshots_the_equipment_linked_at_sample_time(self) -> None:
+        equipment_id = '123e4567-e89b-12d3-a456-426614174055'
+        connection = _FakeConnection(device={
+            'device_profile_version_id': UUID(PROFILE_VERSION_ID),
+            'version': 1,
+            'definition': DEFINITION,
+            'equipment_asset_id': UUID(equipment_id),
+            'received_at': RECEIVED_AT,
+        })
+
+        result = await PostgresTelemetryIngestor(_FakePool(connection)).ingest(
+            project_id=PROJECT_ID,
+            device_id=DEVICE_ID,
+            raw=RAW,
+            retained=False,
+            received_wall=RECEIVED_AT,
+        )
+
+        job = connection.executed[connection.executed_sql.index(INSERT_EVALUATION_JOB_SQL)]
+        self.assertEqual((result.sample.id, PROJECT_ID, DEVICE_ID, PROFILE_VERSION_ID, equipment_id, RECEIVED_AT), job)
 
     async def test_same_message_id_on_another_device_is_a_new_identity(self) -> None:
         other_device_id = '123e4567-e89b-12d3-a456-426614174003'
@@ -487,7 +516,7 @@ class _FakeConnection:
         self.fetchrow_calls.append((sql, *args))
         if sql == SELECT_DEVICE_CONTEXT_SQL:
             self.events.append('device.resolve')
-            return self.device
+            return None if self.device is None else {'equipment_asset_id': None, **self.device}
         if sql == MARK_DEVICE_PRESENCE_SQL:
             self.events.append('presence.update')
             self.presence_sql = sql

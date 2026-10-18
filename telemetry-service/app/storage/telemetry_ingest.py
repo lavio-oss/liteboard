@@ -11,6 +11,7 @@ from asyncpg.pool import Pool
 
 from app.storage.queries import (
     APPEND_OUTCOME_STAGE_SQL,
+    INSERT_EVALUATION_JOB_SQL,
     INSERT_INGEST_OUTCOME_SQL,
     INSERT_MESSAGE_IDENTITY_SQL,
     INSERT_SAMPLE_SQL,
@@ -188,7 +189,7 @@ class PostgresTelemetryIngestor:
                     received_at=received_at,
                     values=envelope.values,
                 )
-                await self._write_sample(connection, sample, inspection.content_hash)
+                await self._write_sample(connection, sample, inspection.content_hash, device['equipment_asset_id'])
                 outcome = await record('persisted', (), sample.message_id)
                 return IngestResult('persisted', processing_id, sample=sample, outcome=outcome, presence=presence)
 
@@ -220,7 +221,13 @@ class PostgresTelemetryIngestor:
             definition=json.loads(definition) if isinstance(definition, str) else definition,
         )
 
-    async def _write_sample(self, connection: Connection, sample: PersistedSample, content_hash: str | None) -> None:
+    async def _write_sample(
+        self,
+        connection: Connection,
+        sample: PersistedSample,
+        content_hash: str | None,
+        equipment_asset_id: Any,
+    ) -> None:
         values_json = json.dumps(
             sample.values,
             sort_keys=True,
@@ -258,6 +265,16 @@ class PostgresTelemetryIngestor:
             content_hash,
             sample.received_at,
         )
+        if sample.device_profile_version_id is not None:
+            await connection.execute(
+                INSERT_EVALUATION_JOB_SQL,
+                sample.id,
+                sample.project_id,
+                sample.device_id,
+                sample.device_profile_version_id,
+                None if equipment_asset_id is None else str(equipment_asset_id),
+                sample.received_at,
+            )
 
     async def _record_unresolved(
         self,

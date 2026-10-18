@@ -17,6 +17,7 @@ from app.realtime.presence_stream import device_presence_stream
 from app.realtime.stream import telemetry_stream
 from app.storage.presence import PostgresPresenceWriter
 from app.storage.presence_monitor import PostgresDevicePresenceMonitor
+from app.storage.rule_evaluation import DEFAULT_POLL_SECONDS, PostgresRuleEvaluator
 from app.storage.telemetry_ingest import PostgresTelemetryIngestor
 
 
@@ -45,6 +46,10 @@ async def lifespan(application: FastAPI):
     application.state.presence_hub = presence_hub
     presence_monitor = PostgresDevicePresenceMonitor(db_pool, presence_hub)
     application.state.presence_monitor = presence_monitor
+    rule_evaluator = PostgresRuleEvaluator(
+        db_pool,
+        poll_seconds=float(os.getenv('RULE_EVALUATION_POLL_SECONDS', str(DEFAULT_POLL_SECONDS))),
+    )
 
     mqtt_subscriber = MqttSubscriber(
         heartbeat_pipeline=[decode_json, MarkPresence(PostgresPresenceWriter(db_pool), presence_hub)],
@@ -55,19 +60,22 @@ async def lifespan(application: FastAPI):
     application.state.mqtt_subscriber = mqtt_subscriber
 
     presence_monitor_task: asyncio.Task[None] | None = None
+    rule_evaluator_task: asyncio.Task[None] | None = None
     try:
         await presence_monitor.refresh()
         presence_monitor_task = asyncio.create_task(presence_monitor.run())
+        rule_evaluator_task = asyncio.create_task(rule_evaluator.run())
         await mqtt_subscriber.connect_and_subscribe()
         application.state.mqtt_client = mqtt_subscriber.client
         yield
     finally:
-        if presence_monitor_task is not None:
-            presence_monitor_task.cancel()
-            try:
-                await presence_monitor_task
-            except asyncio.CancelledError:
-                pass
+        for task in (presence_monitor_task, rule_evaluator_task):
+            if task is not None:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
         await mqtt_subscriber.disconnect()
         await db_pool.close()
 

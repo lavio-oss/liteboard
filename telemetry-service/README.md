@@ -14,6 +14,9 @@
 | `app/storage/queries.py` | All SQL statements |
 | `app/realtime/` | WebSocket ticket verification, in-process fan-out hub, `/ws/telemetry` endpoint |
 | `app/pipeline/` | Stage runner used by the heartbeat path |
+| `app/rules/` | Pure IT-5 rule definition parsing and the per-sample evaluation state machine |
+| `app/storage/rule_evaluation.py` | Evaluator worker: per-device job batches, alert/state/history/outbox in one transaction |
+| `app/storage/alerting.py` | Alert history + outbox writes and the v1 event payload shared with Laravel |
 
 Business rules live in `app/telemetry/` and import nothing from asyncpg; test them with plain unit tests. The storage layer keeps the transaction invariants (the `FOR NO KEY UPDATE` device lock, taken at the strength the presence update needs so concurrent messages from one Device queue instead of deadlocking, the advisory lock around dedup, the `ON CONFLICT … WHERE` latest-value guard) in SQL on purpose; do not hide them behind a repository interface.
 
@@ -104,7 +107,11 @@ Unresolved messages create no sample and do not update presence. Central rows ke
 | `1013` | Connection cap reached |
 | `1011` | `TELEMETRY_WS_SECRET` is not configured (ingestion still runs) |
 
-`GET /health` reports process liveness. `GET /ready` probes PostgreSQL and the MQTT connection. REST history, aggregates, latest values, and message trace are served by Laravel. The service does not provide rule evaluation, automatic retention, TimescaleDB, Redis queues, or write batching. Committed samples are the durable source Phase 5 can replay.
+`GET /health` reports process liveness. `GET /ready` probes PostgreSQL and the MQTT connection. REST history, aggregates, latest values, and message trace are served by Laravel. The service does not provide automatic retention, TimescaleDB, Redis queues, or write batching.
+
+## Rule evaluation and alerts
+
+Committing a sample for a Device whose Profile has an active alert rule also inserts a `telemetry_evaluation_jobs` row in the same ingest transaction, snapshotting the Device's Equipment link. A background task (`PostgresRuleEvaluator`) polls pending jobs, takes a non-blocking per-device advisory lock, and evaluates that Device's jobs in `(received_at, sample_id)` order. One transaction updates `rule_evaluation_states`, opens/touches/clears `alerts`, appends `alert_events`, writes `outbox_events` (`ON CONFLICT (idempotency_key) DO NOTHING`) and marks the jobs evaluated, so replays, duplicate jobs and worker restarts never duplicate alerts or events. Windows use server `received_at`; a sample at or before the state cursor is stale and ignored. When the presence monitor moves a Device to offline it clears that Device's active alerts (`device_offline`) and resets rule windows in the same transaction. Laravel delivers outbox events to webhooks (`php artisan webhooks:dispatch`). Lock order is rule (`FOR SHARE`) → evaluation state → alert.
 
 ## Delivery limits
 
@@ -141,6 +148,7 @@ Docker Compose supplies these environment variables. Keep credentials in the loc
 | `DB_PASSWORD` | `liteboard` | PostgreSQL password |
 | `TELEMETRY_WS_SECRET` | empty | Shared ticket secret; must equal Laravel's value and be at least 32 characters, otherwise WebSocket connections close with `1011` |
 | `TELEMETRY_WS_MAX_CONNECTIONS` | `500` | Total WebSocket subscriber cap |
+| `RULE_EVALUATION_POLL_SECONDS` | `1` | Idle wait between evaluator polls |
 
 The PostgreSQL pool uses `min_size=1` and `max_size=5`.
 

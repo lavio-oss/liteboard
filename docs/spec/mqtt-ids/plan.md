@@ -123,7 +123,7 @@ Nếu không đạt, giữ POC như công cụ nghiên cứu/điều tra offline
 ## 8. Quan hệ với các spec hiện có
 
 - [Telemetry service flow hiện tại](../industrial-telemetry/telemetry-flow-current.md): contract ingest, trace, REST và WebSocket của LiteBoard.
-- [Industrial telemetry IT-5 — Rule, alert và webhook](../industrial-telemetry/phase-05-rules-alerts-webhook.md): alert nghiệp vụ theo rule; ML IDS không nằm trong slice này.
+- [Industrial telemetry — Rule, alert và webhook (mục 12)](../industrial-telemetry/telemetry-flow-current.md): alert nghiệp vụ theo rule; ML IDS không nằm trong slice này.
 - [Kế hoạch tổng thể](../../plan.md): IDS vẫn là hướng nghiên cứu tùy chọn; không đổi non-goal ML của các release đầu cho đến khi có POC và quyết định productization.
 
 ## 9. Tài liệu tham khảo

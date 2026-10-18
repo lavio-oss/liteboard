@@ -262,6 +262,14 @@ export interface TenantHierarchy {
   assets: Asset[]
 }
 
+// Minimum shape AdminTable needs to search and list a row.
+export interface SearchableRow {
+  id: string
+  name: string
+  code?: string
+  status?: string
+}
+
 export interface AdminTableRow {
   id: string
   name: string

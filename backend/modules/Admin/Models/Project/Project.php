@@ -13,11 +13,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Modules\Admin\Enums\Project\ProjectRole;
+use Modules\Admin\Models\Alert\Alert;
+use Modules\Admin\Models\AlertRule\AlertRule;
 use Modules\Admin\Models\Asset\Asset;
 use Modules\Admin\Models\Device\Device;
 use Modules\Admin\Models\DeviceProfile\DeviceProfile;
 use Modules\Admin\Models\DeviceProvisioning\DeviceProvisioningAudit;
 use Modules\Admin\Models\DeviceProvisioning\ProjectProvisioningProfile;
+use Modules\Admin\Models\Webhook\WebhookEndpoint;
 use Modules\Core\Models\Tenant\Tenant;
 use Modules\Core\Models\User\User;
 
@@ -55,6 +58,24 @@ final class Project extends Model
     public function deviceProfiles(): HasMany
     {
         return $this->hasMany(DeviceProfile::class);
+    }
+
+    /** @return HasMany<AlertRule, $this> */
+    public function alertRules(): HasMany
+    {
+        return $this->hasMany(AlertRule::class);
+    }
+
+    /** @return HasMany<Alert, $this> */
+    public function alerts(): HasMany
+    {
+        return $this->hasMany(Alert::class);
+    }
+
+    /** @return HasMany<WebhookEndpoint, $this> */
+    public function webhookEndpoints(): HasMany
+    {
+        return $this->hasMany(WebhookEndpoint::class);
     }
 
     /** @return HasOne<ProjectProvisioningProfile, $this> */

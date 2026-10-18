@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import unittest
 import json
 from datetime import datetime, timezone
@@ -87,6 +88,15 @@ class LifespanCompatibilityTest(unittest.IsolatedAsyncioTestCase):
             async def run(self) -> None:
                 return None
 
+        class FakeRuleEvaluator:
+            async def run(self) -> None:
+                events.append('rule_evaluator.run')
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    events.append('rule_evaluator.cancelled')
+                    raise
+
         pool = FakePool()
         subscriber = FakeSubscriber()
 
@@ -108,6 +118,7 @@ class LifespanCompatibilityTest(unittest.IsolatedAsyncioTestCase):
             patch('app.main.MarkPresence') as mark_presence_factory,
             patch('app.main.PostgresDevicePresenceMonitor', return_value=FakePresenceMonitor()) as presence_monitor_factory,
             patch('app.main.PostgresTelemetryIngestor') as ingestor_factory,
+            patch('app.main.PostgresRuleEvaluator', return_value=FakeRuleEvaluator()) as rule_evaluator_factory,
             patch('app.main.MqttSubscriber', return_value=subscriber) as subscriber_factory,
         ):
             async with lifespan(application):
@@ -115,9 +126,18 @@ class LifespanCompatibilityTest(unittest.IsolatedAsyncioTestCase):
                 self.assertIs(application.state.mqtt_client, subscriber.client)
                 self.assertIs(application.state.mqtt_subscriber, subscriber)
                 self.assertIsNotNone(application.state.presence_hub)
+                await asyncio.sleep(0)
 
         self.assertEqual(
-            ['pool.create', 'presence.refresh', 'mqtt.connect_and_subscribe', 'mqtt.disconnect', 'pool.close'],
+            [
+                'pool.create',
+                'presence.refresh',
+                'mqtt.connect_and_subscribe',
+                'rule_evaluator.run',
+                'rule_evaluator.cancelled',
+                'mqtt.disconnect',
+                'pool.close',
+            ],
             events,
         )
         create_pool_mock.assert_awaited_once_with(
@@ -133,6 +153,7 @@ class LifespanCompatibilityTest(unittest.IsolatedAsyncioTestCase):
         mark_presence_factory.assert_called_once_with(writer_factory.return_value, ANY)
         ingestor_factory.assert_called_once_with(pool)
         presence_monitor_factory.assert_called_once_with(pool, ANY)
+        rule_evaluator_factory.assert_called_once_with(pool, poll_seconds=1.0)
         subscriber_factory.assert_called_once_with(
             heartbeat_pipeline=[decode_json, mark_presence_factory.return_value],
             telemetry_ingestor=ingestor_factory.return_value,

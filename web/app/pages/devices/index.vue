@@ -47,8 +47,7 @@ const {
   rejectDevice: submitDeviceRejection,
   loadDeviceProfiles,
   loadDevices,
-  loadTenantHierarchy,
-  updateDevice
+  loadTenantHierarchy
 } = useAdmin()
 await loadTenants()
 
@@ -57,7 +56,6 @@ const formLoading = ref(false)
 const selectedProjectId = ref<string | null>(null)
 const selectedEquipmentAssetId = ref<string | null>(null)
 const selectedDeviceProfileVersionId = ref<string | null>(null)
-const editingDevice = ref<Device | null>(null)
 const deleteOpen = ref(false)
 const deleteLoading = ref(false)
 const deletingDevice = ref<Device | null>(null)
@@ -241,6 +239,20 @@ const filteredDevices = computed(() => devices.value.filter((device) => {
 
 const rows = computed<AdminTableRow[]>(() => filteredDevices.value)
 
+function projectNameFor(projectId: string | undefined): string {
+  if (projectId === undefined) {
+    throw new Error('The device project_id is missing.')
+  }
+
+  const project = projects.value.find(item => item.id === projectId)
+
+  if (project === undefined) {
+    throw new Error('The device project is not available.')
+  }
+
+  return project.name
+}
+
 function equipmentNameFor(equipmentAssetId: string | null | undefined): string {
   if (equipmentAssetId === null) {
     return '—'
@@ -260,24 +272,9 @@ function equipmentNameFor(equipmentAssetId: string | null | undefined): string {
 }
 
 function openCreate(): void {
-  editingDevice.value = null
   selectedProjectId.value = writableProjects.value[0]?.id ?? null
   selectedEquipmentAssetId.value = null
   selectedDeviceProfileVersionId.value = null
-  formOpen.value = true
-}
-
-function openEdit(deviceId: string): void {
-  const device = devices.value.find(item => item.id === deviceId)
-
-  if (device === undefined) {
-    throw new Error('The selected device is not available.')
-  }
-
-  editingDevice.value = device
-  selectedProjectId.value = device.project_id
-  selectedEquipmentAssetId.value = device.equipment_asset_id
-  selectedDeviceProfileVersionId.value = device.device_profile_version_id
   formOpen.value = true
 }
 
@@ -407,27 +404,16 @@ async function saveDevice(payload: DeviceInput): Promise<void> {
   formLoading.value = true
 
   try {
-    if (editingDevice.value === null) {
-      const createdDevice = await createDevice(activeTenantId.value, selectedProjectId.value, payload)
-      await refresh()
-      formOpen.value = false
-      credentialsDevice.value = createdDevice
-      credentialsOpen.value = true
-      toast.add({
-        title: 'Device created',
-        description: 'The device and its access token have been generated.',
-        color: 'success'
-      })
-    } else {
-      await updateDevice(activeTenantId.value, editingDevice.value.project_id, editingDevice.value.id, payload)
-      await refresh()
-      formOpen.value = false
-      toast.add({
-        title: 'Device updated',
-        description: 'The device has been saved.',
-        color: 'success'
-      })
-    }
+    const createdDevice = await createDevice(activeTenantId.value, selectedProjectId.value, payload)
+    await refresh()
+    formOpen.value = false
+    credentialsDevice.value = createdDevice
+    credentialsOpen.value = true
+    toast.add({
+      title: 'Device created',
+      description: 'The device and its access token have been generated.',
+      color: 'success'
+    })
   } catch (requestError: unknown) {
     if (!(requestError instanceof ApiError)) {
       throw requestError
@@ -490,6 +476,12 @@ const columns: TableColumn<AdminTableRow>[] = [
     id: 'code',
     accessorKey: 'code',
     header: 'Code'
+  },
+  {
+    id: 'project_id',
+    accessorKey: 'project_id',
+    header: 'Project',
+    cell: ({ row }) => projectNameFor(row.original.project_id)
   },
   {
     id: 'equipment_asset_id',
@@ -610,11 +602,11 @@ const columns: TableColumn<AdminTableRow>[] = [
 
       const actions: ReturnType<typeof h>[] = [
         h(UButton, {
-          'icon': 'i-lucide-activity',
+          'icon': 'i-lucide-eye',
           'color': 'neutral',
           'variant': 'ghost',
           'to': `/devices/${projectId}/${row.original.id}`,
-          'aria-label': `View telemetry for ${row.original.name}`
+          'aria-label': `View ${row.original.name}`
         })
       ]
 
@@ -648,14 +640,6 @@ const columns: TableColumn<AdminTableRow>[] = [
             'onClick': () => openCredentials(row.original.id)
           }))
         }
-
-        actions.push(h(UButton, {
-          'icon': 'i-lucide-pencil',
-          'color': 'neutral',
-          'variant': 'ghost',
-          'aria-label': `Edit ${row.original.name}`,
-          'onClick': () => openEdit(row.original.id)
-        }))
       }
 
       if (canDeleteProject(projectId)) {
@@ -751,7 +735,6 @@ const errorMessage = computed(() => {
         v-model:equipment-asset-id="selectedEquipmentAssetId"
         v-model:device-profile-version-id="selectedDeviceProfileVersionId"
         resource-type="device"
-        :resource="editingDevice"
         :project-options="writableProjectOptions"
         :equipment-asset-options="equipmentAssetOptions"
         :device-profiles="selectedProjectDeviceProfiles"

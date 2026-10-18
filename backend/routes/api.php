@@ -18,3 +18,6 @@ require base_path('modules/Admin/Routes/device.php');
 require base_path('modules/Admin/Routes/device-profile.php');
 require base_path('modules/Admin/Routes/device-provisioning.php');
 require base_path('modules/Admin/Routes/telemetry.php');
+require base_path('modules/Admin/Routes/alert-rule.php');
+require base_path('modules/Admin/Routes/alert.php');
+require base_path('modules/Admin/Routes/webhook.php');

@@ -9,6 +9,8 @@ import { useDevicePresenceStream } from '~/composables/useDevicePresenceStream'
 import type { TelemetryDeviceScope } from '~/composables/useTelemetry'
 import { useTelemetryStream } from '~/composables/useTelemetryStream'
 import { useTenantContext } from '~/composables/useTenantContext'
+import { canWriteProjectData } from '~/utils/projectPermissions'
+import type { DeviceInput } from '~/types/admin'
 import DevicePresenceStatus from '~/components/realtime/DevicePresenceStatus.vue'
 import TelemetryOutcomeStatus from '~/components/realtime/TelemetryOutcomeStatus.vue'
 import type {
@@ -50,8 +52,8 @@ const FUTURE_SKEW_MS = 5 * 60 * 1000
 
 const route = useRoute()
 const toast = useToast()
-const { activeTenantId } = useTenantContext()
-const { loadDevice } = useAdmin()
+const { activeTenantId, canManageActiveTenant } = useTenantContext()
+const { loadAssets, loadDevice, loadDeviceProfiles, loadProjects, updateDevice } = useAdmin()
 const {
   loadLatestTelemetry,
   loadMessageOutcomes,
@@ -99,6 +101,60 @@ const { data: deviceSnapshot, error: deviceError, refresh: refreshDevice } = awa
   { watch: [activeTenantId] }
 )
 
+// Everything the edit form needs; only fetched for users who may edit this device.
+const { data: editContext } = await useAsyncData(
+  `device-edit-context-${deviceId}`,
+  async () => {
+    const tenantId = activeTenantId.value
+
+    if (tenantId === null) {
+      return null
+    }
+
+    const project = (await loadProjects(tenantId)).find(item => item.id === projectId) ?? null
+
+    if (project === null || !canWriteProjectData(project.role, canManageActiveTenant.value)) {
+      return null
+    }
+
+    const [assets, deviceProfiles] = await Promise.all([
+      loadAssets(tenantId, projectId),
+      loadDeviceProfiles(tenantId, projectId)
+    ])
+
+    return { assets, deviceProfiles, project }
+  },
+  { watch: [activeTenantId] }
+)
+
+const editLoading = ref(false)
+const equipmentAssetOptions = computed(() => [
+  { label: 'No equipment asset', value: null },
+  ...(editContext.value?.assets ?? [])
+    .filter(asset => asset.asset_type === 'equipment')
+    .map(asset => ({ label: `${asset.name} (${asset.code})`, value: asset.id }))
+])
+
+async function saveDevice(payload: DeviceInput): Promise<void> {
+  const tenantId = activeTenantId.value
+
+  if (tenantId === null) {
+    throw new Error('An active tenant is required before saving a device.')
+  }
+
+  editLoading.value = true
+
+  try {
+    await updateDevice(tenantId, projectId, deviceId, payload)
+    await refreshDevice()
+    toast.add({ title: 'Device updated', description: 'The device has been saved.', color: 'success' })
+  } catch (error: unknown) {
+    notifyError(error, 'Unable to save device')
+  } finally {
+    editLoading.value = false
+  }
+}
+
 const devicePresence = ref<DevicePresenceEventData | null>(null)
 const device = computed(() => deviceSnapshot.value === null || deviceSnapshot.value === undefined
   ? null
@@ -119,11 +175,12 @@ const presenceStream = useDevicePresenceStream(() => activeTenantId.value, {
   }
 })
 
-const tabs = [
+const tabs = computed(() => [
   { label: 'Overview', value: 'overview', slot: 'overview' },
   { label: 'Telemetry', value: 'telemetry', slot: 'telemetry' },
-  { label: 'Message Inspector', value: 'inspector', slot: 'inspector' }
-]
+  { label: 'Message Inspector', value: 'inspector', slot: 'inspector' },
+  ...(editContext.value ? [{ label: 'Settings', value: 'settings', slot: 'settings' }] : [])
+])
 const activeTab = ref('overview')
 
 const latest = ref<TelemetryLatestValue[]>([])
@@ -766,6 +823,18 @@ async function openTrace(message: string): Promise<void> {
               />
             </div>
           </div>
+        </template>
+
+        <template #settings>
+          <AdminDeviceEditForm
+            v-if="editContext && device"
+            :device="device"
+            :project-name="editContext.project.name"
+            :equipment-asset-options="equipmentAssetOptions"
+            :device-profiles="editContext.deviceProfiles"
+            :loading="editLoading"
+            @submit="saveDevice"
+          />
         </template>
 
         <template #inspector>

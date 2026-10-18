@@ -55,6 +55,10 @@ const liteboardLinks = computed<NavigationMenuItem[]>(() => [{
   icon: 'i-lucide-router',
   to: '/devices',
   active: route.path.startsWith('/devices') || route.path.startsWith('/device-profiles')
+}, {
+  label: 'Alerts',
+  icon: 'i-lucide-bell-ring',
+  to: '/alerts'
 }])
 
 const links = computed<NavigationMenuItem[][]>(() => [
@@ -70,11 +74,13 @@ const groups = computed(() => [{
       icon: item.icon,
       to: item.to
     })),
-    ...(!isAdminWorkspace.value ? [{
-      label: 'Device Profiles',
-      icon: 'i-lucide-file-cog',
-      to: '/device-profiles'
-    }] : [])
+    ...(!isAdminWorkspace.value
+      ? [{
+          label: 'Device Profiles',
+          icon: 'i-lucide-file-cog',
+          to: '/device-profiles'
+        }]
+      : [])
   ]
 }, {
   id: 'code',

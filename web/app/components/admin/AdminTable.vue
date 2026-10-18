@@ -1,12 +1,12 @@
-<script setup lang="ts">
+<script setup lang="ts" generic="T extends SearchableRow">
 import type { TableColumn } from '@nuxt/ui'
 import { upperFirst } from 'scule'
 import { getPaginationRowModel } from '@tanstack/table-core'
-import type { AdminTableRow, ResourceStatus } from '~/types/admin'
+import type { ResourceStatus, SearchableRow } from '~/types/admin'
 
 const props = withDefaults(defineProps<{
-  columns: TableColumn<AdminTableRow>[]
-  data: AdminTableRow[]
+  columns: TableColumn<T>[]
+  data: T[]
   loading?: boolean
   searchPlaceholder: string
   showStatusFilter?: boolean
@@ -81,7 +81,7 @@ async function resetFilters(): Promise<void> {
   }
 }
 
-function getColumnKey(column: TableColumn<AdminTableRow>): string {
+function getColumnKey(column: TableColumn<T>): string {
   return column.id ?? 'column'
 }
 

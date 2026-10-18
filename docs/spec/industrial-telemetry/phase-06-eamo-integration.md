@@ -1,6 +1,6 @@
 # IT-6 — Event contract với EAMO
 
-> Trạng thái: kế hoạch; phụ thuộc IT-5 alert lifecycle, durable outbox và idempotent receiver contract.
+> Trạng thái: kế hoạch; phụ thuộc alert lifecycle, durable outbox và idempotent receiver contract (đã có, xem [mục 12 của flow hiện hành](./telemetry-flow-current.md#12-rule-alert-và-webhook-it-5)).
 
 ## Mục tiêu
 

@@ -6,6 +6,8 @@
 #include "device_config.h"
 
 constexpr unsigned long TELEMETRY_INTERVAL_MS = 5000;
+// Every Nth telemetry packet reports an over-temperature value (> 100 C) to exercise alert rules.
+constexpr unsigned long OVER_TEMPERATURE_EVERY_N_PACKETS = 3;
 constexpr int SCHEMA_VERSION = 1;
 constexpr time_t MIN_VALID_EPOCH = 1700000000;
 // Topic (~100 chars) + envelope payload (~150 chars) exceed PubSubClient's default 256-byte packet.
@@ -15,6 +17,7 @@ WiFiClientSecure wifiClient;
 PubSubClient mqttClient(wifiClient);
 
 unsigned long lastPublishAt = 0;
+unsigned long telemetryPacketCount = 0;
 float simulatedTemperature = 25.0F;
 char telemetryTopic[128];
 
@@ -74,6 +77,11 @@ float nextTemperature() {
   return simulatedTemperature;
 }
 
+float overTemperature() {
+  // 101.00 - 110.00 C, always above 100.
+  return 100.0F + random(100, 1001) / 100.0F;
+}
+
 void makeMessageId(char *out, size_t size) {
   // Random UUID v4, unique per message, well under the 128 character limit.
   uint32_t r[4];
@@ -106,7 +114,9 @@ void publishTelemetry() {
   gmtime_r(&nowEpoch, &utc);
   strftime(occurredAt, sizeof(occurredAt), "%Y-%m-%dT%H:%M:%SZ", &utc);
 
-  const float temperature = nextTemperature();
+  telemetryPacketCount++;
+  const bool overTemperatureSample = telemetryPacketCount % OVER_TEMPERATURE_EVERY_N_PACKETS == 0;
+  const float temperature = overTemperatureSample ? overTemperature() : nextTemperature();
   char payload[256];
   const int length = snprintf(
       payload,
@@ -128,7 +138,8 @@ void publishTelemetry() {
     Serial.print("Telemetry sent to ");
     Serial.print(telemetryTopic);
     Serial.print(": ");
-    Serial.println(payload);
+    Serial.print(payload);
+    Serial.println(overTemperatureSample ? " (over temperature)" : "");
   } else {
     Serial.println("Telemetry publish failed");
   }

@@ -136,6 +136,30 @@ services:
       redis:
         condition: service_healthy
 
+  webhook-dispatcher:
+    profiles: ['application']
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ['php', 'artisan', 'webhooks:dispatch']
+    restart: unless-stopped
+    environment:
+      APP_NAME: LiteBoard
+      APP_ENV: local
+      # Must match the backend APP_KEY: endpoint secrets are encrypted with it.
+      APP_KEY: ${APP_KEY:-base64:ZmFrZS1saXRlYm9hcmQta2V5LWZvci1sb2NhbC1kZXY=}
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: ${POSTGRES_DB:-liteboard}
+      DB_USERNAME: ${POSTGRES_USER:-liteboard}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-liteboard}
+      CACHE_STORE: array
+      WEBHOOKS_ALLOW_PRIVATE_DESTINATIONS: ${WEBHOOKS_ALLOW_PRIVATE_DESTINATIONS:-false}
+    depends_on:
+      backend:
+        condition: service_healthy
+
   telemetry-service:
     build:
       context: telemetry-service

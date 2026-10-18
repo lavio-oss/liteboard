@@ -16,6 +16,7 @@ Module/
 ├── Requests/<submodule>/
 ├── Resources/<submodule>/ # API representation
 ├── Services/<submodule>/
+├── Console/<submodule>/   # artisan commands (optional), registered by the module provider
 └── Routes/<submodule-kebab>.php
 ```
 
