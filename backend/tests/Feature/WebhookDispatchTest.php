@@ -14,6 +14,9 @@ use Modules\Core\Models\Tenant\Tenant;
 /** @var array<string, list<string>> $webhookDispatchDns */
 $GLOBALS['webhookDispatchDns'] = [];
 
+// The rule every fixture event comes from; the fixture endpoint lists it so its alerts are delivered.
+const WEBHOOK_DISPATCH_RULE_ID = '00000000-0000-4000-8000-0000000000a1';
+
 /** @return array{project: Project, endpoint: WebhookEndpoint} */
 function webhookDispatchFixture(): array
 {
@@ -28,10 +31,10 @@ function webhookDispatchFixture(): array
     Http::preventStrayRequests();
     $project = Project::factory()->for(Tenant::factory())->create();
 
-    return ['project' => $project, 'endpoint' => WebhookEndpoint::factory()->for($project)->create()];
+    return ['project' => $project, 'endpoint' => WebhookEndpoint::factory()->for($project)->create(['alert_rule_ids' => [WEBHOOK_DISPATCH_RULE_ID]])];
 }
 
-function webhookOutboxEvent(Project $project, string $type = 'alert.opened'): OutboxEvent
+function webhookOutboxEvent(Project $project, string $type = 'alert.opened', string $ruleId = WEBHOOK_DISPATCH_RULE_ID): OutboxEvent
 {
     $id = (string) Str::uuid();
     $alertId = (string) Str::uuid();
@@ -41,7 +44,9 @@ function webhookOutboxEvent(Project $project, string $type = 'alert.opened'): Ou
         'event_type' => $type,
         'aggregate_id' => $alertId,
         'idempotency_key' => "alert:$alertId:$type",
-        'payload' => json_encode(['id' => $id, 'type' => $type, 'project_id' => $project->getKey()]),
+        'payload' => json_encode([
+            'id' => $id, 'type' => $type, 'project_id' => $project->getKey(), 'alert' => ['rule_id' => $ruleId],
+        ]),
         'created_at' => now(),
     ]);
 
@@ -55,9 +60,10 @@ function webhookDispatcher(): WebhookDispatcher
 
 it('fans each event out once to enabled endpoints subscribed in the same project', function (): void {
     ['project' => $project, 'endpoint' => $endpoint] = webhookDispatchFixture();
-    $disabled = WebhookEndpoint::factory()->for($project)->create(['enabled' => false]);
-    $unsubscribed = WebhookEndpoint::factory()->for($project)->create(['event_types' => ['alert.cleared']]);
-    $foreign = WebhookEndpoint::factory()->for(Project::factory()->for(Tenant::factory()))->create();
+    $listing = ['alert_rule_ids' => [WEBHOOK_DISPATCH_RULE_ID]];
+    $disabled = WebhookEndpoint::factory()->for($project)->create([...$listing, 'enabled' => false]);
+    $unsubscribed = WebhookEndpoint::factory()->for($project)->create([...$listing, 'event_types' => ['alert.cleared']]);
+    $foreign = WebhookEndpoint::factory()->for(Project::factory()->for(Tenant::factory()))->create($listing);
     $event = webhookOutboxEvent($project);
 
     expect(webhookDispatcher()->fanOut())->toBe(1)
@@ -70,6 +76,25 @@ it('fans each event out once to enabled endpoints subscribed in the same project
     foreach ([$disabled, $unsubscribed, $foreign] as $skipped) {
         expect($skipped->deliveries()->exists())->toBeFalse();
     }
+});
+
+it('fans out only alerts of the rules an endpoint lists', function (): void {
+    ['project' => $project] = webhookDispatchFixture();
+    $ruleA = (string) Str::uuid();
+    $ruleB = (string) Str::uuid();
+    $onlyA = WebhookEndpoint::factory()->for($project)->create(['alert_rule_ids' => [$ruleA]]);
+    $both = WebhookEndpoint::factory()->for($project)->create(['alert_rule_ids' => [$ruleA, $ruleB]]);
+    $none = WebhookEndpoint::factory()->for($project)->create(['alert_rule_ids' => []]);
+    $fromA = webhookOutboxEvent($project, ruleId: $ruleA);
+    $fromB = webhookOutboxEvent($project, ruleId: $ruleB);
+
+    webhookDispatcher()->fanOut();
+
+    $targets = static fn (OutboxEvent $event): array => WebhookDelivery::query()
+        ->where('outbox_event_id', $event->getKey())->pluck('webhook_endpoint_id')->sort()->values()->all();
+    expect($targets($fromA))->toBe(collect([$onlyA->getKey(), $both->getKey()])->sort()->values()->all())
+        ->and($targets($fromB))->toBe([$both->getKey()])
+        ->and($none->deliveries()->exists())->toBeFalse();
 });
 
 it('delivers a signed request pinned to the checked address and marks success', function (): void {

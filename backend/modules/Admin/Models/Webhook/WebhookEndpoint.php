@@ -20,12 +20,13 @@ use Modules\Admin\Models\Project\Project;
  * @property string $url
  * @property string $secret
  * @property list<string> $event_types
+ * @property list<string> $alert_rule_ids
  * @property bool $enabled
  * @property CarbonImmutable|null $secret_rotated_at
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  */
-#[Fillable(['name', 'url', 'event_types', 'enabled'])]
+#[Fillable(['name', 'url', 'event_types', 'alert_rule_ids', 'enabled'])]
 #[Hidden(['secret'])]
 final class WebhookEndpoint extends Model
 {
@@ -44,6 +45,7 @@ final class WebhookEndpoint extends Model
         return [
             'secret' => 'encrypted',
             'event_types' => 'array',
+            'alert_rule_ids' => 'array',
             'enabled' => 'boolean',
             'secret_rotated_at' => 'immutable_datetime',
             'created_at' => 'immutable_datetime',

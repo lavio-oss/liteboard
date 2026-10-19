@@ -14,6 +14,7 @@ final class DatabaseSeeder extends Seeder
         $this->call([
             CoreDatabaseSeeder::class,
             AdminDatabaseSeeder::class,
+            DemoWorkflowSeeder::class,
         ]);
     }
 }

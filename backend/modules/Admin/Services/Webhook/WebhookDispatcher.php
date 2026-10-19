@@ -53,7 +53,8 @@ final class WebhookDispatcher
                     ->where('project_id', $event->project_id)
                     ->where('enabled', true)
                     ->get()
-                    ->filter(static fn (WebhookEndpoint $endpoint): bool => in_array($event->event_type, $endpoint->event_types, true))
+                    ->filter(static fn (WebhookEndpoint $endpoint): bool => in_array($event->event_type, $endpoint->event_types, true)
+                        && in_array(data_get($event->payload, 'alert.rule_id'), $endpoint->alert_rule_ids, true))
                     ->map(static fn (WebhookEndpoint $endpoint): array => [
                         'id' => (string) Str::uuid(),
                         'project_id' => $event->project_id,

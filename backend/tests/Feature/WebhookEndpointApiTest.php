@@ -1,6 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\DB;
+use Modules\Admin\Models\AlertRule\AlertRule;
+use Modules\Admin\Models\DeviceProfile\DeviceProfile;
 use Modules\Admin\Models\Project\Project;
 use Modules\Admin\Models\Webhook\WebhookEndpoint;
 use Modules\Admin\Services\Webhook\HostResolver;
@@ -79,6 +81,34 @@ it('updates endpoints and revalidates the destination', function (): void {
     $this->actingAs($owner)->patchJson("$base/{$endpoint->getKey()}", ['url' => 'https://internal.example.com/x'])
         ->assertUnprocessable()
         ->assertJsonValidationErrors('url');
+});
+
+it('stores the explicit rule list limited to rules of the same project', function (): void {
+    ['owner' => $owner, 'tenant' => $tenant, 'project' => $project, 'base' => $base] = webhookEndpointFixture();
+    $profile = DeviceProfile::factory()->for($project)->create();
+    $rule = AlertRule::factory()->forProfile($profile)->create();
+    $foreignRule = AlertRule::factory()->forProfile(DeviceProfile::factory()->for(Project::factory()->for($tenant))->create())->create();
+
+    $id = (string) $this->actingAs($owner)->postJson($base, webhookEndpointPayload())
+        ->assertCreated()
+        ->assertJsonPath('data.alert_rule_ids', [])
+        ->json('data.id');
+
+    $this->actingAs($owner)->patchJson("$base/$id", ['alert_rule_ids' => [$rule->getKey()]])
+        ->assertOk()
+        ->assertJsonPath('data.alert_rule_ids', [$rule->getKey()]);
+    $this->actingAs($owner)->patchJson("$base/$id", ['alert_rule_ids' => [$foreignRule->getKey()]])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('alert_rule_ids.0');
+    $this->actingAs($owner)->patchJson("$base/$id", ['alert_rule_ids' => [$rule->getKey(), $rule->getKey()]])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('alert_rule_ids.0');
+    $this->actingAs($owner)->patchJson("$base/$id", ['alert_rule_ids' => []])
+        ->assertOk()
+        ->assertJsonPath('data.alert_rule_ids', []);
+    $this->actingAs($owner)->patchJson("$base/$id", ['alert_rule_ids' => null])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('alert_rule_ids');
 });
 
 it('rejects unsafe or malformed endpoint definitions', function (array $overrides, string $errorKey): void {

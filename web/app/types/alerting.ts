@@ -85,6 +85,8 @@ export const webhookEndpointSchema = z.object({
   name: z.string(),
   url: z.string(),
   event_types: z.array(webhookEventTypeSchema),
+  // The endpoint only receives alerts of these rules; a new endpoint starts with none.
+  alert_rule_ids: z.array(z.string().uuid()),
   enabled: z.boolean(),
   secret_rotated_at: z.string().nullable(),
   created_at: z.string().nullable(),
@@ -152,6 +154,7 @@ export interface WebhookEndpointInput {
   name: string
   url: string
   event_types: WebhookEventType[]
+  alert_rule_ids?: string[]
   enabled: boolean
 }
 

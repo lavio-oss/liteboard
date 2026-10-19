@@ -18,7 +18,6 @@ export default defineNuxtPlugin({
       const parsed = colorPreferenceSchema.safeParse(themeCookie.value)
       if (parsed.success) {
         appConfig.ui.colors.primary = parsed.data.primary
-        appConfig.ui.colors.neutral = parsed.data.neutral
       }
     } else if (import.meta.client) {
       try {
@@ -27,7 +26,6 @@ export default defineNuxtPlugin({
           const parsed = colorPreferenceSchema.safeParse(JSON.parse(stored))
           if (parsed.success) {
             appConfig.ui.colors.primary = parsed.data.primary
-            appConfig.ui.colors.neutral = parsed.data.neutral
             themeCookie.value = parsed.data
           }
         }
@@ -38,10 +36,7 @@ export default defineNuxtPlugin({
 
     if (import.meta.client) {
       watch(
-        () => ({
-          primary: appConfig.ui.colors.primary,
-          neutral: appConfig.ui.colors.neutral
-        }),
+        () => ({ primary: appConfig.ui.colors.primary }),
         (preference) => {
           const parsed = colorPreferenceSchema.safeParse(preference)
           if (parsed.success) {

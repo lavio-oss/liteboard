@@ -5,6 +5,8 @@ namespace Modules\Admin\Requests\Webhook;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Validator;
+use LogicException;
+use Modules\Admin\Models\Project\Project;
 use Modules\Admin\Models\Webhook\WebhookEndpoint;
 use Modules\Core\Models\User\User;
 
@@ -26,10 +28,10 @@ final class UpdateWebhookEndpointRequest extends FormRequest
         return WebhookEndpointRules::rules('sometimes');
     }
 
-    /** @return array{name?: string, url?: string, event_types?: list<string>, enabled?: bool} */
+    /** @return array{name?: string, url?: string, event_types?: list<string>, alert_rule_ids?: list<string>, enabled?: bool} */
     public function endpointAttributes(): array
     {
-        /** @var array{name?: string, url?: string, event_types?: list<string>, enabled?: bool} $attributes */
+        /** @var array{name?: string, url?: string, event_types?: list<string>, alert_rule_ids?: list<string>, enabled?: bool} $attributes */
         $attributes = $this->validated();
 
         return $attributes;
@@ -37,6 +39,13 @@ final class UpdateWebhookEndpointRequest extends FormRequest
 
     public function withValidator(Validator $validator): void
     {
+        $project = $this->route('project');
+
+        if (! $project instanceof Project) {
+            throw new LogicException('The project route binding is required.');
+        }
+
+        WebhookEndpointRules::addProjectRules($validator, $project);
         $validator->after(static function (Validator $validator): void {
             WebhookEndpointRules::checkDestination($validator);
         });

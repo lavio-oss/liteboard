@@ -2,7 +2,8 @@ export default defineAppConfig({
   ui: {
     colors: {
       primary: 'green',
-      neutral: 'gray'
+      // Fixed: the neutral palette is not user-selectable.
+      neutral: 'neutral'
     },
     table: {
       slots: {

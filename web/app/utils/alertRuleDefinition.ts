@@ -1,3 +1,4 @@
+import type { DeviceProfile } from '~/types/admin'
 import type { AlertRuleDefinition, ComparisonOperator } from '~/types/alerting'
 
 // Mirrors backend AlertRuleDefinitionRules so the form explains problems before the request.
@@ -13,6 +14,20 @@ export const OPERATOR_LABELS: Record<ComparisonOperator, string> = {
 
 const isUpward = (operator: ComparisonOperator): boolean => operator === 'gt' || operator === 'gte'
 const isInclusive = (operator: ComparisonOperator): boolean => operator === 'gte' || operator === 'lte'
+
+/** Fields of the newest profile version; rules may only watch the numeric ones, as the API enforces. */
+export function latestProfileFields(profile: DeviceProfile) {
+  const latest = profile.versions.reduce<DeviceProfile['versions'][number] | undefined>(
+    (newest, version) => newest === undefined || version.version > newest.version ? version : newest,
+    undefined
+  )
+
+  return Object.entries(latest?.definition.fields ?? {}).map(([name, field]) => ({
+    name,
+    ...field,
+    numeric: field.type === 'integer' || field.type === 'float'
+  }))
+}
 
 /** Clear operators that point away from the trigger, e.g. trigger `>` → clear `<` or `≤`. */
 export function clearOperatorsFor(trigger: ComparisonOperator): ComparisonOperator[] {

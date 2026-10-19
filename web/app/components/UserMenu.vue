@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
 import { useDateTime } from '~/composables/useDateTime'
-import { neutralColors, primaryColors } from '~/utils/colorTheme'
+import { primaryColors } from '~/utils/colorTheme'
 
 defineProps<{
   collapsed?: boolean
@@ -103,18 +103,6 @@ const items = computed<DropdownMenuItem[][]>(() => ([
         onSelect(e: Event) {
           e.preventDefault()
           appConfig.ui.colors.primary = color
-        }
-      }))
-    }, {
-      label: 'Neutral color',
-      icon: 'i-lucide-circle-half',
-      children: neutralColors.map(color => ({
-        label: color,
-        type: 'checkbox' as const,
-        checked: appConfig.ui.colors.neutral === color,
-        onSelect(e: Event) {
-          e.preventDefault()
-          appConfig.ui.colors.neutral = color
         }
       }))
     }]

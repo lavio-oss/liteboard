@@ -21,3 +21,4 @@ require base_path('modules/Admin/Routes/telemetry.php');
 require base_path('modules/Admin/Routes/alert-rule.php');
 require base_path('modules/Admin/Routes/alert.php');
 require base_path('modules/Admin/Routes/webhook.php');
+require base_path('modules/Admin/Routes/overview.php');

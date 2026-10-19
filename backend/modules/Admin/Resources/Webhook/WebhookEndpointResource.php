@@ -25,6 +25,7 @@ final class WebhookEndpointResource extends JsonResource
             'name' => $endpoint->name,
             'url' => $endpoint->url,
             'event_types' => $endpoint->event_types,
+            'alert_rule_ids' => $endpoint->alert_rule_ids,
             'enabled' => $endpoint->enabled,
             'secret_rotated_at' => $endpoint->secret_rotated_at?->toISOString(),
             'created_at' => $endpoint->created_at?->toISOString(),

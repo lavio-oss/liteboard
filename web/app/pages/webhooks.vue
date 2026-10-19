@@ -12,7 +12,6 @@ definePageMeta({
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
 const toast = useToast()
-const { copy, copied } = useClipboard()
 const alerting = useAlerting()
 const {
   canAdminInSelectedProject,
@@ -410,35 +409,10 @@ const errorMessage = computed(() => {
         </template>
       </UModal>
 
-      <UModal
+      <AlertingWebhookSecretModal
         v-model:open="secretOpen"
-        title="Signing secret"
-        description="Copy it now. It is shown only once and cannot be retrieved later."
-      >
-        <template #body>
-          <div class="space-y-4">
-            <UInput
-              :model-value="revealedSecret"
-              readonly
-              class="w-full font-mono"
-            />
-            <p class="text-xs text-muted">
-              Verify requests with HMAC-SHA256 over <code>{timestamp}.{body}</code> and compare with
-              <code>X-LiteBoard-Signature: v1=…</code>.
-            </p>
-            <div class="flex justify-end gap-2">
-              <UButton
-                :label="copied ? 'Copied' : 'Copy'"
-                :icon="copied ? 'i-lucide-check' : 'i-lucide-copy'"
-                color="neutral"
-                variant="outline"
-                @click="copy(revealedSecret)"
-              />
-              <UButton label="Done" @click="secretOpen = false" />
-            </div>
-          </div>
-        </template>
-      </UModal>
+        :secret="revealedSecret"
+      />
 
       <AlertingWebhookDeliveriesModal
         v-model:open="deliveriesOpen"

@@ -11,7 +11,7 @@ final class WebhookEndpointFactory extends Factory
     protected $model = WebhookEndpoint::class;
 
     /**
-     * @return array{name: string, url: string, secret: string, event_types: list<string>, enabled: bool}
+     * @return array{name: string, url: string, secret: string, event_types: list<string>, alert_rule_ids: list<string>, enabled: bool}
      */
     public function definition(): array
     {
@@ -20,6 +20,7 @@ final class WebhookEndpointFactory extends Factory
             'url' => 'https://hooks.example.com/liteboard',
             'secret' => 'whsec_'.fake()->regexify('[A-Za-z0-9]{40}'),
             'event_types' => ['alert.opened', 'alert.cleared', 'alert.acknowledged', 'alert.severity_changed'],
+            'alert_rule_ids' => [],
             'enabled' => true,
         ];
     }

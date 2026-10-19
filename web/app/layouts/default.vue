@@ -41,7 +41,7 @@ const route = useRoute()
 const configurationPaths = ['/device-profiles', '/alert-rules', '/webhooks']
 
 const liteboardLinks = computed<NavigationMenuItem[]>(() => [{
-  label: 'Dashboard',
+  label: 'Overview',
   icon: 'i-lucide-layout-dashboard',
   to: '/'
 }, {
@@ -57,6 +57,10 @@ const liteboardLinks = computed<NavigationMenuItem[]>(() => [{
   icon: 'i-lucide-settings-2',
   to: '/device-profiles',
   active: configurationPaths.some(path => route.path.startsWith(path))
+}, {
+  label: 'Workflow',
+  icon: 'i-lucide-workflow',
+  to: '/workflows'
 }, {
   label: 'Alerts',
   icon: 'i-lucide-bell-ring',

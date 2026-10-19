@@ -8,8 +8,9 @@ import {
   webhookEndpointSecretResponseSchema,
   webhookEndpointsResponseSchema
 } from '../app/types/alerting.ts'
+import type { DeviceProfile } from '../app/types/admin.ts'
 import type { AlertRuleDefinition } from '../app/types/alerting.ts'
-import { clearOperatorsFor, describeAlertRule, validateAlertRuleDefinition } from '../app/utils/alertRuleDefinition.ts'
+import { clearOperatorsFor, describeAlertRule, latestProfileFields, validateAlertRuleDefinition } from '../app/utils/alertRuleDefinition.ts'
 
 const ids = {
   project: '00000000-0000-4000-8000-0000000000aa',
@@ -42,6 +43,26 @@ test('alert rule responses match the AlertRuleResource shape', () => {
   assert.equal(alertRuleResponseSchema.safeParse({ data: { ...rule, status: 'paused' } }).success, false)
 })
 
+test('canvas field palette reads the newest profile version and flags numeric fields', () => {
+  const version = (number: number, fields: DeviceProfile['versions'][number]['definition']['fields']) => ({
+    id: ids.revision, project_id: ids.project, device_profile_id: ids.profile, version: number, schema_code: `v${number}`,
+    definition: { strict_mode: true, fields }, compatibility_note: null, created_at: at, updated_at: at
+  })
+  const profile: DeviceProfile = {
+    id: ids.profile, project_id: ids.project, code: 'boiler', name: 'Boiler', description: null, created_at: at, updated_at: at,
+    versions: [
+      version(2, {
+        temperature: { type: 'float', unit: 'C', required: true },
+        mode: { type: 'string', unit: 'state', required: false }
+      }),
+      version(1, { pressure: { type: 'integer', unit: 'bar', required: true } })
+    ]
+  }
+
+  assert.deepEqual(latestProfileFields(profile).map(field => [field.name, field.numeric]), [['temperature', true], ['mode', false]])
+  assert.deepEqual(latestProfileFields({ ...profile, versions: [] }), [])
+})
+
 test('alert list and detail responses match the AlertResource shape', () => {
   const alert = {
     id: ids.alert, project_id: ids.project, device_id: ids.device, equipment_asset_id: null, alert_rule_id: ids.rule,
@@ -62,11 +83,12 @@ test('alert list and detail responses match the AlertResource shape', () => {
 test('webhook responses keep the secret outside data and only on create/rotate', () => {
   const endpoint = {
     id: ids.endpoint, project_id: ids.project, name: 'EAMO', url: 'https://hooks.example.com', event_types: ['alert.opened'],
-    enabled: true, secret_rotated_at: null, created_at: at, updated_at: at
+    alert_rule_ids: [], enabled: true, secret_rotated_at: null, created_at: at, updated_at: at
   }
 
   assert.equal(webhookEndpointSecretResponseSchema.safeParse({ data: endpoint, secret: 'whsec_x' }).success, true)
   assert.equal(webhookEndpointSecretResponseSchema.safeParse({ data: endpoint }).success, false)
+  assert.equal(webhookEndpointsResponseSchema.safeParse({ data: [{ ...endpoint, alert_rule_ids: null }] }).success, false)
   assert.equal('secret' in webhookEndpointsResponseSchema.parse({ data: [{ ...endpoint, secret: 'leak' }] }).data[0]!, false)
 
   const delivery = {

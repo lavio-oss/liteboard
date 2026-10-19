@@ -7,6 +7,7 @@ import {
   RULE_DURATION_SECONDS,
   RULE_GAP_SECONDS,
   clearOperatorsFor,
+  latestProfileFields,
   validateAlertRuleDefinition
 } from '~/utils/alertRuleDefinition'
 
@@ -75,17 +76,14 @@ const profileOptions = computed(() => props.profiles
   .filter(profile => profile.project_id === state.projectId && profile.versions.length > 0)
   .map(profile => ({ label: `${profile.name} (${profile.code})`, value: profile.id })))
 
-// Rules can only watch numeric fields of the newest profile version, as the API enforces.
 const fieldOptions = computed(() => {
   const profile = props.profiles.find(item => item.id === state.profileId)
-  const latest = profile?.versions.reduce<typeof profile.versions[number] | undefined>(
-    (newest, version) => newest === undefined || version.version > newest.version ? version : newest,
-    undefined
-  )
 
-  return Object.entries(latest?.definition.fields ?? {})
-    .filter(([, field]) => field.type === 'integer' || field.type === 'float')
-    .map(([name, field]) => ({ label: `${name} (${field.unit})`, value: name }))
+  return profile === undefined
+    ? []
+    : latestProfileFields(profile)
+        .filter(field => field.numeric)
+        .map(field => ({ label: `${field.name} (${field.unit})`, value: field.name }))
 })
 
 watch(() => state.triggerOperator, (trigger) => {

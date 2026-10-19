@@ -5,11 +5,9 @@ export const primaryColors = [
   'red', 'orange', 'amber', 'yellow', 'lime', 'green', 'emerald', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'violet', 'purple', 'fuchsia', 'pink', 'rose'
 ] as const
 
-export const neutralColors = ['slate', 'gray', 'zinc', 'neutral', 'stone', 'taupe', 'mauve', 'mist', 'olive'] as const
-
+// Only the primary colour is user-selectable; the neutral palette is fixed in app.config.ts.
 export const colorPreferenceSchema = z.object({
-  primary: z.enum(primaryColors),
-  neutral: z.enum(neutralColors)
+  primary: z.enum(primaryColors)
 })
 
 export type ColorPreference = z.infer<typeof colorPreferenceSchema>

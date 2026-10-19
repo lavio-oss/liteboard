@@ -12,6 +12,7 @@ export async function useAlertingProject() {
   const toast = useToast()
   const { isPlatformAdmin, loadTenants, tenants } = useTenantContext()
   const { loadProjects } = useAdmin()
+  const nuxtApp = useNuxtApp()
   await loadTenants()
 
   const tenantIds = computed(() => tenants.value.map(tenant => tenant.id))
@@ -21,12 +22,13 @@ export async function useAlertingProject() {
       .map(tenant => tenant.id)
   ))
 
-  const { data: projectsData, status: projectsStatus, error: projectsError } = await useAsyncData(
+  // The Nuxt context is lost after the await above, so re-enter it before calling a Nuxt composable.
+  const { data: projectsData, status: projectsStatus, error: projectsError } = await nuxtApp.runWithContext(() => useAsyncData(
     'liteboard-alerting-projects',
     () => Promise.all(tenants.value.map(tenant => loadProjects(tenant.id, { participating: true })))
       .then(lists => lists.flat()),
     { watch: [tenantIds] }
-  )
+  ))
 
   const projects = computed(() => projectsData.value ?? [])
   const selectedProjectId = ref<string | undefined>(undefined)
