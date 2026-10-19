@@ -4,6 +4,8 @@
 
 It provides a multi-tenant hierarchy (`Tenants` -> `Projects` -> `Factories` -> `Production Lines`), device management, telemetry streaming, and an interactive flow dashboard.
 
+![LiteBoard intro](docs/img/intro.png)
+
 ---
 
 ## Architecture & Project Structure
@@ -65,50 +67,15 @@ Start with the project map and local setup guide, then use the detailed referenc
 
 - **[docs/README.md](docs/README.md)** — Architecture, environment keys, ports, and local setup.
 - **[docs/plan.md](docs/plan.md)** — Master Project Plan & System Specifications.
+- **[docs/setup/](docs/setup/README.md)** — Setup guides for the backend, web, telemetry service, and Mosquitto.
+- **[docs/spec/](docs/spec/README.md)** — Feature specifications: auth, devices, industrial telemetry, MQTT IDS, and tenants.
 - **[infrastructure/mosquitto/README.md](infrastructure/mosquitto/README.md)** — Mosquitto MQTT Broker (`mosquitto-go-auth`) Setup, Authentication & Operations Guide.
 
 ---
 
 ## Getting Started
 
-Use the step-by-step [local setup guide](docs/README.md). It covers the Laravel key, MQTT TLS certificates, environment files, ports, Docker startup, simulator, and the optional host-local workflow.
-
-### Set the internal telemetry MQTT password
-
-`telemetry-service` uses an internal MQTT account to connect to Mosquitto and subscribe to telemetry and heartbeat topics. This password is for service-to-broker authentication; it is not a Device Access Token or the Mosquitto healthcheck password.
-
-From the repository root, create `.env` from the example if it does not already exist:
-
-```powershell
-if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-```
-
-Generate a unique random password, then put it in the root `.env` next to `docker-compose.yml`:
-
-```powershell
-$bytes = New-Object byte[] 32
-$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-$rng.GetBytes($bytes)
-[Convert]::ToBase64String($bytes)
-$rng.Dispose()
-```
-
-Set the username and replace the password placeholder with the generated value:
-
-```dotenv
-MQTT_INTERNAL_USERNAME=telemetry-service
-MQTT_INTERNAL_PASSWORD=replace-with-the-generated-value
-```
-
-Compose passes this same password to Mosquitto and `telemetry-service`. Mosquitto creates a bcrypt hash for its internal password file when it starts; the telemetry service uses the original password when connecting over MQTT TLS. Keep the real `.env` out of Git and do not use the Compose fallback password (`telemetry-service-secret`) in a deployed environment.
-
-After changing the password, recreate both services so they load the matching value:
-
-```powershell
-docker compose up -d --force-recreate mosquitto telemetry-service
-```
-
-See the [Mosquitto setup and operations guide](infrastructure/mosquitto/README.md) for broker authentication, ACLs, certificates, and troubleshooting.
+See the [setup guide](docs/setup/README.md) for local setup, environment files, and the internal telemetry MQTT password.
 
 ---
 ## Quality Checks & Testing
