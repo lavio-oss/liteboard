@@ -1,6 +1,17 @@
 # Mosquitto Setup
 
-The broker uses the `mosquitto-go-auth` image. Devices connect over **MQTT TLS on port `8883`**; there is no `1883` listener and no WebSocket `9001`. The broker authenticates Access Tokens and enforces per-topic ACLs through the `v_mqtt_users` and `v_mqtt_acls` views in PostgreSQL, with Redis as a cache (5 second TTL). Configuration lives in [infrastructure/mosquitto/](../../infrastructure/mosquitto/); the full operations guide is [infrastructure/mosquitto/README.md](../../infrastructure/mosquitto/README.md).
+The broker uses the `mosquitto-go-auth` image. Devices connect over **MQTT TLS on port `8883`**; there is no `1883` listener and no WebSocket `9001`. The broker authenticates Access Tokens and enforces per-topic ACLs through the `v_mqtt_users` and `v_mqtt_acls` views in PostgreSQL, with Redis as a cache (5 second TTL). Configuration lives in [infrastructure/mosquitto/](../../infrastructure/mosquitto/) (`mosquitto.conf`, `acls`, `generate-dev-certs.ps1`, and the Git-ignored `certs/`). Passwords for the internal accounts are never stored in Git: they are bcrypt-hashed from `.env` into `/tmp/mosquitto-passwords` on every container start.
+
+## Authentication and authorization
+
+The broker runs with `allow_anonymous false` and evaluates two backends in order:
+
+1. **`files`** (internal services, see `acls`): `telemetry-service` gets `readwrite` and `subscribe` on `liteboard/#`; `healthcheck` may only write to the `healthcheck` topic.
+2. **`postgres`** (Devices): the Device connects with `username = password = <ACCESS_TOKEN>`. Mosquitto hashes the username with SHA-256 and queries two views:
+   - `v_mqtt_users` requires the Device, Project, Tenant and credential to be active and `approved`, and checks the password against `mqtt_password_hash` (bcrypt).
+   - `v_mqtt_acls` isolates topics per Device. Publish: `liteboard/{project_id}/devices/{device_id}/telemetry`, `.../heartbeat`, `.../commands/ack`. Subscribe: `.../commands`.
+
+Results are cached in Redis for 5 seconds, so a revoked or rotated credential loses access within 5 seconds. Clients verify the server certificate and hostname; client certificates (mTLS) are not required.
 
 The broker needs:
 

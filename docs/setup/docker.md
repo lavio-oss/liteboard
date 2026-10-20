@@ -1,6 +1,6 @@
 # LiteBoard Setup Guide
 
-How to run each LiteBoard component. For the architecture overview and port map, see [docs/README.md](../README.md).
+How to run each LiteBoard component. For the architecture overview and port map, see [architecture.md](../architecture.md).
 
 | Component | Guide | Stack |
 |---|---|---|
@@ -8,6 +8,7 @@ How to run each LiteBoard component. For the architecture overview and port map,
 | Web | [web.md](web.md) | Nuxt 4, pnpm |
 | Telemetry service | [telemetry-service.md](telemetry-service.md) | FastAPI, gmqtt |
 | Mosquitto | [mosquitto.md](mosquitto.md) | `mosquitto-go-auth`, TLS `8883` |
+| ESP32 firmware | [esp32.md](esp32.md) | Arduino, `PubSubClient` |
 
 ## Run everything with Docker
 
@@ -78,3 +79,15 @@ docker compose --profile application up -d postgres redis mosquitto
 ```
 
 Do not run a component in Docker and on the host at the same time; they compete for the port. Stop the container first, for example `docker compose stop backend`.
+
+## Run the simulator
+
+Create a Device in the dashboard first, then set `SIMULATOR_PROJECT_ID`, `SIMULATOR_DEVICE_ID` and `SIMULATOR_DEVICE_ACCESS_TOKEN` in the root `.env` to that Device's values.
+
+```powershell
+docker compose --profile tools run --rm simulator
+```
+
+The simulator publishes every 5 seconds over TLS `8883`. Never commit the access token. A PLC without MQTT TLS support must go through a gateway; the broker has no plaintext listener.
+
+For first-time enrollment the simulator calls the HTTPS bootstrap endpoint and must trust that endpoint's CA. The ESP32 can use HTTP for a local smoke test when the backend allows insecure HTTP in the `local` environment; this does not verify TLS. Use Nginx or a staging HTTPS endpoint to validate real HTTPS. MQTT TLS on `8883` is handled separately by Mosquitto.

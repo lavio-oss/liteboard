@@ -1,4 +1,4 @@
-# Cài đặt LiteBoardSetup
+# ESP32: cài đặt LiteBoardSetup và firmware
 
 `LiteBoardSetup` là thư viện dùng chung của hai sketch LiteBoard trong `ESP32/`. Thư viện gom phần kết nối Wi-Fi và cấu hình MQTT qua TLS đã xác minh CA. Sketch Access Token và Provisioning vẫn tự quản lý luồng nghiệp vụ riêng.
 
@@ -54,8 +54,12 @@ Trong môi trường local, `infrastructure/mosquitto/generate-dev-certs.ps1` c�
 5. Cấu hình `ESP32/AccessToken/mqtt_ca_cert.h` như ở phần trên. Provisioning dùng CA MQTT chung đó để kết nối broker sau khi bootstrap.
 6. Mở `Provisioning.ino`, biên dịch và nạp firmware. Sau lần bootstrap đầu, credential được lưu trong Preferences/NVS để dùng lại sau reboot.
 
-Xem [luồng provisioning Access Token](../../../docs/spec/devices/current/devices_access_token.md#provisioning-device-flow). Khi chuyển môi trường, cập nhật provisioning URL và CA trong simulator/firmware. Chỉ nhúng public CA certificate, không nhúng private key.
+Xem [luồng provisioning Access Token](../spec/devices/current/devices_access_token.md#provisioning-device-flow). Khi chuyển môi trường, cập nhật provisioning URL và CA trong simulator/firmware. Chỉ nhúng public CA certificate, không nhúng private key.
 
 ## File local và bảo mật
 
 Các file thật sau đây bị ignore khỏi Git: `AccessToken/device_config.h`, `AccessToken/mqtt_ca_cert.h`, `Provisioning/provisioning_config.h` và `Provisioning/provisioning_ca_cert.h`. Chỉ các file `.example` chứa placeholder mới được đưa lên GitHub. Không commit Wi-Fi password, provisioning secret, Access Token hoặc certificate CA local; chỉ cài public CA certificate vào firmware, tuyệt đối không đưa CA private key vào sketch. Không tắt xác minh CA/hostname để xử lý lỗi kết nối.
+
+## Ghi chú thêm cho Provisioning
+
+Sketch dùng MQTT host do bootstrap trả về. Nếu tên DNS cục bộ như `mqtt.local` không phân giải được trên mạng của thiết bị, đặt `LB_MQTT_HOST_OVERRIDE` thành IP hoặc DNS broker mà thiết bị truy cập được và có trong SAN của certificate broker; xác minh TLS vẫn bật. Hai sketch dùng chung thư viện `ESP32/libraries/LiteBoardSetup`; `WiFi`, `WiFiClientSecure`, `HTTPClient`, `Preferences` và `cJSON` đi kèm ESP32 Arduino core.

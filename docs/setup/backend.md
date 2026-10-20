@@ -4,7 +4,7 @@ The backend lives in `backend/` and listens on port `8800`. It is the control pl
 
 ## Run with Docker
 
-This is part of [running everything with Docker](README.md#run-everything-with-docker). To start only the backend and its dependencies:
+This is part of [running everything with Docker](docker.md#run-everything-with-docker). To start only the backend and its dependencies:
 
 ```powershell
 docker compose --profile application up -d --build postgres redis backend

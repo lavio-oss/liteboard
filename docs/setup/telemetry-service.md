@@ -1,6 +1,6 @@
 # Telemetry Service Setup
 
-`telemetry-service/` is a FastAPI MQTT worker listening on port `8100`. It subscribes to telemetry and heartbeat topics on Mosquitto, writes samples, latest values, presence, and alerts to PostgreSQL, and pushes realtime events over WebSocket. Processing details are in [telemetry-service/README.md](../../telemetry-service/README.md).
+`telemetry-service/` is a FastAPI MQTT worker listening on port `8100`. It subscribes to telemetry and heartbeat topics on Mosquitto, writes samples, latest values, presence, and alerts to PostgreSQL, and pushes realtime events over WebSocket. Processing details are in [telemetry-flow.md](../spec/industrial-telemetry/current/telemetry-flow.md).
 
 The service needs three things running first:
 
@@ -62,7 +62,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8100
 | `TELEMETRY_WS_SECRET` | empty | Signs WebSocket tickets; must equal the backend value |
 | `TELEMETRY_WS_MAX_CONNECTIONS` | `500` | WebSocket connection cap |
 
-The full list is in [telemetry-service/README.md](../../telemetry-service/README.md#configuration).
+The full list is in [telemetry-flow.md](../spec/industrial-telemetry/current/telemetry-flow.md#15-cấu-hình-giới-hạn-delivery-và-kiểm-thử).
 
 ## Verify
 

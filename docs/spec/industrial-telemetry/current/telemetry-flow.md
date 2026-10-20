@@ -73,6 +73,20 @@ Heartbeat đi qua pipeline ngắn hơn: parse topic → decode JSON object → c
 - Device tồn tại đúng Project nhưng không được nhận ingest do chưa approved/inactive, hoặc Project/Tenant inactive: ghi outcome unresolved trong scope Device/Project đã xác nhận, với reason tương ứng. Các message này không cập nhật presence.
 - Lỗi lưu central record cho topic không hợp lệ hiện được log rồi ACK; không có sample nào bị ảnh hưởng vì topic không được nhận diện là telemetry hợp lệ.
 
+Bảng reason của các trường hợp không resolve được:
+
+| Trường hợp | Nơi ghi | Reason |
+| --- | --- | --- |
+| Device có trong Project của topic nhưng pending hoặc rejected | `telemetry_ingest_outcomes`, status `unresolved` | `device_not_approved` |
+| Device inactive | như trên | `device_inactive` |
+| Project inactive | như trên | `project_inactive` |
+| Tenant inactive | như trên | `tenant_inactive` |
+| Topic không khớp `liteboard/{uuid}/devices/{uuid}/{channel}` | `telemetry_unresolved_messages` (central) | `invalid_topic` |
+| Không có Device với ID đó | như trên | `device_not_found` |
+| Device thuộc Project khác | như trên | `project_mismatch` |
+
+Topic ID là dữ liệu không tin cậy: chỉ khi database xác nhận cặp `(project_id, device_id)` mới ghi dòng thuộc tenant. Dòng central chỉ giữ chuỗi topic, reason, kích thước payload và stages; chưa có retention job cho bảng này.
+
 ## 5. Contract payload
 
 ### 5.1 Device đã gắn Profile Version
@@ -144,6 +158,21 @@ Một transaction xử lý sample thường bao gồm presence update, sample, l
 
 **Giới hạn cần biết:** latest table lưu metric dạng tối đa 64 ký tự, trong khi nhánh chưa profile hiện không kiểm tra độ dài key metric tại ingress. Key vượt giới hạn làm PostgreSQL transaction lỗi và không tạo sample; chưa có reason code validation riêng cho trường hợp này. Aggregates chỉ chạy trên PostgreSQL và chỉ tính metric JSON number; string/boolean vẫn có thể xem ở latest/history.
 
+### Stage timeline và trạng thái outcome
+
+Mỗi message được xử lý nhận một `processing_id`. Cột `stages` của `telemetry_ingest_outcomes` ghi lần lượt `received`, `resolved`, `decoded`, `dedup_checked`, `validated` hoặc `schema_validation_skipped`, rồi `commit`; thoát sớm thì ghi ít stage hơn. Sau commit, nếu có ít nhất một WebSocket subscriber nhận outcome event, service thêm stage `broadcast` (kèm số subscriber) ngoài transaction ingest theo kiểu best-effort; lỗi ghi stage chỉ được log. Tối đa 256 lần ghi stage chạy đồng thời, vượt mức đó bị bỏ và log cảnh báo. Sample đã commit được gửi bằng một event riêng cho cùng message.
+
+| Status | Ý nghĩa |
+| --- | --- |
+| `persisted` | Sample đã lưu |
+| `rejected` | Bị từ chối do envelope, retained hoặc schema validation |
+| `duplicate` | Cùng `(device_id, message_id)` và nội dung với sample đã lưu |
+| `idempotency_conflict` | Cùng `(device_id, message_id)` nhưng nội dung khác |
+| `unresolved` | Device có trong Project của topic nhưng đang bị chặn |
+| `skipped` | Outcome lịch sử cho Device active chưa gắn Profile Version; message mới hợp lệ cơ bản được `persisted` |
+
+Latest values chỉ tiến về phía trước theo `(occurred_at, received_at, sample_id)`: sample đến muộn không ghi đè giá trị mới hơn, và metric vắng trong sample mới nhất giữ giá trị cuối. Laravel phục vụ các dòng này qua `GET …/devices/{device}/telemetry/latest`. Service đăng ký subscribe với `retain_as_published=True` và từ chối telemetry retained dựa trên thuộc tính `retain` của MQTT v5, trước dedup để replay retained không bị tính là duplicate; kiểm tra này chỉ áp dụng cho telemetry, không áp dụng cho heartbeat.
+
 ## 7. Device presence và trạng thái realtime
 
 Device presence, browser stream và ingest outcome là ba trạng thái khác nhau:
@@ -202,6 +231,18 @@ Ticket được Laravel ký HMAC-SHA256 và có TTL 60 giây. Client xin ticket 
 | /ws/device-presence?ticket=... | Một Tenant | device.presence gồm project_id, device_id, connection_state, last_seen_at, updated_at. |
 
 Service phát sample/outcome sau khi DB commit. Presence event cũng được phát sau khi presence update commit. Ghi stage broadcast là best-effort. Mỗi hub hiện chạy in-process, tối đa 500 kết nối theo cấu hình, queue 256 event mỗi subscriber; subscriber chậm bị ngắt với code 4008. Đây chưa phải fan-out dùng chung giữa nhiều telemetry-service instance. Event có thể mất trong lúc web disconnect nên REST snapshot/history/outcomes là đường recovery.
+
+Mã đóng WebSocket (áp dụng cho cả hai stream):
+
+| Code | Nguyên nhân |
+| --- | --- |
+| `4401` | Ticket thiếu, giả mạo hoặc hết hạn khi kết nối |
+| `4403` | Ticket hết hạn mà không gia hạn, gia hạn không hợp lệ hoặc gia hạn cho user/Device khác |
+| `4008` | Subscriber chậm: queue bị đầy |
+| `1013` | Đã đạt giới hạn số kết nối |
+| `1011` | `TELEMETRY_WS_SECRET` chưa được cấu hình (ingest vẫn chạy) |
+
+Client gửi `{"type": "renew", "ticket": "…"}` với ticket mới của cùng user và Device trước khi ticket hết hạn; nhờ đó quyền bị thu hồi có hiệu lực trong vòng 60 giây. Sự kiện phát lúc client mất kết nối không được phát lại; sau mỗi lần (re)connect client lấy phần thiếu từ REST history và recent outcomes, gộp outcome trùng theo `processing_id`.
 
 ## 9. Frontend hiện tại
 
@@ -335,9 +376,12 @@ Mỗi lần thử ghi webhook_delivery_attempts (mã HTTP, lỗi đã cắt 500 
 - Command/RPC có topic/ACL nền nhưng command API, trạng thái command và ACK processing chưa thuộc implementation telemetry hiện tại.
 - [Phase 6](../plan/phase-06-eamo-integration.md): giao alert event cho EAMO qua hàng đợi (Redis Streams) dựa trên alert/outbox hiện có; envelope có version, `sequence` theo alert, consumer contract, DLQ và mapping Equipment vẫn là kế hoạch.
 - Chưa có retention/partitioning/downsampling policy cho samples, dedup identity và outcomes.
+- Chưa có TimescaleDB, hàng đợi Redis hay gom nhóm ghi (write batching) trong telemetry-service; dòng central `telemetry_unresolved_messages` cũng chưa có retention job.
 - In-process event hubs cần thay hoặc bổ sung shared fan-out nếu chạy nhiều service replica.
 
 ## 14. Điểm vào code chính
+
+Cấu hình, giới hạn delivery và cách chạy test/L0 của telemetry-service nằm ở mục 15.
 
 | Phần | File |
 | --- | --- |
@@ -358,3 +402,81 @@ Mỗi lần thử ghi webhook_delivery_attempts (mã HTTP, lỗi đã cắt 500 
 | Màn Alerts | web/app/pages/alerts.vue, web/app/components/alerting/, web/app/composables/useAlerting.ts, web/app/types/alerting.ts |
 | Nullable profile version migration | backend/database/migrations/2026_10_15_174624_allow_profileless_telemetry_samples.php |
 | Test coverage | telemetry-service/tests/, web/tests/telemetryContract.test.ts, web/tests/alertingContract.test.ts, backend/tests/Feature/ (AlertRuleApiTest, AlertApiTest, Webhook*Test, AlertingStatsCommandTest) |
+
+### Cấu trúc module telemetry-service
+
+| Đường dẫn | Trách nhiệm |
+| --- | --- |
+| `app/ingress/mqtt_subscriber.py` | MQTT v5 client, parse topic, thời điểm PUBACK, broadcast sau commit |
+| `app/telemetry/envelope.py` | Parse envelope, giới hạn payload, canonical content hash, kiểm tra future skew |
+| `app/telemetry/validation.py` | Validate theo Profile Version và reason từ chối |
+| `app/telemetry/decisions.py` | Luật ingest thuần: phân loại unresolved, duplicate/conflict, nhận hoặc từ chối |
+| `app/storage/telemetry_ingest.py` | Chạy decisions trong một transaction PostgreSQL: đọc trạng thái, lấy khóa, ghi dòng |
+| `app/storage/queries.py` | Toàn bộ câu SQL |
+| `app/realtime/` | Xác thực ticket WebSocket, hub fan-out trong process, endpoint `/ws/telemetry` và `/ws/device-presence` |
+| `app/pipeline/` | Stage runner dùng cho đường heartbeat |
+| `app/rules/` | Parse định nghĩa rule (thuần) và state machine đánh giá từng sample |
+| `app/storage/rule_evaluation.py` | Evaluator: batch job theo Device, ghi alert/state/history/outbox trong một transaction |
+| `app/storage/alerting.py` | Ghi alert history + outbox và payload event v1 dùng chung với Laravel |
+
+Luật nghiệp vụ nằm ở `app/telemetry/` và không import asyncpg nên test bằng unit test thuần. Các bất biến transaction (khóa Device `FOR NO KEY UPDATE` để message đồng thời của một Device xếp hàng thay vì deadlock, advisory lock quanh dedup, guard `ON CONFLICT … WHERE` của latest value) được cố ý để ở SQL, không giấu sau repository interface.
+
+## 15. Cấu hình, giới hạn delivery và kiểm thử
+
+Docker Compose cấp các biến môi trường sau. Giữ credential trong cấu hình môi trường cục bộ, ngoài source control.
+
+| Biến | Mặc định trong service Python | Ý nghĩa |
+| --- | --- | --- |
+| `MQTT_HOST` | `localhost` | Hostname TLS của Mosquitto |
+| `MQTT_PORT` | `8883` | Cổng TLS của Mosquitto |
+| `MQTT_TLS_CA_FILE` | `/run/secrets/mqtt_tls_ca_certificate` | CA dùng để xác minh broker |
+| `MQTT_USERNAME`, `MQTT_PASSWORD` | rỗng | Tài khoản MQTT nội bộ (nếu đặt `MQTT_USERNAME` thì bật xác thực username) |
+| `MQTT_CLIENT_ID` | `liteboard-telemetry-service` | ID ổn định cho persistent session; chạy đúng một replica cho mỗi ID |
+| `MQTT_SESSION_EXPIRY_SECONDS` | `2147483647` | Thời gian sống của persistent session MQTT v5 |
+| `MQTT_RECEIVE_MAXIMUM` | `20` | Cửa sổ nhận của subscriber MQTT v5 |
+| `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` | `localhost`, `5432`, `liteboard`, `liteboard`, `liteboard` | PostgreSQL |
+| `TELEMETRY_WS_SECRET` | rỗng | Secret ký ticket; phải bằng giá trị của Laravel và dài ít nhất 32 ký tự, nếu không WebSocket đóng với `1011` |
+| `TELEMETRY_WS_MAX_CONNECTIONS` | `500` | Giới hạn tổng subscriber WebSocket |
+| `RULE_EVALUATION_POLL_SECONDS` | `1` | Thời gian chờ giữa các lần poll khi evaluator rảnh |
+
+Pool PostgreSQL dùng `min_size=1`, `max_size=5`. **Chạy migration Laravel trước khi chạy phiên bản service mới:** SQL ingest ghi `processing_id`, `stages`, `telemetry_latest_values` và `telemetry_unresolved_messages`; với schema cũ mọi lần ingest đều lỗi, không message nào được ACK và broker liên tục gửi lại.
+
+Giới hạn công việc đang bay và hàng đợi offline:
+
+| Cài đặt | Mặc định | Mục đích |
+| --- | ---: | --- |
+| `MQTT_SESSION_EXPIRY_SECONDS` | `2147483647` | Giữ persistent session qua các lần khởi động lại worker |
+| `MQTT_RECEIVE_MAXIMUM` | `20` | Giới hạn message chưa ACK được gửi tới subscriber |
+| Mosquitto `max_inflight_messages` | `20` | Giới hạn message QoS chưa ACK phía broker |
+| Mosquitto `max_queued_messages` | `1000` | Giới hạn số message xếp hàng của mỗi session offline |
+| Mosquitto `max_queued_bytes` | `67108864` | Giới hạn 64 MiB byte xếp hàng |
+
+Chạm giới hạn hàng đợi của broker là tình trạng suy giảm: không tính một lần chạy L0 là đạt nếu message bị bỏ vì đầy backlog.
+
+### Chạy test
+
+Từ thư mục `telemetry-service/`:
+
+```powershell
+python -m unittest discover -s tests -p "test_*.py"
+```
+
+- `test_decisions.py`, `test_envelope.py`, `test_validate_telemetry.py` phủ các luật thuần.
+- `test_telemetry_ingest.py` kiểm tra cách decisions được ghi và ranh giới transaction bằng connection giả.
+- Test endpoint WebSocket trong `test_realtime.py` cần `httpx` cho `TestClient` của Starlette. Gói này không nằm trong `requirements.txt`; không cài thì các test đó bị bỏ qua.
+- Test tích hợp PostgreSQL dùng database riêng đã áp dụng migration Laravel; đặt `TELEMETRY_TEST_DATABASE_URL` trỏ tới database dùng một lần đó. Chúng phủ persistence, dedup, thứ tự latest value với sample muộn và metric thiếu, stage timeline và cả hai đường unresolved.
+- Test tích hợp Mosquitto cần `TELEMETRY_TEST_MQTT_HOST`, `TELEMETRY_TEST_MQTT_CA_FILE`, `TELEMETRY_TEST_MQTT_USERNAME`, `TELEMETRY_TEST_MQTT_PASSWORD`; chúng kiểm tra QoS 1 gửi lại sau lỗi storage giả lập và xử lý telemetry retained.
+
+### Chạy L0 phát triển
+
+Dùng database PostgreSQL dùng một lần đã migrate và một broker Mosquitto cô lập cho phép anonymous, với các giới hạn backlog ở trên:
+
+```powershell
+$env:TELEMETRY_TEST_DATABASE_URL = 'postgresql://user:password@localhost:55432/liteboard'
+$env:MQTT_HOST = 'localhost'
+$env:MQTT_PORT = '18884'
+$env:TELEMETRY_L0_INSECURE_TEST_BROKER = '1'
+python tests/run_l0_load.py
+```
+
+Runner gửi 10 luồng Device độc lập, mỗi luồng 1 message/giây trong năm phút, đối chiếu message logic với outcome đã commit, báo p50/p95/p99 độ trễ transaction, độ trễ database, số callback đang chạy tối đa, số message chưa commit và bộ nhớ Python, rồi chạy riêng một probe phục hồi QoS 1. Kết quả L0 đã ghi nhận (IT-3, trước khi có latest-value upsert và stage tracking của IT-4) nằm ở mục 11, kèm các số bổ sung: độ trễ database trung bình 14,005 ms, tối đa 3 callback đang chạy và 3 message chưa commit, đỉnh tracemalloc 0,705 MiB. Vì IT-4 thêm latest-value upsert và stage tracking, cần chạy lại L0 trước khi dựa vào các số này; độ trễ từng stage đo được từ cột `stages`. Các kết quả này dùng broker/database cô lập local, không khẳng định công suất pilot; độ sâu hàng đợi broker và fault injection lúc chạy vẫn cần kiểm chứng trên môi trường đích.

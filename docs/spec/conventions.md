@@ -31,6 +31,6 @@ Thứ tự đọc gợi ý cho người mới: tenant, auth, devices, industrial
 
 ## Tài liệu liên quan ngoài `spec/`
 
-- [Tổng quan tài liệu](../README.md) và [kế hoạch tổng thể](../plan.md).
+- [Kiến trúc](../architecture.md) và [kế hoạch tổng thể](../plan.md).
 - [Data contract integrity](../DATA_CONTRACT_INTEGRITY_RULE.md) và [Request handling](../Request_Handling.md): quy tắc bắt buộc khi đổi schema, API hoặc xử lý request.
 - [Cấu trúc module backend](../modules.md).

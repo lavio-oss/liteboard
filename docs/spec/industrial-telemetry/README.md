@@ -15,7 +15,7 @@ IT-1 đến IT-5 đã được gom vào một tài liệu. Mô tả phản ánh 
 
 | Tài liệu | Nội dung |
 | --- | --- |
-| [Telemetry service, Control Plane và frontend](./current/telemetry-flow.md) | Ownership/tenant scope, payload MQTT, ingest transaction, profile validation và profile-less persistence, PostgreSQL, presence, REST, WebSocket, trace, rule/alert/outbox/webhook, UI, giới hạn đã biết |
+| [Telemetry service, Control Plane và frontend](./current/telemetry-flow.md) | Ownership/tenant scope, stage/outcome, WebSocket close code, cấu hình, giới hạn delivery, test và L0, payload MQTT, ingest transaction, profile validation và profile-less persistence, PostgreSQL, presence, REST, WebSocket, trace, rule/alert/outbox/webhook, UI, giới hạn đã biết |
 
 ## Kế hoạch
 

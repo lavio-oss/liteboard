@@ -41,8 +41,7 @@ LiteBoardv2/
 ├── infrastructure/        # Infrastructure configs (Eclipse Mosquitto MQTT broker)
 │   └── mosquitto/
 │
-├── docs/                  # Project documentation & architectural plans
-│   └── plan.md            # Master project roadmap and system architecture specifications
+├── docs/                  # architecture.md, plan.md, setup/ (how to run), spec/ (per-area specs)
 │
 ├── AGENTS.md              # Repository guidelines, rules, and testing standards
 ├── docker-compose.yml     # Multi-service local deployment orchestrator
@@ -63,19 +62,27 @@ LiteBoardv2/
 
 ## Documentation
 
-Start with the project map and local setup guide, then use the detailed references:
-
-- **[docs/README.md](docs/README.md)** — Architecture, environment keys, ports, and local setup.
-- **[docs/plan.md](docs/plan.md)** — Master Project Plan & System Specifications.
-- **[docs/setup/](docs/setup/README.md)** — Setup guides for the backend, web, telemetry service, and Mosquitto.
-- **[docs/spec/](docs/spec/README.md)** — Feature specifications: auth, devices, industrial telemetry, MQTT IDS, and tenants.
-- **[infrastructure/mosquitto/README.md](infrastructure/mosquitto/README.md)** — Mosquitto MQTT Broker (`mosquitto-go-auth`) Setup, Authentication & Operations Guide.
+| Topic | Document |
+|---|---|
+| Architecture, components, ports, keys | [docs/architecture.md](docs/architecture.md) |
+| Master plan and system specification | [docs/plan.md](docs/plan.md) |
+| Run everything with Docker, root `.env` | [docs/setup/docker.md](docs/setup/docker.md) |
+| Backend / Web / Telemetry service | [backend](docs/setup/backend.md) · [web](docs/setup/web.md) · [telemetry-service](docs/setup/telemetry-service.md) |
+| Mosquitto broker (TLS, auth, ACL) | [docs/setup/mosquitto.md](docs/setup/mosquitto.md) |
+| ESP32 firmware | [docs/setup/esp32.md](docs/setup/esp32.md) |
+| Spec conventions (`current/` vs `plan/`) | [docs/spec/conventions.md](docs/spec/conventions.md) |
+| Tenant, Project, Asset | [README](docs/spec/tenant/README.md) · [master data](docs/spec/tenant/current/tenant-project-asset.md) · [tenant management](docs/spec/tenant/current/tenant-management.md) |
+| Auth | [README](docs/spec/auth/README.md) · [authentication](docs/spec/auth/current/authentication.md) · [access control](docs/spec/auth/current/access-control.md) · [backend ↔ telemetry](docs/spec/auth/current/telemetry-service-auth.md) |
+| Devices | [README](docs/spec/devices/README.md) · [Access Token](docs/spec/devices/current/devices_access_token.md) · [roadmap](docs/spec/devices/plan/future_device_security_and_ingestion_plan.md) · [phase 7](docs/spec/devices/plan/phase-7-mqtt-tls-server-certificate.md) · [phase 8](docs/spec/devices/plan/phase-8-quotas-and-rate-limiting.md) · [phase 9](docs/spec/devices/plan/phase-9-schema-validation-and-replay-protection.md) |
+| Industrial telemetry | [README](docs/spec/industrial-telemetry/README.md) · [telemetry flow](docs/spec/industrial-telemetry/current/telemetry-flow.md) · [phase 6: EAMO](docs/spec/industrial-telemetry/plan/phase-06-eamo-integration.md) |
+| MQTT IDS (research) | [README](docs/spec/mqtt-ids/README.md) · [POC plan](docs/spec/mqtt-ids/plan/mqtt-ids-poc.md) |
+| Mandatory rules | [Data contract integrity](docs/DATA_CONTRACT_INTEGRITY_RULE.md) · [Request handling](docs/Request_Handling.md) · [Backend modules](docs/modules.md) |
 
 ---
 
 ## Getting Started
 
-See the [setup guide](docs/setup/README.md) for local setup, environment files, and the internal telemetry MQTT password.
+Follow [docs/setup/docker.md](docs/setup/docker.md) for local setup, environment files, and the internal telemetry MQTT password.
 
 ---
 ## Quality Checks & Testing
