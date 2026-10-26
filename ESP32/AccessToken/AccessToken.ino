@@ -1,9 +1,12 @@
 #include <WiFi.h>
+#include <WiFiClient.h>
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <LiteBoardSetup.h>
-#include "mqtt_ca_cert.h"
 #include "device_config.h"
+#if LB_MQTT_TLS
+#include "mqtt_ca_cert.h"
+#endif
 
 constexpr unsigned long TELEMETRY_INTERVAL_MS = 5000;
 // Every Nth telemetry packet reports an over-temperature value (> 100 C) to exercise alert rules.
@@ -13,7 +16,11 @@ constexpr time_t MIN_VALID_EPOCH = 1700000000;
 // Topic (~100 chars) + envelope payload (~150 chars) exceed PubSubClient's default 256-byte packet.
 constexpr uint16_t MQTT_BUFFER_SIZE = 512;
 
+#if LB_MQTT_TLS
 WiFiClientSecure wifiClient;
+#else
+WiFiClient wifiClient;
+#endif
 PubSubClient mqttClient(wifiClient);
 
 unsigned long lastPublishAt = 0;
@@ -154,8 +161,12 @@ void setup() {
 
   connectWiFi();
   syncTime();
+#if LB_MQTT_TLS
   LiteBoardSetup::configureMqttTls(
       wifiClient, mqttClient, LB_MQTT_CA_CERT, LB_HOST, LB_PORT);
+#else
+  LiteBoardSetup::configureMqtt(mqttClient, LB_HOST, LB_PORT);
+#endif
   mqttClient.setBufferSize(MQTT_BUFFER_SIZE);
   connectLiteBoard();
 }

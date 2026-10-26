@@ -43,6 +43,10 @@ arduino-cli compile --libraries .\ESP32\libraries --fqbn <your-board-fqbn> .\ESP
 3. Sao chép `mqtt_ca_cert.h.example` thành `mqtt_ca_cert.h`, rồi thay nội dung placeholder bằng **public CA certificate** đã ký chứng chỉ MQTT broker.
 4. Mở `AccessToken.ino`, biên dịch và nạp firmware.
 
+### Thử nhanh qua cổng playground `1883` (không TLS)
+
+Dùng sketch riêng `ESP32/AccessTokenNoTls/AccessTokenNoTls.ino`: sao chép `device_config.h.example` thành `device_config.h`, điền Wi-Fi, host, Project ID, Device ID, Access Token và topic (hoặc dán đoạn Firmware config từ modal Credentials). Sketch này chỉ dùng `WiFiClient` thường, không có `mqtt_ca_cert.h` và host không cần nằm trong SAN. Trước đó phải bật **Allow connection without TLS** cho Device. Cũng có thể dùng `AccessToken.ino` với `LB_PORT = 1883` và `#define LB_MQTT_TLS 0`. Access Token đi không mã hóa trên cổng này nên chỉ dùng để thử; **rotate token rồi chuyển về `8883` + `LB_MQTT_TLS 1`** trước khi dùng thật. Sketch Provisioning luôn dùng TLS.
+
 Trong môi trường local, `infrastructure/mosquitto/generate-dev-certs.ps1` có thể tạo certificate và file CA header cho sketch. Script từ chối ghi đè các certificate đã tồn tại; nếu đã có certificate/CA trong workspace, giữ nguyên chúng và không chạy lại script.
 
 ## Cấu hình HTTPS Provisioning

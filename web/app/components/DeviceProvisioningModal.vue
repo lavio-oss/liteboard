@@ -61,7 +61,7 @@ watch(() => props.tenantId, () => {
           <span class="font-mono font-semibold text-highlighted">HTTPS</span>
           <span class="text-muted/60">·</span>
           <UBadge
-            color="primary"
+            color="success"
             variant="subtle"
             size="sm"
           >

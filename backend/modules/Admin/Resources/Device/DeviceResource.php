@@ -87,6 +87,7 @@ final class DeviceResource extends JsonResource
             'approval_status' => $approvalStatus->value,
             'approval_reason' => $approvalReason,
             'connection_state' => $connectionState->value,
+            'allow_plaintext' => (bool) $device->getAttribute('allow_plaintext'),
             'credential_type' => $credentialType->value,
             'credential_status' => $credentialStatus->value,
             'mqtt_topics' => app(DeviceCredentialService::class)->mqttTopicsFor($device),

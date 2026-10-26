@@ -7,9 +7,15 @@ export const deviceMqttTopicsSchema = z.object({
   commands_ack: z.string()
 })
 
+export const deviceMqttEndpointSchema = z.object({
+  port: z.number().int().positive(),
+  tls: z.boolean()
+})
+
 export const deviceMqttConnectionSchema = z.object({
   host: z.string().min(1),
-  port: z.literal(8883),
-  tls: z.literal(true),
+  endpoints: z.array(deviceMqttEndpointSchema).min(1).refine(endpoints => endpoints.some(endpoint => endpoint.tls), {
+    message: 'At least one MQTT endpoint must use TLS.'
+  }),
   topics: deviceMqttTopicsSchema
 })

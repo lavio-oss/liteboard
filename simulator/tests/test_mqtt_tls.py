@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app.mqtt_tls import build_mqtt_ssl_context
+from app.mqtt_tls import build_mqtt_ssl_context, select_tls_endpoint
 
 
 class BuildMqttSslContextTest(unittest.TestCase):
@@ -39,3 +39,14 @@ class BuildMqttSslContextTest(unittest.TestCase):
 
             with self.assertRaises(ssl.SSLError):
                 build_mqtt_ssl_context(str(ca_file))
+
+
+class SelectTlsEndpointTest(unittest.TestCase):
+    def test_skips_the_plaintext_endpoint(self) -> None:
+        mqtt = {'endpoints': [{'port': 1883, 'tls': False}, {'port': 8883, 'tls': True}]}
+
+        self.assertEqual({'port': 8883, 'tls': True}, select_tls_endpoint(mqtt))
+
+    def test_fails_instead_of_falling_back_to_plaintext(self) -> None:
+        with self.assertRaisesRegex(ValueError, 'no TLS endpoint'):
+            select_tls_endpoint({'endpoints': [{'port': 1883, 'tls': False}]})

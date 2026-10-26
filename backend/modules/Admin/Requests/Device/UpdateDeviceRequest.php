@@ -36,6 +36,7 @@ final class UpdateDeviceRequest extends FormRequest
             'equipment_asset_id' => ['sometimes', 'nullable', 'bail', 'uuid'],
             'device_profile_version_id' => ['sometimes', 'nullable', 'bail', 'uuid'],
             'status' => ['sometimes', Rule::enum(DeviceStatus::class)],
+            'allow_plaintext' => ['sometimes', 'boolean'],
             'approval_status' => ['prohibited'],
             'tenant_id' => ['prohibited'],
             'project_id' => ['prohibited'],
@@ -49,7 +50,8 @@ final class UpdateDeviceRequest extends FormRequest
      *     description?: string|null,
      *     equipment_asset_id?: string|null,
      *     device_profile_version_id?: string|null,
-     *     status?: string
+     *     status?: string,
+     *     allow_plaintext?: bool
      * }
      */
     public function deviceAttributes(): array
@@ -60,7 +62,8 @@ final class UpdateDeviceRequest extends FormRequest
          *     description?: string|null,
          *     equipment_asset_id?: string|null,
          *     device_profile_version_id?: string|null,
-         *     status?: string
+         *     status?: string,
+         *     allow_plaintext?: bool
          * } $validated
          */
         $validated = $this->validated();

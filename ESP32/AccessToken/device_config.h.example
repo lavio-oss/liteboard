@@ -3,7 +3,10 @@
 const char *LB_WIFI_SSID = "<wifi-ssid>";
 const char *LB_WIFI_PASSWORD = "<wifi-password>";
 const char *LB_HOST = "mqtt.example.local";
+// 8883 + LB_MQTT_TLS 1: TLS (recommended). 1883 + LB_MQTT_TLS 0: plaintext playground,
+// the access token is sent unencrypted, so rotate it before real use.
 constexpr uint16_t LB_PORT = 8883;
+#define LB_MQTT_TLS 1
 const char *LB_PROJECT_ID = "<project-id>";
 const char *LB_DEVICE_ID = "<device-id>";
 const char *LB_ACCESS_TOKEN = "<access-token>";

@@ -42,6 +42,8 @@ services:
       MQTT_INTERNAL_PASSWORD: ${MQTT_INTERNAL_PASSWORD:-telemetry-service-secret}
       MQTT_HEALTHCHECK_USERNAME: ${MQTT_HEALTHCHECK_USERNAME:-healthcheck}
       MQTT_HEALTHCHECK_PASSWORD: ${MQTT_HEALTHCHECK_PASSWORD:-healthcheck-secret}
+      MQTT_BRIDGE_USERNAME: ${MQTT_BRIDGE_USERNAME:-plaintext-bridge}
+      MQTT_BRIDGE_PASSWORD: ${MQTT_BRIDGE_PASSWORD:-plaintext-bridge-secret}
       MQTT_TLS_HOSTNAME: ${MQTT_TLS_HOSTNAME:-mqtt.local}
     command:
       - /bin/sh
@@ -50,7 +52,8 @@ services:
         set -eu
         INTERNAL_HASH=$$(/mosquitto/pw -h bcrypt -c 10 -p "$$MQTT_INTERNAL_PASSWORD")
         HEALTH_HASH=$$(/mosquitto/pw -h bcrypt -c 10 -p "$$MQTT_HEALTHCHECK_PASSWORD")
-        printf "%s:%s\n%s:%s\n" "$$MQTT_INTERNAL_USERNAME" "$$INTERNAL_HASH" "$$MQTT_HEALTHCHECK_USERNAME" "$$HEALTH_HASH" > /tmp/mosquitto-passwords
+        BRIDGE_HASH=$$(/mosquitto/pw -h bcrypt -c 10 -p "$$MQTT_BRIDGE_PASSWORD")
+        printf "%s:%s\n%s:%s\n%s:%s\n" "$$MQTT_INTERNAL_USERNAME" "$$INTERNAL_HASH" "$$MQTT_HEALTHCHECK_USERNAME" "$$HEALTH_HASH" "$$MQTT_BRIDGE_USERNAME" "$$BRIDGE_HASH" > /tmp/mosquitto-passwords
         chmod 0644 /tmp/mosquitto-passwords
         sed \
           -e "s|__MQTT_PG_HOST__|$$MQTT_PG_HOST|g" \
@@ -86,6 +89,50 @@ services:
       timeout: 3s
       retries: 10
     depends_on:
+      redis:
+        condition: service_healthy
+
+  mosquitto-plain:
+    image: iegomez/mosquitto-go-auth@sha256:acd65f8566f22126e3bf3b72fe5bee8a5002ca57695f211b1904013953560c3f
+    environment:
+      MQTT_PG_HOST: ${MQTT_PG_HOST:-host.docker.internal}
+      MQTT_PG_PORT: ${MQTT_PG_PORT:-5432}
+      MQTT_PG_DB: ${POSTGRES_DB:-liteboard}
+      MQTT_PG_USER: ${POSTGRES_USER:-liteboard}
+      MQTT_PG_PASSWORD: ${POSTGRES_PASSWORD:-liteboard}
+      MQTT_REDIS_HOST: ${MQTT_REDIS_HOST:-redis}
+      MQTT_REDIS_PORT: ${MQTT_REDIS_PORT:-6379}
+      MQTT_BRIDGE_USERNAME: ${MQTT_BRIDGE_USERNAME:-plaintext-bridge}
+      MQTT_BRIDGE_PASSWORD: ${MQTT_BRIDGE_PASSWORD:-plaintext-bridge-secret}
+      MQTT_TLS_HOSTNAME: ${MQTT_TLS_HOSTNAME:-mqtt.local}
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        sed \
+          -e "s|__MQTT_PG_HOST__|$$MQTT_PG_HOST|g" \
+          -e "s|__MQTT_PG_PORT__|$$MQTT_PG_PORT|g" \
+          -e "s|__MQTT_PG_DB__|$$MQTT_PG_DB|g" \
+          -e "s|__MQTT_PG_USER__|$$MQTT_PG_USER|g" \
+          -e "s|__MQTT_PG_PASSWORD__|$$MQTT_PG_PASSWORD|g" \
+          -e "s|__MQTT_REDIS_HOST__|$$MQTT_REDIS_HOST|g" \
+          -e "s|__MQTT_REDIS_PORT__|$$MQTT_REDIS_PORT|g" \
+          -e "s|__MQTT_TLS_HOSTNAME__|$$MQTT_TLS_HOSTNAME|g" \
+          -e "s|__MQTT_BRIDGE_USERNAME__|$$MQTT_BRIDGE_USERNAME|g" \
+          -e "s|__MQTT_BRIDGE_PASSWORD__|$$MQTT_BRIDGE_PASSWORD|g" \
+          /etc/mosquitto/mosquitto.conf.template > /tmp/mosquitto.conf
+        chmod 0644 /tmp/mosquitto.conf
+        exec /usr/sbin/mosquitto -c /tmp/mosquitto.conf
+    ports:
+      - '1883:1883'
+    volumes:
+      - ./infrastructure/mosquitto/mosquitto-plain.conf:/etc/mosquitto/mosquitto.conf.template:ro
+    secrets:
+      - mqtt_tls_ca_certificate
+    depends_on:
+      mosquitto:
+        condition: service_healthy
       redis:
         condition: service_healthy
 

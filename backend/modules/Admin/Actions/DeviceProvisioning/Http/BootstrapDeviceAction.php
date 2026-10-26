@@ -75,8 +75,7 @@ final class BootstrapDeviceAction
             'credentials' => ['access_token' => $result['access_token']],
             'mqtt' => [
                 'host' => config('device_provisioning.mqtt_host'),
-                'port' => 8883,
-                'tls' => true,
+                'endpoints' => $credentialService->mqttEndpoints($device),
                 'topics' => $credentialService->mqttTopicsFor($device),
             ],
         ], $result['created'] ? Response::HTTP_CREATED : Response::HTTP_OK, [

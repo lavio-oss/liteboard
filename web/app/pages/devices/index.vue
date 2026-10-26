@@ -819,7 +819,7 @@ const errorMessage = computed(() => {
                     Install the MQTT CA in your MQTT client's trust store and the HTTPS CA in the device's HTTPS trust store. These roots are separate and must not be interchanged.
                   </li>
                   <li>
-                    Keep certificate and hostname verification enabled for both connections. Use the HTTPS endpoint hostname for provisioning and a broker hostname listed in the MQTT certificate's SAN on port <code class="font-mono text-highlighted">8883</code>.
+                    Keep certificate and hostname verification enabled for both connections. Use the HTTPS endpoint hostname for provisioning and a broker hostname listed in the MQTT certificate's SAN.
                   </li>
                 </ol>
 
@@ -837,7 +837,7 @@ const errorMessage = computed(() => {
                       Port
                     </p>
                     <p class="mt-1 text-sm font-medium text-highlighted">
-                      8883
+                      Shown in the credentials modal
                     </p>
                   </div>
                   <div>
@@ -867,8 +867,9 @@ const errorMessage = computed(() => {
                 </p>
                 <ol class="list-inside list-decimal space-y-3 text-sm text-default">
                   <li>Create the device with <strong>Add device</strong>, then open its credentials from the device row.</li>
-                  <li>Install the MQTT CA from the TLS tab and keep certificate-chain and broker-hostname verification enabled.</li>
-                  <li>Use the broker host, port, and TLS status shown in the credentials modal. The MQTT TLS port is <code class="font-mono text-highlighted">8883</code>.</li>
+                  <li>Install the MQTT CA from the first tab and keep certificate-chain and broker-hostname verification enabled.</li>
+                  <li>Use the broker host, port, and TLS status shown in the credentials modal.</li>
+                  <li>For quick experiments, turn on <strong>Allow connection without TLS</strong> for that device in the credentials modal. The token then travels unencrypted on the plaintext port, so do not use it for real devices.</li>
                   <li>Set the Access Token as both MQTT username and password, then publish telemetry to the topic shown in the credentials modal.</li>
                   <li>Return to the Devices list and confirm the device reports <strong>Online</strong>.</li>
                 </ol>
@@ -918,10 +919,10 @@ const errorMessage = computed(() => {
                   <li>Open <strong>Provision devices</strong> for the target Project and create a provisioning profile.</li>
                   <li>Copy the provision key and save the secret when it is shown. The secret is available only immediately after creation or rotation.</li>
                   <li>Enable enrollment after securely configuring the device with its profile key and secret.</li>
-                  <li>Copy the HTTPS bootstrap endpoint from the profile panel. Install the HTTPS CA from the TLS tab and verify the endpoint hostname and certificate before enrollment.</li>
+                  <li>Copy the HTTPS bootstrap endpoint from the profile panel. Install the HTTPS CA from the first tab and verify the endpoint hostname and certificate before enrollment.</li>
                   <li>Bootstrap the device once. It is created as waiting for approval, and its firmware saves the returned Access Token and MQTT settings.</li>
                   <li>Approve the device from this list. Until approval, the broker blocks the token; the firmware checks the decision and waits without repeating bootstrap.</li>
-                  <li>After approval, the device connects to the returned MQTT host on port <code class="font-mono text-highlighted">8883</code> with TLS and hostname verification enabled.</li>
+                  <li>After approval, the device connects to the returned MQTT host on the TLS endpoint with TLS and hostname verification enabled.</li>
                   <li>Use the returned Access Token as both MQTT username and password, publish to the returned telemetry topic, and confirm the device reports <strong>Online</strong>.</li>
                 </ol>
 
@@ -941,7 +942,7 @@ const errorMessage = computed(() => {
                       <dt class="text-muted">
                         MQTT transport
                       </dt><dd class="mt-1 font-medium text-highlighted">
-                        MQTT over TLS, port 8883
+                        MQTT over TLS
                       </dd>
                     </div>
                     <div>

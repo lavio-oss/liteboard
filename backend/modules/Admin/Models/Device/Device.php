@@ -32,6 +32,7 @@ use Modules\Admin\Models\Telemetry\TelemetrySample;
     'approval_status',
     'connection_state',
     'last_seen_at',
+    'allow_plaintext',
 ])]
 final class Device extends Model
 {
@@ -52,6 +53,7 @@ final class Device extends Model
             'approval_status' => DeviceApprovalStatus::class,
             'connection_state' => DeviceConnectionState::class,
             'last_seen_at' => 'immutable_datetime',
+            'allow_plaintext' => 'boolean',
         ];
     }
 

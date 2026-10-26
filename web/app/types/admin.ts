@@ -70,6 +70,7 @@ export const deviceSchema = resourceBaseSchema.extend({
   credential_type: deviceCredentialTypeSchema,
   credential_status: deviceCredentialStatusSchema,
   mqtt_topics: deviceMqttTopicsSchema,
+  allow_plaintext: z.boolean(),
   last_seen_at: z.string().nullable()
 }).extend(deviceApprovalSchema.shape)
 
@@ -235,6 +236,7 @@ export interface DeviceInput {
   equipment_asset_id: string | null
   device_profile_version_id: string | null
   status: ResourceStatus
+  allow_plaintext?: boolean
 }
 
 export type ProjectProvisioningProfile = z.infer<typeof projectProvisioningProfileSchema>

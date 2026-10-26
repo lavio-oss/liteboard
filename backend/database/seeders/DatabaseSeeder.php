@@ -14,7 +14,9 @@ final class DatabaseSeeder extends Seeder
         $this->call([
             CoreDatabaseSeeder::class,
             AdminDatabaseSeeder::class,
-            DemoWorkflowSeeder::class,
+            DemoMembersSeeder::class,
+            // Device profiles, devices, rules and webhooks are unlinked for now; re-add to seed them:
+            // DemoWorkflowSeeder::class,
         ]);
     }
 }

@@ -101,6 +101,22 @@ final class DeviceCredentialService
     }
 
     /**
+     * The TLS endpoint always comes first; the plaintext one only for devices that opted in.
+     *
+     * @return list<array{port: int, tls: bool}>
+     */
+    public function mqttEndpoints(Device $device): array
+    {
+        $endpoints = [['port' => config()->integer('device_provisioning.mqtt_tls_port'), 'tls' => true]];
+
+        if ($device->allow_plaintext) {
+            $endpoints[] = ['port' => config()->integer('device_provisioning.mqtt_plaintext_port'), 'tls' => false];
+        }
+
+        return $endpoints;
+    }
+
+    /**
      * @return array{
      *     telemetry: string,
      *     heartbeat: string,

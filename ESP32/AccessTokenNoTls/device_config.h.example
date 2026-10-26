@@ -1,0 +1,13 @@
+#pragma once
+
+const char *LB_WIFI_SSID = "<wifi-ssid>";
+const char *LB_WIFI_PASSWORD = "<wifi-password>";
+// Plaintext playground: the access token is sent unencrypted, so rotate it before real use.
+// Turn on "Allow connection without TLS" for this device in the LiteBoard credentials modal first.
+const char *LB_HOST = "mqtt.example.local";
+constexpr uint16_t LB_PORT = 1883;
+const char *LB_PROJECT_ID = "<project-id>";
+const char *LB_DEVICE_ID = "<device-id>";
+const char *LB_ACCESS_TOKEN = "<access-token>";
+const char *LB_TELEMETRY_TOPIC =
+    "liteboard/<project-id>/devices/<device-id>/telemetry";

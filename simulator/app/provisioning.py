@@ -200,8 +200,7 @@ def load_or_enroll() -> dict[str, Any]:
             },
             'mqtt': {
                 'host': os.getenv('MQTT_HOST', 'localhost'),
-                'port': int(os.getenv('MQTT_PORT', '8883')),
-                'tls': True,
+                'endpoints': [{'port': int(os.getenv('MQTT_PORT', '8883')), 'tls': True}],
                 'topics': {'telemetry': f"liteboard/{os.environ['PROJECT_ID']}/devices/{os.environ['DEVICE_ID']}/telemetry"},
             },
         }

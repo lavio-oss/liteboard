@@ -88,6 +88,6 @@ Create a Device in the dashboard first, then set `SIMULATOR_PROJECT_ID`, `SIMULA
 docker compose --profile tools run --rm simulator
 ```
 
-The simulator publishes every 5 seconds over TLS `8883`. Never commit the access token. A PLC without MQTT TLS support must go through a gateway; the broker has no plaintext listener.
+The simulator publishes every 5 seconds over TLS `8883`. Never commit the access token. A PLC without MQTT TLS support can try the plaintext playground port `1883` (served by `mosquitto-plain`; turn on `allow_plaintext` for that device), but the access token travels unencrypted there; production devices should go through a TLS gateway.
 
 For first-time enrollment the simulator calls the HTTPS bootstrap endpoint and must trust that endpoint's CA. The ESP32 can use HTTP for a local smoke test when the backend allows insecure HTTP in the `local` environment; this does not verify TLS. Use Nginx or a staging HTTPS endpoint to validate real HTTPS. MQTT TLS on `8883` is handled separately by Mosquitto.

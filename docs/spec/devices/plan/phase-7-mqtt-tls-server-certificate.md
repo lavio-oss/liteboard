@@ -11,13 +11,13 @@ Broker hiện cấu hình listener TLS `8883` và xác thực Access Token theo 
 ## 2. Việc thực hiện
 
 1. Pin broker/auth-plugin artifact; khởi chạy cấu hình production-equivalent và ghi nhận image/version, host, CA và SAN dùng trong bài kiểm tra.
-2. Xác minh Device dùng Access Token hợp lệ kết nối/publish qua `8883`; token sai, CA sai, hostname sai và kết nối plaintext `1883`/`9001` đều bị từ chối.
+2. Xác minh Device dùng Access Token hợp lệ kết nối/publish qua `8883`; token sai, CA sai, hostname sai và WebSocket `9001` đều bị từ chối. Playground plaintext `1883` (broker `mosquitto-plain`) vẫn từ chối token sai và áp dụng cùng ACL.
 3. Chuẩn bị phân phối CA/certificate chain cho simulator và firmware; ghi rõ thời gian hiệu lực và thời điểm phải cập nhật firmware khi CA thay đổi.
 4. Thử xoay vòng chứng chỉ máy chủ trong môi trường kiểm thử: cấp chứng chỉ mới cho cùng hostname, cập nhật broker, xác minh client kết nối lại và khả năng xử lý khi chứng chỉ hết hạn.
 5. Ghi kết quả runtime và tác động tenant/project: broker ACL vẫn giới hạn topic theo Device và Project sau reconnect, cache auth không cấp lại quyền cho token đã revoke.
 
 ## 3. Tiêu chí nghiệm thu
 
-- [ ] Trên cấu hình production-equivalent, xác nhận client hợp lệ dùng CA/hostname production; token/CA/hostname sai và plaintext `1883`/`9001` đều bị từ chối qua topology/firewall thực tế.
+- [ ] Trên cấu hình production-equivalent, xác nhận client hợp lệ dùng CA/hostname production; token/CA/hostname sai và `9001` đều bị từ chối qua topology/firewall thực tế; `1883` chỉ chấp nhận token hợp lệ với cùng ACL.
 - [ ] Sau khi xoay vòng chứng chỉ máy chủ, client kết nối lại được bằng Access Token và ACL tenant/project vẫn đúng.
 - [ ] Quy trình phân phối trust chain và khôi phục khi xoay vòng thất bại được ghi lại, thử nghiệm và có kết quả.

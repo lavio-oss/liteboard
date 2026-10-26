@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 from gmqtt import Client as MQTTClient
 
-from app.mqtt_tls import build_mqtt_ssl_context
+from app.mqtt_tls import build_mqtt_ssl_context, select_tls_endpoint
 from app.provisioning import load_or_enroll, wait_for_approval
 
 
@@ -25,7 +25,7 @@ async def main() -> None:
     mqtt_tls_context = build_mqtt_ssl_context(os.getenv('MQTT_TLS_CA_FILE', '/run/secrets/mqtt_tls_ca_certificate'))
     await client.connect(
         provisioned['mqtt']['host'],
-        provisioned['mqtt']['port'],
+        select_tls_endpoint(provisioned['mqtt'])['port'],
         ssl=mqtt_tls_context,
     )
     topic = provisioned['mqtt']['topics']['telemetry']

@@ -28,5 +28,6 @@ Phía telemetry, `telemetry-service` đã lưu telemetry bền vững vào Postg
 | Phase 7 | MQTT TLS server-auth và xoay vòng chứng chỉ máy chủ | TLS local đã có; nghiệm thu production còn mở | [Phase 7](./plan/phase-7-mqtt-tls-server-certificate.md) |
 | Phase 8 | Giới hạn kích thước gói tin, số kết nối và tốc độ gửi theo Device | Một phần: quota tạo Device và giới hạn payload 64 KiB ở `telemetry-service` đã có; quota kết nối và rate limit theo Device chưa | [Phase 8](./plan/phase-8-quotas-and-rate-limiting.md) |
 | Phase 9 | Kiểm tra schema telemetry và chống replay/trùng lặp | Phần kiểm tra schema và khử trùng lặp đã làm theo thiết kế khác (Profile Version và PostgreSQL, không dùng Redis); tài liệu cần rà lại | [Phase 9](./plan/phase-9-schema-validation-and-replay-protection.md) |
+| Phase 10 | Playground MQTT plaintext `1883` | Một phần: broker `mosquitto-plain`, cờ `allow_plaintext` theo từng thiết bị, contract, UI và firmware đã có; còn biên dịch firmware, downlink qua bridge, đo tải auth và firewall production | [Phase 10](./plan/phase-10-mqtt-plaintext-playground.md) |
 
 Roadmap end-to-end của telemetry công nghiệp: [industrial-telemetry](../industrial-telemetry/README.md).

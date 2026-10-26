@@ -132,7 +132,7 @@ final class DemoWorkflowSeeder extends Seeder
         );
 
         $this->seedEsp32Lab($tenant, $admin);
-        $this->seedMembers($tenant);
+        $this->call(DemoMembersSeeder::class);
     }
 
     private function project(Tenant $tenant, string $name): Project
@@ -307,23 +307,5 @@ final class DemoWorkflowSeeder extends Seeder
                 ]);
             }
         });
-    }
-
-    /** One login per project role, so permissions on the Workflow screen can be tried. */
-    private function seedMembers(Tenant $tenant): void
-    {
-        $projects = Project::query()->where('tenant_id', $tenant->getKey())->get();
-
-        foreach (['engineer', 'operator', 'viewer'] as $role) {
-            $user = User::query()->updateOrCreate(
-                ['email' => "$role@gmail.com"],
-                ['name' => ucfirst($role), 'password' => '12345678'],
-            );
-            $tenant->users()->syncWithoutDetaching([$user->getKey() => ['role' => 'member']]);
-
-            foreach ($projects as $project) {
-                $project->users()->syncWithoutDetaching([$user->getKey() => ['role' => $role]]);
-            }
-        }
     }
 }

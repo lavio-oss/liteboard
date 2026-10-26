@@ -5,7 +5,7 @@ Tài liệu này mô tả các thành phần, luồng dữ liệu, cổng và c�
 ## Tóm tắt trong một phút
 
 - `web/` là dashboard Nuxt; `backend/` là Laravel API và nơi xử lý đăng nhập, phân quyền, tenant/project và dữ liệu nghiệp vụ.
-- Thiết bị gửi MQTT qua **TLS cổng `8883`** vào Mosquitto. MQTT plaintext `1883` và WebSocket `9001` không được mở.
+- Thiết bị gửi MQTT qua **TLS cổng `8883`** vào Mosquitto. Cổng plaintext `1883` là playground do service `mosquitto-plain` phục vụ: cùng Access Token và ACL, token đi không mã hóa, và chỉ thiết bị có `allow_plaintext` mới đăng nhập được. WebSocket `9001` không được mở.
 - `telemetry-service/` nhận telemetry từ broker và cập nhật trạng thái online/last-seen của Device. Service cũng lưu sample, latest value và outcome vào PostgreSQL, kiểm tra theo Profile Version và khử trùng lặp (xem [telemetry-flow](./spec/industrial-telemetry/current/telemetry-flow.md)).
 - PostgreSQL lưu dữ liệu ứng dụng; Redis được Mosquitto dùng cho cache xác thực/ACL với TTL 5 giây.
 - Thiết bị đăng nhập MQTT bằng Access Token. Provisioning tự tạo Device ở trạng thái chờ duyệt; broker chỉ cho Device kết nối sau khi được Project duyệt.
@@ -34,6 +34,8 @@ flowchart LR
     API --> DB[(PostgreSQL :5432)]
 
     Device[Device / simulator] -->|MQTT TLS :8883| Broker[Mosquitto]
+    Device -->|MQTT plaintext :1883| Plain[mosquitto-plain]
+    Plain -->|bridge TLS :8883| Broker
     Broker -->|Auth + ACL| Views[(PostgreSQL views)]
     Broker --> Cache[(Redis :6379)]
     Broker -->|telemetry / heartbeat| Telemetry[telemetry-service :8100]
@@ -51,7 +53,8 @@ Tenant/project context được xử lý ở Laravel; credential của Device ch
 | `BACKEND_PORT` → container `8800` | Cổng host của Laravel API. |
 | `TELEMETRY_PORT` → container `8100` | Cổng host của health endpoint telemetry-service. |
 | `FRONTEND_PORT` → container `3000` | Cổng host của Nuxt nếu chạy bằng Compose profile. |
-| MQTT `8883` | Listener TLS của broker, hiện publish cố định. Không có listener `1883` hay `9001`. |
+| MQTT `8883` | Listener TLS của broker, hiện publish cố định. |
+| MQTT `1883` | Listener plaintext của `mosquitto-plain`, publish cố định; bridge sang `8883`. Chỉ nhận Access Token của thiết bị có `devices.allow_plaintext` bật. Không có listener `9001`. |
 | `MQTT_PG_PORT` | Cổng PostgreSQL mà Mosquitto và telemetry-service gọi; với PostgreSQL trong Compose giữ `5432`. |
 | `MQTT_REDIS_PORT` | Cổng Redis mà Mosquitto dùng cho cache; với Redis trong Compose giữ `6379`. |
 

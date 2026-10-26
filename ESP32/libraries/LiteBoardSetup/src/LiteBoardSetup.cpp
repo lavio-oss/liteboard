@@ -41,6 +41,15 @@ void configureMqttTls(
     uint16_t keepAliveSeconds
 ) {
     tlsClient.setCACert(caCertificate);
+    configureMqtt(mqttClient, host, port, keepAliveSeconds);
+}
+
+void configureMqtt(
+    PubSubClient &mqttClient,
+    const char *host,
+    uint16_t port,
+    uint16_t keepAliveSeconds
+) {
     mqttClient.setServer(host, port);
     mqttClient.setKeepAlive(keepAliveSeconds);
 }

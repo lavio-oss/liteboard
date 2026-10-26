@@ -49,7 +49,7 @@ class ProvisioningTests(unittest.TestCase):
         state = {
             'device': {'project_id': 'project', 'id': 'device'},
             'credentials': {'access_token': 'token'},
-            'mqtt': {'host': 'mqtt.local', 'port': 8883, 'tls': True, 'topics': {'telemetry': 'topic'}},
+            'mqtt': {'host': 'mqtt.local', 'endpoints': [{'port': 8883, 'tls': True}], 'topics': {'telemetry': 'topic'}},
         }
 
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {
@@ -75,7 +75,7 @@ class ProvisioningTests(unittest.TestCase):
                 'approval_status': 'pending',
             },
             'credentials': {'access_token': 'token'},
-            'mqtt': {'host': 'mqtt.local', 'port': 8883, 'tls': True, 'topics': {'telemetry': 'topic'}},
+            'mqtt': {'host': 'mqtt.local', 'endpoints': [{'port': 8883, 'tls': True}], 'topics': {'telemetry': 'topic'}},
         }
 
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {

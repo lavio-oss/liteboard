@@ -712,7 +712,7 @@ The development plan is not production-ready only because the platform starts wi
 
 ### Security
 
-- MQTT clients use TLS on port 8883 only; the broker must not expose plaintext MQTT on 1883. HTTP/WebSocket traffic also requires TLS in production.
+- Real devices use MQTT TLS on port 8883. Port 1883 is a plaintext playground served by `mosquitto-plain` with the same Access Token auth and ACLs, accepted only for devices with `allow_plaintext` turned on; tokens used there are exposed on the wire. HTTP/WebSocket traffic requires TLS in production.
 - Broker ACL scoped to the project and Device; Device credentials can be revoked and rotated. Anonymous access is development-only.
 - Secrets supplied through environment or secret management and never committed to Git.
 - API rate limiting, MQTT connection/message limits and maximum payload size.

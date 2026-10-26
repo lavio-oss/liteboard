@@ -20,7 +20,7 @@ Access Token là credential MQTT duy nhất của Device. Provisioning profile c
 
 Backend sinh Access Token bằng `random_int()` từ bảng chữ số và chữ thường, hiện dài 20 ký tự. Đây là secret opaque dùng để chứng minh quyền sở hữu credential, không phải JWT hay OAuth token có claims. Mỗi Device có một row credential hiện hành. Credential lưu SHA-256 của token để tra cứu, bcrypt hash của token để broker kiểm tra password, và bản mã hóa Laravel để API credential có thể trả token cho người có quyền. Token thô không nằm trong Device list resource; endpoint credentials và bootstrap response có trả token nên client cần bảo vệ nó và không ghi vào log.
 
-Device dùng Access Token làm cả MQTT username lẫn password, kết nối tới Mosquitto qua TLS ở cổng `8883`. Đây là TLS xác minh chứng chỉ máy chủ; luồng hiện tại không dùng client certificate/mTLS. MQTT TLS bảo vệ kết nối tới broker, còn HTTPS bảo vệ riêng bootstrap và truy vấn trạng thái duyệt.
+Device dùng Access Token làm cả MQTT username lẫn password, kết nối tới Mosquitto qua TLS ở cổng `8883`. Đây là TLS xác minh chứng chỉ máy chủ; luồng hiện tại không dùng client certificate/mTLS. MQTT TLS bảo vệ kết nối tới broker, còn HTTPS bảo vệ riêng bootstrap và truy vấn trạng thái duyệt. Danh sách `mqtt.endpoints` liệt kê các cổng kết nối: endpoint `tls: true` (mặc định `8883`) luôn có và đứng đầu; endpoint `tls: false` (mặc định `1883`) là playground plaintext dùng cùng Access Token và ACL, token gửi qua cổng này không được mã hóa, và chỉ có khi thiết bị có `allow_plaintext` (Device resource trả `allow_plaintext`, cập nhật bằng PATCH Device; mặc định tắt, thiết bị tạo trước ngày bật tính năng này được giữ bật). Client cần TLS chọn endpoint `tls: true`.
 
 Mosquitto tra cứu PostgreSQL qua `v_mqtt_users` và `v_mqtt_acls`. Một credential chỉ được xác thực khi credential đang `active`, Device đang `active` và `approved`, Project đang `active`, Tenant đang `active`. ACL tạo topic từ đúng `project_id` và `device_id`; Device không thể dùng token để truy cập topic của Device khác. Broker cache auth và ACL trên Redis trong 5 giây.
 
@@ -111,7 +111,9 @@ Ví dụ request (giá trị bí mật chỉ là placeholder):
 
 Backend xác minh profile và secret, rate limit theo IP/profile, rồi kiểm tra profile đang bật và Project/Tenant đang active. Project được lấy từ profile, không từ payload. Trong transaction backend khóa Project/Profile, kiểm tra quota và `device_code`, tạo Device cùng credential rồi đặt Device thành `pending`. Backend ghi receipt chứa fingerprint payload, token hash và hạn hết hạn 24 giờ.
 
-Response thành công trả `credential_type: access_token`, định danh Device, `request_id`, `approval_status`, Access Token, cùng MQTT host/cổng `8883`/TLS/topics. Response có `Cache-Control: no-store`. Token được cấp và lưu ngay, dù Device đang chờ duyệt.
+Response thành công trả `credential_type: access_token`, định danh Device, `request_id`, `approval_status`, Access Token, cùng MQTT host, danh sách `endpoints` và topics. Response có `Cache-Control: no-store`. Token được cấp và lưu ngay, dù Device đang chờ duyệt.
+
+> **Thay đổi contract:** `mqtt.port`, `mqtt.tls` và `mqtt.plaintext_port` đã bị bỏ, thay bằng `mqtt.endpoints`. Firmware cũ đọc `mqtt.port` sẽ không cấu hình được MQTT sau khi bootstrap. Bản enrollment đã lưu (NVS của sketch Provisioning, `device.json` của simulator) không có `endpoints`, nên thiết bị cần xóa bản lưu và enroll lại.
 
 Response rút gọn theo contract:
 
@@ -124,8 +126,10 @@ Response rút gọn theo contract:
   "credentials": { "access_token": "<device-access-token>" },
   "mqtt": {
     "host": "<configured-broker-host>",
-    "port": 8883,
-    "tls": true,
+    "endpoints": [
+      { "port": 8883, "tls": true },
+      { "port": 1883, "tls": false }
+    ],
     "topics": {
       "telemetry": "liteboard/<project-id>/devices/<device-id>/telemetry",
       "heartbeat": "liteboard/<project-id>/devices/<device-id>/heartbeat",

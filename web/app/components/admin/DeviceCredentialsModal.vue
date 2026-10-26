@@ -23,6 +23,7 @@ const downloadMqttCaCertificate = useMqttCaCertificateDownload()
 const {
   loadDeviceCredentials,
   rotateDeviceCredentials,
+  updateDevice,
   updateDeviceCredentials
 } = useAdmin()
 
@@ -32,17 +33,32 @@ const actionLoading = ref(false)
 const error = ref<ApiError | null>(null)
 const tokenVisible = ref(false)
 
+const tlsEndpoint = computed(() => {
+  const endpoint = credential.value?.mqtt.endpoints.find(candidate => candidate.tls)
+
+  if (credential.value !== null && endpoint === undefined) {
+    throw new Error('The credential must expose a TLS MQTT endpoint.')
+  }
+
+  return endpoint
+})
+
+const plaintextEndpoint = computed(() => credential.value?.mqtt.endpoints.find(candidate => !candidate.tls))
+// The device decides: the API lists the plaintext endpoint only for devices that allow it.
+const selectedEndpoint = computed(() => plaintextEndpoint.value ?? tlsEndpoint.value)
+
 const firmwareConfig = computed(() => {
-  if (credential.value === null) {
+  if (credential.value === null || selectedEndpoint.value === undefined) {
     return ''
   }
 
   return `const char* LB_PROJECT_ID = "${credential.value.project_id}";
 const char* LB_DEVICE_ID = "${credential.value.device_id}";
 const char* LB_ACCESS_TOKEN = "${credential.value.access_token}";
-const char* LB_MQTT_HOST = "";
-const uint16_t LB_MQTT_PORT = ${credential.value.mqtt.port};
-const bool LB_MQTT_TLS = ${credential.value.mqtt.tls};
+const char* LB_HOST = "";
+// ${selectedEndpoint.value.tls ? 'TLS with a verified server certificate.' : 'Plaintext playground: the access token is sent unencrypted.'}
+constexpr uint16_t LB_PORT = ${selectedEndpoint.value.port};
+#define LB_MQTT_TLS ${selectedEndpoint.value.tls ? 1 : 0}
 const char* LB_TELEMETRY_TOPIC = "${credential.value.mqtt.topics.telemetry}";`
 })
 
@@ -122,6 +138,32 @@ async function rotateToken(): Promise<void> {
   }
 }
 
+async function setAllowPlaintext(allowPlaintext: boolean): Promise<void> {
+  if (props.tenantId === null || props.device === null) {
+    throw new Error('A tenant and device are required to change the plaintext setting.')
+  }
+
+  actionLoading.value = true
+
+  try {
+    await updateDevice(props.tenantId, props.device.project_id, props.device.id, { allow_plaintext: allowPlaintext })
+    credential.value = await loadDeviceCredentials(props.tenantId, props.device.project_id, props.device.id)
+    emit('updated')
+  } catch (requestError: unknown) {
+    if (!(requestError instanceof ApiError)) {
+      throw requestError
+    }
+
+    toast.add({
+      title: 'Unable to update the connection setting',
+      description: requestError.message,
+      color: 'error'
+    })
+  } finally {
+    actionLoading.value = false
+  }
+}
+
 async function toggleCredentialStatus(): Promise<void> {
   if (props.tenantId === null || props.device === null || credential.value === null) {
     throw new Error('A tenant, device, and loaded credential are required.')
@@ -168,17 +210,18 @@ async function toggleCredentialStatus(): Promise<void> {
       <div class="flex items-center gap-3">
         <span>Credentials</span>
         <div
-          v-if="credential !== null"
+          v-for="endpoint in selectedEndpoint === undefined ? [] : [selectedEndpoint]"
+          :key="endpoint.port"
           class="inline-flex items-center gap-2 rounded-md border border-default bg-elevated/40 px-3 py-1 text-sm font-normal"
         >
-          <span class="font-mono font-semibold text-highlighted">{{ credential.mqtt.port }}</span>
+          <span class="font-mono font-semibold text-highlighted">{{ endpoint.port }}</span>
           <span class="text-muted/60">·</span>
           <UBadge
-            :color="credential.mqtt.tls ? 'primary' : 'neutral'"
+            :color="endpoint.tls ? 'success' : 'warning'"
             variant="subtle"
             size="sm"
           >
-            {{ credential.mqtt.tls ? 'TLS' : 'No TLS' }}
+            {{ endpoint.tls ? 'TLS' : 'No TLS' }}
           </UBadge>
         </div>
       </div>
@@ -240,6 +283,14 @@ async function toggleCredentialStatus(): Promise<void> {
           </div>
         </div>
 
+        <USwitch
+          v-if="props.canManage"
+          :model-value="plaintextEndpoint !== undefined"
+          label="Allow connection without TLS"
+          :disabled="actionLoading"
+          @update:model-value="setAllowPlaintext"
+        />
+
         <UCollapsible>
           <UButton
             label="Firmware config"
@@ -261,6 +312,7 @@ async function toggleCredentialStatus(): Promise<void> {
                   @click="copyText(firmwareConfig, 'Firmware config')"
                 />
                 <UButton
+                  v-if="selectedEndpoint?.tls"
                   label="MQTT CA"
                   icon="i-lucide-download"
                   color="neutral"

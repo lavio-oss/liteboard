@@ -13,6 +13,7 @@ infrastructure/caddy/root.crt
 infrastructure/provisioning/ca.crt
 /ESP32/AccessToken/device_config.h
 /ESP32/AccessToken/mqtt_ca_cert.h
+/ESP32/AccessTokenNoTls/device_config.h
 /ESP32/Provisioning/provisioning_config.h
 /ESP32/Provisioning/provisioning_ca_cert.h
 simulator/state/*.json

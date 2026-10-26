@@ -4,3 +4,10 @@ topic subscribe liteboard/#
 
 user healthcheck
 topic write healthcheck
+
+# Bridge from mosquitto-plain: device traffic in, commands out. Nothing else.
+user plaintext-bridge
+topic write liteboard/+/devices/+/telemetry
+topic write liteboard/+/devices/+/heartbeat
+topic write liteboard/+/devices/+/commands/ack
+topic read liteboard/+/devices/+/commands

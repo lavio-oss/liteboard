@@ -278,11 +278,21 @@ bool configureMqtt(const String &enrollment, String &accessToken) {
   cJSON *approval = cJSON_GetObjectItemCaseSensitive(provisioning, "approval_status");
   cJSON *requestId = cJSON_GetObjectItemCaseSensitive(provisioning, "request_id");
   cJSON *host = cJSON_GetObjectItemCaseSensitive(mqtt, "host");
-  cJSON *port = cJSON_GetObjectItemCaseSensitive(mqtt, "port");
+  cJSON *endpoints = cJSON_GetObjectItemCaseSensitive(mqtt, "endpoints");
+  cJSON *tlsPort = nullptr;
+  cJSON *endpoint = nullptr;
+  cJSON_ArrayForEach(endpoint, endpoints) {
+    cJSON *endpointTls = cJSON_GetObjectItemCaseSensitive(endpoint, "tls");
+    cJSON *endpointPort = cJSON_GetObjectItemCaseSensitive(endpoint, "port");
+    if (cJSON_IsTrue(endpointTls) && cJSON_IsNumber(endpointPort)) {
+      tlsPort = endpointPort;
+      break;
+    }
+  }
   cJSON *topics = cJSON_GetObjectItemCaseSensitive(mqtt, "topics");
   cJSON *telemetry = cJSON_GetObjectItemCaseSensitive(topics, "telemetry");
   const bool valid = cJSON_IsString(credential) && cJSON_IsString(host) &&
-                     cJSON_IsNumber(port) && cJSON_IsString(telemetry) &&
+                     tlsPort != nullptr && cJSON_IsString(telemetry) &&
                      cJSON_IsString(approval) &&
                      (strcmp(approval->valuestring, "pending") == 0 ||
                       strcmp(approval->valuestring, "approved") == 0 ||
@@ -302,7 +312,7 @@ bool configureMqtt(const String &enrollment, String &accessToken) {
         mqttClient,
         LB_MQTT_CA_CERT,
         mqttHost,
-        static_cast<uint16_t>(port->valueint)
+        static_cast<uint16_t>(tlsPort->valueint)
     );
   }
   cJSON_Delete(root);

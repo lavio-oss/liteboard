@@ -57,8 +57,7 @@ final class DeviceCredentialResource extends JsonResource
             'status' => $status->value,
             'mqtt' => [
                 'host' => $mqttHost,
-                'port' => 8883,
-                'tls' => true,
+                'endpoints' => app(DeviceCredentialService::class)->mqttEndpoints($device),
                 'topics' => $mqttTopics,
             ],
             'mqtt_topics' => $mqttTopics,

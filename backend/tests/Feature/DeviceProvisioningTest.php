@@ -74,8 +74,10 @@ it('bootstraps a device atomically and returns the same active credential for an
         ->assertHeaderContains('Cache-Control', 'no-store')
         ->assertJsonPath('credential_type', 'access_token')
         ->assertJsonPath('mqtt.host', 'mqtt.test.local')
-        ->assertJsonPath('mqtt.port', 8883)
-        ->assertJsonPath('mqtt.tls', true)
+        ->assertJsonPath('mqtt.endpoints', [['port' => 8883, 'tls' => true]])
+        ->assertJsonMissingPath('mqtt.port')
+        ->assertJsonMissingPath('mqtt.tls')
+        ->assertJsonMissingPath('mqtt.plaintext_port')
         ->assertJsonPath('device.project_id', $project->getKey());
 
     $deviceId = (string) $first->json('device.id');
@@ -153,8 +155,7 @@ it('allows plaintext bootstrap only when explicitly enabled in local environment
 
     $this->postJson('/api/device-provisioning/bootstrap', bootstrapPayload($profile, $secret))
         ->assertCreated()
-        ->assertJsonPath('mqtt.tls', true)
-        ->assertJsonPath('mqtt.port', 8883);
+        ->assertJsonPath('mqtt.endpoints.0', ['port' => 8883, 'tls' => true]);
 });
 
 it('applies project quota to manual creation and provisioning and prevents lowering it below device count', function (): void {

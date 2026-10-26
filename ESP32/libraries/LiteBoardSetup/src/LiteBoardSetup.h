@@ -17,4 +17,11 @@ void configureMqttTls(
     uint16_t keepAliveSeconds = 60
 );
 
+void configureMqtt(
+    PubSubClient &mqttClient,
+    const char *host,
+    uint16_t port,
+    uint16_t keepAliveSeconds = 60
+);
+
 }
