@@ -40,11 +40,11 @@ const STATUS_COLORS = {
       </div>
     </template>
 
-    <template #description>
-      <span class="font-mono break-all">{{ props.endpoint?.url }}</span>
-    </template>
-
     <template #body>
+      <p class="mb-4 font-mono text-xs break-all text-muted">
+        {{ props.endpoint?.url }}
+      </p>
+
       <p v-if="!props.loading && props.deliveries.length === 0" class="text-sm text-muted">
         No deliveries yet. Events are delivered after an alert opens, clears or is acknowledged.
       </p>

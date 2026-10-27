@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
+import type { NavigationMenuItem, TableColumn } from '@nuxt/ui'
 import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
 import { useMqttCaCertificateDownload } from '~/composables/useMqttCaCertificateDownload'
@@ -7,15 +7,14 @@ import { useProvisioningCaCertificateDownload } from '~/composables/useProvision
 import { useDevicePresenceStream } from '~/composables/useDevicePresenceStream'
 import { useTenantContext } from '~/composables/useTenantContext'
 import DevicePresenceStatus from '~/components/realtime/DevicePresenceStatus.vue'
-import DeviceProvisioningModal from '~/components/DeviceProvisioningModal.vue'
 import { canDeleteProjectData, canWriteProjectData } from '~/utils/projectPermissions'
-import { initialProvisioningProjectId } from '~/utils/provisioning'
 import { applyDevicePresenceToDevice, mergeDevicePresenceEvents } from '~/utils/devicePresence'
 import type {
   AdminTableRow,
   Device,
   DeviceApprovalStatus,
-  DeviceInput
+  DeviceInput,
+  Project
 } from '~/types/admin'
 import type { DevicePresenceEventData } from '~/types/telemetry'
 
@@ -57,7 +56,15 @@ const credentialsOpen = ref(false)
 const credentialsDevice = ref<Device | null>(null)
 const mqttGuideOpen = ref(false)
 const mqttGuideTab = ref('tls-ca')
+// Same tab bar as the configuration screens (device profiles, alert rules, webhooks); the tab lives in the URL.
+const route = useRoute()
+const activeTab = computed(() => route.query.tab === 'provisioning' ? 'provisioning' : 'access-token')
+const deviceTabs = computed<NavigationMenuItem[][]>(() => [[
+  { label: 'Access token', icon: 'i-lucide-key-round', to: { query: {} }, active: activeTab.value === 'access-token' },
+  { label: 'Provisioning', icon: 'i-lucide-radio-tower', to: { query: { tab: 'provisioning' } }, active: activeTab.value === 'provisioning' }
+]])
 const provisioningOpen = ref(false)
+const projectDevicesOpen = ref(false)
 const provisioningProjectId = ref<string | null>(null)
 const mqttGuideTabs = [
   { label: 'TLS CA certificate', value: 'tls-ca', slot: 'tls-ca' },
@@ -176,22 +183,88 @@ const projectFilterOptions = computed(() => [
   ...projectOptions.value
 ])
 
-function openProvisioning(): void {
-  provisioningProjectId.value = initialProvisioningProjectId(
-    projectFilter.value,
-    writableProjects.value.map(project => project.id)
-  )
+// Read from the live list so the modal follows quota and device-count changes after a refresh.
+const provisioningProject = computed(() => writableProjects.value
+  .find(project => project.id === provisioningProjectId.value) ?? null)
+
+function openProvisioning(project: Project): void {
+  provisioningProjectId.value = project.id
   provisioningOpen.value = true
 }
 
-const addDeviceItems = computed<DropdownMenuItem[][]>(() => [[
-  ...(canCreateDevice.value
-    ? [{ label: 'Create device with Access Token', icon: 'i-lucide-key-round', onSelect: openCreate }]
-    : []),
-  ...(writableProjects.value.length > 0
-    ? [{ label: 'Set up multiple devices', icon: 'i-lucide-radio-tower', onSelect: openProvisioning }]
-    : [])
-]])
+function openProjectDevices(project: Project): void {
+  provisioningProjectId.value = project.id
+  projectDevicesOpen.value = true
+}
+
+const sortableHeader = useSortableHeader()
+const provisioningColumns: TableColumn<Project>[] = [
+  {
+    id: 'sequence',
+    header: 'No.',
+    cell: ({ row }) => row.index + 1
+  },
+  {
+    id: 'name',
+    accessorKey: 'name',
+    header: 'Project',
+    cell: ({ row }) => h('span', { class: 'font-medium text-highlighted' }, row.original.name)
+  },
+  {
+    id: 'provisioning_enabled',
+    accessorKey: 'provisioning_enabled',
+    header: 'Enrollment',
+    cell: ({ row }) => row.original.provisioning_enabled === null
+      ? h('span', { class: 'text-muted' }, 'Not configured')
+      : h(
+          UBadge,
+          { color: row.original.provisioning_enabled ? 'success' : 'neutral', variant: 'subtle' },
+          () => row.original.provisioning_enabled ? 'Enabled' : 'Disabled'
+        )
+  },
+  {
+    id: 'device_count',
+    accessorKey: 'device_count',
+    header: sortableHeader('Devices')
+  },
+  {
+    // Bootstrapped devices start pending and cannot connect until approved in the Access token tab.
+    id: 'pending',
+    header: 'Waiting for approval',
+    cell: ({ row }) => {
+      const pending = devices.value.filter(device => device.project_id === row.original.id && device.approval_status === 'pending').length
+
+      return pending === 0 ? '—' : h(UBadge, { color: 'warning', variant: 'subtle' }, () => pending)
+    }
+  },
+  {
+    id: 'quota',
+    // Unlimited sorts as the largest capacity.
+    accessorFn: project => project.max_devices_quota ?? Number.POSITIVE_INFINITY,
+    header: sortableHeader('Capacity'),
+    cell: ({ row }) => row.original.max_devices_quota === null ? 'Unlimited' : `${row.original.device_count}/${row.original.max_devices_quota}`
+  },
+  {
+    id: 'actions',
+    header: 'Actions',
+    cell: ({ row }) => h('div', { class: 'flex justify-end gap-1' }, [
+      h(UButton, {
+        'icon': 'i-lucide-cpu',
+        'color': 'neutral',
+        'variant': 'ghost',
+        'aria-label': `Devices of ${row.original.name}`,
+        'onClick': () => openProjectDevices(row.original)
+      }),
+      h(UButton, {
+        'icon': 'i-lucide-key-round',
+        'color': 'neutral',
+        'variant': 'ghost',
+        'aria-label': `Provisioning key of ${row.original.name}`,
+        'onClick': () => openProvisioning(row.original)
+      })
+    ])
+  }
+]
 
 const equipmentAssetOptions = computed(() => [
   { label: 'No equipment asset', value: null },
@@ -671,19 +744,22 @@ const errorMessage = computed(() => {
             variant="outline"
             @click="mqttGuideOpen = true"
           />
-          <UDropdownMenu
-            v-if="addDeviceItems[0]?.length"
-            :items="addDeviceItems"
-            :content="{ align: 'end' }"
-          >
-            <UButton
-              label="Add device"
-              icon="i-lucide-plus"
-              trailing-icon="i-lucide-chevron-down"
-            />
-          </UDropdownMenu>
+          <UButton
+            v-if="activeTab === 'access-token' && canCreateDevice"
+            label="Add device"
+            icon="i-lucide-plus"
+            @click="openCreate"
+          />
         </template>
       </UDashboardNavbar>
+
+      <UDashboardToolbar>
+        <UNavigationMenu
+          :items="deviceTabs"
+          highlight
+          class="-mx-1 flex-1"
+        />
+      </UDashboardToolbar>
     </template>
 
     <template #body>
@@ -697,6 +773,7 @@ const errorMessage = computed(() => {
         />
 
         <AdminTable
+          v-if="activeTab === 'access-token'"
           :columns="columns"
           :data="rows"
           :loading="status === 'pending'"
@@ -712,7 +789,41 @@ const errorMessage = computed(() => {
             />
           </template>
         </AdminTable>
+
+        <AdminTable
+          v-else
+          :columns="provisioningColumns"
+          :data="writableProjects"
+          :loading="status === 'pending'"
+          :show-status-filter="false"
+          search-placeholder="Search projects..."
+        />
       </div>
+
+      <template v-if="provisioningProject !== null">
+        <AdminProjectProvisioningModal
+          v-model:open="provisioningOpen"
+          :ui="{ content: 'max-w-2xl' }"
+          :tenant-id="provisioningProject.tenant_id"
+          :project="provisioningProject"
+          :can-manage-quota="canManageActiveTenant"
+          :show-quota="false"
+          @updated="refresh"
+        />
+        <AdminProjectDevicesModal
+          v-model:open="projectDevicesOpen"
+          :tenant-id="provisioningProject.tenant_id"
+          :project="provisioningProject"
+          :devices="devices.filter(device => device.project_id === provisioningProject?.id)"
+          :device-profiles="(response?.deviceProfiles ?? []).filter(profile => profile.project_id === provisioningProject?.id)"
+          :can-manage-quota="canManageActiveTenant"
+          :can-write="canWriteProject(provisioningProject.id)"
+          :approving-device-id="approvalActionDeviceId"
+          @updated="refresh"
+          @approve="approveSelectedDevice"
+          @reject="openRejection"
+        />
+      </template>
 
       <AdminResourceFormModal
         v-model:open="formOpen"
@@ -722,13 +833,14 @@ const errorMessage = computed(() => {
         resource-type="device"
         :project-options="writableProjectOptions"
         :equipment-asset-options="equipmentAssetOptions"
-        :device-profiles="selectedProjectDeviceProfiles"
+        :device-profiles="(response?.deviceProfiles ?? []).filter(profile => canWriteProject(profile.project_id))"
         :loading="formLoading"
         @submit-device="saveDevice"
       />
 
       <AdminDeviceCredentialsModal
         v-model:open="credentialsOpen"
+        :ui="{ content: 'max-w-2xl' }"
         :tenant-id="activeTenantId"
         :device="credentialsDevice"
         :can-manage="canManageCredentials"
@@ -737,13 +849,13 @@ const errorMessage = computed(() => {
 
       <UModal
         v-model:open="rejectionOpen"
+        :ui="{ content: 'max-w-xl' }"
         title="Reject device"
-        description="The device will remain listed and cannot connect. This decision cannot be changed."
       >
         <template #body>
           <div class="space-y-3">
             <p class="text-sm text-muted">
-              Provide a reason. The device will receive this reason and stop waiting for approval.
+              The device will remain listed and cannot connect. This decision cannot be changed. Provide a reason: the device will receive it and stop waiting for approval.
             </p>
             <UTextarea
               v-model="rejectionReason"
@@ -777,7 +889,6 @@ const errorMessage = computed(() => {
         v-model:open="mqttGuideOpen"
         :ui="{ content: 'max-w-3xl' }"
         title="Connect a device over MQTT TLS"
-        description="Set up TLS verification and MQTT device authentication."
       >
         <template #body>
           <UTabs
@@ -916,12 +1027,12 @@ const errorMessage = computed(() => {
                   HTTPS provisioning checklist
                 </p>
                 <ol class="list-inside list-decimal space-y-3 text-sm text-default">
-                  <li>Open <strong>Provision devices</strong> for the target Project and create a provisioning profile.</li>
+                  <li>Open the <strong>Provisioning</strong> tab, select the target Project and create a provisioning profile.</li>
                   <li>Copy the provision key and save the secret when it is shown. The secret is available only immediately after creation or rotation.</li>
                   <li>Enable enrollment after securely configuring the device with its profile key and secret.</li>
-                  <li>Copy the HTTPS bootstrap endpoint from the profile panel. Install the HTTPS CA from the first tab and verify the endpoint hostname and certificate before enrollment.</li>
+                  <li>Copy the HTTPS bootstrap endpoint from the Provisioning tab. Install the HTTPS CA from the first tab and verify the endpoint hostname and certificate before enrollment.</li>
                   <li>Bootstrap the device once. It is created as waiting for approval, and its firmware saves the returned Access Token and MQTT settings.</li>
-                  <li>Approve the device from this list. Until approval, the broker blocks the token; the firmware checks the decision and waits without repeating bootstrap.</li>
+                  <li>Approve the device from the Access token tab's device list. Until approval, the broker blocks the token; the firmware checks the decision and waits without repeating bootstrap.</li>
                   <li>After approval, the device connects to the returned MQTT host on the TLS endpoint with TLS and hostname verification enabled.</li>
                   <li>Use the returned Access Token as both MQTT username and password, publish to the returned telemetry topic, and confirm the device reports <strong>Online</strong>.</li>
                 </ol>
@@ -973,18 +1084,11 @@ const errorMessage = computed(() => {
 
       <ConfirmDeleteModal
         v-model:open="deleteOpen"
+        :ui="{ content: 'max-w-xl' }"
         :title="`Delete ${deletingDevice?.name ?? 'device'}`"
         description="This action cannot be undone and will revoke its MQTT credentials."
         :loading="deleteLoading"
         @confirm="deleteSelectedDevice"
-      />
-
-      <DeviceProvisioningModal
-        v-if="provisioningOpen"
-        v-model:open="provisioningOpen"
-        :initial-project-id="provisioningProjectId"
-        :projects="writableProjects"
-        :tenant-id="activeTenantId"
       />
     </template>
   </UDashboardPanel>

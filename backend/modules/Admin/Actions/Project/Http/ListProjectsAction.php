@@ -30,6 +30,7 @@ final class ListProjectsAction
                 'users' => static function ($query) use ($user): void {
                     $query->whereKey($user->getKey());
                 },
+                'provisioningProfile',
             ])
             ->when(
                 ! $user->isPlatformAdmin()

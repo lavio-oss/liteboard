@@ -252,3 +252,26 @@ it('rate limits authenticated provisioning profiles and returns Retry-After', fu
         ->assertHeader('Retry-After')
         ->assertJsonPath('code', 'PROVISIONING_RATE_LIMITED');
 });
+
+it('exposes each project provisioning state in the project list', function (): void {
+    [$owner, $tenant, $enabledProject, $profile] = createProvisioningProject();
+    $profile->forceFill(['enabled' => true])->save();
+    $disabledProject = Project::factory()->for($tenant)->create(['name' => 'B disabled']);
+    $disabledProject->provisioningProfile()->create([
+        'enabled' => false,
+        'provision_key' => Str::lower(Str::random(32)),
+        'provision_secret_hash' => Hash::make(Str::random(64)),
+    ]);
+    $unconfiguredProject = Project::factory()->for($tenant)->create(['name' => 'C none']);
+
+    $states = collect($this->actingAs($owner)
+        ->getJson("/api/tenants/$tenant->id/projects")
+        ->assertOk()
+        ->json('data'))
+        ->mapWithKeys(static fn (array $project): array => [$project['id'] => $project['provisioning_enabled']]);
+
+    expect($states->get($enabledProject->getKey()))->toBeTrue()
+        ->and($states->get($disabledProject->getKey()))->toBeFalse()
+        ->and($states->has($unconfiguredProject->getKey()))->toBeTrue()
+        ->and($states->get($unconfiguredProject->getKey()))->toBeNull();
+});

@@ -203,12 +203,12 @@ async function toggleCredentialStatus(): Promise<void> {
 <template>
   <UModal
     v-model:open="open"
-    :description="props.device?.name"
     :ui="{ content: 'max-w-3xl' }"
   >
     <template #title>
-      <div class="flex items-center gap-3">
-        <span>Credentials</span>
+      <div class="flex min-w-0 items-center gap-3">
+        <span class="shrink-0">Credentials</span>
+        <span v-if="props.device" class="truncate font-normal text-muted">{{ props.device.name }}</span>
         <div
           v-for="endpoint in selectedEndpoint === undefined ? [] : [selectedEndpoint]"
           :key="endpoint.port"

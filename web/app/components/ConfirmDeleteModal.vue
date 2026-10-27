@@ -18,9 +18,11 @@ const emit = defineEmits<{
   <UModal
     v-model:open="open"
     :title="props.title"
-    :description="props.description"
   >
     <template #body>
+      <p v-if="props.description" class="mb-4 text-sm text-muted">
+        {{ props.description }}
+      </p>
       <div class="flex justify-end gap-2">
         <UButton
           label="Cancel"

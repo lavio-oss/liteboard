@@ -1148,7 +1148,6 @@ const flowKey = computed(() => `${selectedTenantId.value}-${selectedFilterKeys.v
   <UModal
     v-model:open="detailsOpen"
     :title="selectedNode ? `${getKindLabel(selectedNode.kind)} Details` : 'Details'"
-    :description="selectedNode ? `Detailed information for ${selectedNode.label}.` : undefined"
   >
     <template #body>
       <div v-if="selectedNode" class="space-y-4">

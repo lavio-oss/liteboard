@@ -1,7 +1,11 @@
-/** Column header button that toggles sorting, matching the headers on the Assets table. */
-export function useSortableHeader() {
-  const UButton = resolveComponent('UButton')
+import { UButton } from '#components'
 
+/**
+ * Column header button that toggles sorting, matching the headers on the Assets table.
+ * UButton is imported rather than resolved with resolveComponent because pages call this
+ * after an await, where the component instance is gone and the header would render empty.
+ */
+export function useSortableHeader() {
   return function sortableHeader(label: string) {
     return ({ column }: { column: { getIsSorted: () => false | 'asc' | 'desc', toggleSorting: (desc?: boolean) => void } }) => {
       const isSorted = column.getIsSorted()

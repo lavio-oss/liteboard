@@ -24,7 +24,6 @@ const schema = JSON.stringify({
   <UModal
     v-model:open="open"
     title="Schema guide"
-    description="What a telemetry message must contain and how to describe its values."
     :ui="{ content: 'max-w-3xl' }"
   >
     <template #body>

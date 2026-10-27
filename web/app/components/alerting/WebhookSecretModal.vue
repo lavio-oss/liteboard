@@ -11,10 +11,12 @@ const { copy, copied } = useClipboard()
   <UModal
     v-model:open="open"
     title="Signing secret"
-    description="Copy it now. It is shown only once and cannot be retrieved later."
   >
     <template #body>
       <div class="space-y-4">
+        <p class="text-sm text-muted">
+          Copy it now. It is shown only once and cannot be retrieved later.
+        </p>
         <UInput
           :model-value="props.secret"
           readonly

@@ -60,11 +60,14 @@ function handleAutoDetect(): void {
   <UModal
     :open="props.open"
     title="Select Timezone"
-    description="Choose your preferred display timezone. System timestamps remain strictly UTC+0."
     @update:open="emit('update:open', $event)"
   >
     <template #body>
       <div class="space-y-3">
+        <p class="text-sm text-muted">
+          Choose your preferred display timezone. System timestamps remain strictly UTC+0.
+        </p>
+
         <div class="flex items-center gap-2">
           <UInput
             v-model="search"

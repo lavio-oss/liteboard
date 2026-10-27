@@ -30,7 +30,9 @@ export const projectSchema = resourceBaseSchema.extend({
   description: z.string().nullable(),
   role: projectRoleSchema.nullable(),
   max_devices_quota: z.number().int().nonnegative().nullable(),
-  device_count: z.number().int().nonnegative()
+  device_count: z.number().int().nonnegative(),
+  // null until the project has a provisioning profile.
+  provisioning_enabled: z.boolean().nullable()
 })
 
 export const projectProvisioningProfileSchema = z.object({

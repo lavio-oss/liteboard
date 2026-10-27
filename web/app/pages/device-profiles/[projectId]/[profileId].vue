@@ -375,7 +375,7 @@ async function createVersion(payload: DeviceProfileVersionInput): Promise<void> 
       </div>
       <AdminDeviceProfileGuideModal v-model:open="guideOpen" />
 
-      <UModal v-model:open="metaOpen" title="New version" description="Set the version details, then define its fields.">
+      <UModal v-model:open="metaOpen" title="New version">
         <template #body>
           <UForm
             id="version-meta-form"

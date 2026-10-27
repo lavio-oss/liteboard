@@ -54,10 +54,13 @@ watch(parent, () => {
   <UModal
     v-model:open="open"
     :title="props.title"
-    :description="props.description"
   >
     <template #body>
       <div class="space-y-4">
+        <p v-if="props.description" class="text-sm text-muted">
+          {{ props.description }}
+        </p>
+
         <UFormField v-if="props.parentItems !== undefined" :label="props.parentLabel">
           <USelectMenu
             v-model="parent"

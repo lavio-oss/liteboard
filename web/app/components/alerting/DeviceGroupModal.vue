@@ -66,11 +66,14 @@ function apply(): void {
   <UModal
     v-model:open="open"
     :title="props.title"
-    :description="`Tick the devices that use this profile version. Unticked devices move back to the Default profile. Added devices must send schema_version ${props.schemaVersion}.`"
     :ui="{ content: 'max-w-2xl' }"
   >
     <template #body>
       <div class="space-y-4">
+        <p class="text-sm text-muted">
+          Tick the devices that use this profile version. Unticked devices move back to the Default profile. Added devices must send schema_version {{ props.schemaVersion }}.
+        </p>
+
         <div class="flex gap-2">
           <UInput
             v-model="query"

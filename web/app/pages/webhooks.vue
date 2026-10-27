@@ -388,9 +388,11 @@ const errorMessage = computed(() => {
       <UModal
         v-model:open="rotateOpen"
         :title="`Rotate secret of ${rotatingEndpoint?.name ?? 'endpoint'}`"
-        description="The old secret stops working immediately. Update the receiver before the next delivery."
       >
         <template #body>
+          <p class="mb-4 text-sm text-muted">
+            The old secret stops working immediately. Update the receiver before the next delivery.
+          </p>
           <div class="flex justify-end gap-2">
             <UButton
               label="Cancel"

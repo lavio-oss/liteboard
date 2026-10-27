@@ -98,10 +98,21 @@ const assetTypeOptions: Array<{ label: string, value: AssetType }> = [
   { label: 'Equipment', value: 'equipment' }
 ]
 
-const deviceProfileOptions = computed<SelectOption[]>(() => [
-  { label: 'Default (no schema)', value: null },
-  ...props.deviceProfiles.map(profile => ({ label: `${profile.name} (${profile.code})`, value: profile.id }))
-])
+// The project's "default" profile is the null option; profiles may span projects, so they name theirs.
+const deviceProfileOptions = computed<SelectOption[]>(() => {
+  const spansProjects = new Set(props.deviceProfiles.map(profile => profile.project_id)).size > 1
+  const projectName = (projectId: string) => props.projectOptions.find(option => option.value === projectId)?.label
+
+  return [
+    { label: 'Default (no schema)', value: null },
+    ...props.deviceProfiles
+      .filter(profile => profile.code !== 'default')
+      .map(profile => ({
+        label: spansProjects ? `${profile.name} (${profile.code}) · ${projectName(profile.project_id)}` : `${profile.name} (${profile.code})`,
+        value: profile.id
+      }))
+  ]
+})
 
 const deviceProfileVersionOptions = computed<SelectOption[]>(() => props.deviceProfiles
   .find(profile => profile.id === deviceProfileId.value)
@@ -109,12 +120,21 @@ const deviceProfileVersionOptions = computed<SelectOption[]>(() => props.deviceP
   .toSorted((a, b) => b.version - a.version)
   .map(version => ({ label: version.schema_code, value: version.id })) ?? [])
 
+// A profile belongs to one project, so choosing one also fixes the device's project (step 2).
+const selectedDeviceProfile = computed(() => props.deviceProfiles.find(profile => profile.id === deviceProfileId.value) ?? null)
+
 function selectDeviceProfile(profileId: string | null): void {
   deviceProfileId.value = profileId
   deviceProfileVersionId.value = deviceProfileVersionOptions.value[0]?.value ?? null
+
+  if (selectedDeviceProfile.value !== null) {
+    emit('update:project-id', selectedDeviceProfile.value.project_id)
+  }
 }
 
-const isTwoColumnLayout = computed(() => props.resourceType === 'asset' || props.resourceType === 'device')
+const isTwoColumnLayout = computed(() => props.resourceType === 'asset')
+// Device creation is two steps: identity and profile first, then where the device belongs.
+const deviceStep = ref<1 | 2>(1)
 
 const schema = computed(() => {
   if (props.resourceType === 'project') {
@@ -159,6 +179,11 @@ const title = computed(() => {
   return `${action} ${props.resourceType}`
 })
 
+const deviceStepTabs = [
+  { label: 'Device & profile', value: 1 },
+  { label: 'Project & asset', value: 2 }
+]
+
 watch(
   () => [open.value, props.resource, props.resourceType, props.tenantId],
   () => {
@@ -179,6 +204,7 @@ watch(
       ? resource.location ?? ''
       : ''
     state.status = resource === null || resource === undefined ? 'active' : resource.status
+    deviceStep.value = 1
     deviceProfileId.value = props.deviceProfiles.find(
       profile => profile.versions.some(version => version.id === deviceProfileVersionId.value)
     )?.id ?? null
@@ -196,6 +222,12 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
   }
 
   if (props.resourceType === 'device') {
+    if (deviceStep.value === 1) {
+      deviceStep.value = 2
+
+      return
+    }
+
     const data = deviceSchema.parse(event.data)
     const normalizedDescription = data.description.trim() === '' ? null : data.description
 
@@ -224,17 +256,30 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
   <UModal
     v-model:open="open"
     :title="title"
-    :ui="{ content: isTwoColumnLayout ? 'max-w-3xl' : undefined }"
+    :ui="{ content: isTwoColumnLayout ? 'max-w-3xl' : props.resourceType === 'device' ? 'max-w-xl' : undefined }"
   >
     <template #body>
+      <UTabs
+        v-if="props.resourceType === 'device'"
+        v-model="deviceStep"
+        :items="deviceStepTabs"
+        :content="false"
+        variant="link"
+        :ui="{ list: 'w-full border-default p-0', trigger: 'flex-1 justify-center rounded-none py-3' }"
+        class="-mt-2 mb-4 w-full"
+      />
+
+      <!-- Step 1 fields carry the validation, so a failed submit from step 2 goes back to show the errors. -->
       <UForm
         :schema="schema"
         :state="state"
         :disabled="props.loading"
         :class="isTwoColumnLayout ? 'grid grid-cols-1 gap-4 sm:grid-cols-2' : 'space-y-4'"
         @submit="onSubmit"
+        @error="deviceStep = 1"
       >
         <UFormField
+          v-if="props.resourceType !== 'device' || deviceStep === 1"
           name="name"
           label="Name"
           required
@@ -318,37 +363,13 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
           </UFormField>
         </template>
 
-        <template v-else-if="props.resourceType === 'device'">
+        <template v-else-if="props.resourceType === 'device' && deviceStep === 1">
           <UFormField
             name="code"
             label="Code"
             required
           >
             <UInput v-model="state.code" class="w-full" placeholder="Enter device code" />
-          </UFormField>
-
-          <UFormField
-            label="Project"
-            required
-          >
-            <USelect
-              :model-value="props.projectId"
-              :items="props.projectOptions"
-              class="w-full"
-              :disabled="props.resource !== null"
-              @update:model-value="emit('update:project-id', $event)"
-            />
-          </UFormField>
-
-          <UFormField
-            label="Equipment asset"
-          >
-            <USelect
-              :model-value="props.equipmentAssetId"
-              :items="props.equipmentAssetOptions"
-              class="w-full"
-              @update:model-value="emit('update:equipment-asset-id', $event)"
-            />
           </UFormField>
 
           <UFormField label="Device profile">
@@ -366,28 +387,56 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
           </UFormField>
 
           <UFormField
+            v-if="deviceProfileId !== null"
             label="Profile version"
-            :help="deviceProfileId !== null && deviceProfileVersionOptions.length === 0 ? 'This profile has no versions yet.' : undefined"
+            :help="deviceProfileVersionOptions.length === 0 ? 'This profile has no versions yet.' : undefined"
           >
             <USelect
               v-model="deviceProfileVersionId"
               :items="deviceProfileVersionOptions"
               class="w-full"
               placeholder="Select a version"
-              :disabled="deviceProfileId === null || deviceProfileVersionOptions.length === 0"
+              :disabled="deviceProfileVersionOptions.length === 0"
             />
           </UFormField>
 
           <UFormField
             name="description"
             label="Description"
-            class="sm:col-span-2"
           >
             <UTextarea v-model="state.description" class="w-full" placeholder="Enter device description" />
           </UFormField>
         </template>
 
+        <template v-else-if="props.resourceType === 'device'">
+          <UFormField
+            label="Project"
+            required
+            :help="selectedDeviceProfile !== null ? 'Set by the selected device profile.' : undefined"
+          >
+            <USelect
+              :model-value="props.projectId"
+              :items="props.projectOptions"
+              class="w-full"
+              :disabled="props.resource !== null || selectedDeviceProfile !== null"
+              @update:model-value="emit('update:project-id', $event)"
+            />
+          </UFormField>
+
+          <UFormField
+            label="Equipment asset"
+          >
+            <USelect
+              :model-value="props.equipmentAssetId"
+              :items="props.equipmentAssetOptions"
+              class="w-full"
+              @update:model-value="emit('update:equipment-asset-id', $event)"
+            />
+          </UFormField>
+        </template>
+
         <UFormField
+          v-if="props.resourceType !== 'device' || deviceStep === 1"
           name="status"
           label="Status"
           :class="isTwoColumnLayout ? 'sm:col-span-2' : undefined"
@@ -400,6 +449,15 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
 
         <div :class="isTwoColumnLayout ? 'flex justify-end gap-2 sm:col-span-2' : 'flex justify-end gap-2'">
           <UButton
+            v-if="props.resourceType === 'device' && deviceStep === 2"
+            label="Back"
+            color="neutral"
+            variant="subtle"
+            :disabled="props.loading"
+            @click="deviceStep = 1"
+          />
+          <UButton
+            v-else
             label="Cancel"
             color="neutral"
             variant="subtle"
@@ -407,7 +465,7 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
             @click="open = false"
           />
           <UButton
-            :label="props.resource === null ? 'Create' : 'Save changes'"
+            :label="props.resourceType === 'device' && deviceStep === 1 ? 'Next' : props.resource === null ? 'Create' : 'Save changes'"
             color="primary"
             type="submit"
             :loading="props.loading"

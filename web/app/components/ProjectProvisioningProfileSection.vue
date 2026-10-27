@@ -65,12 +65,12 @@ const rotateConfirmOpen = ref(false)
 
 const profileBadge = computed(() => {
   if (profile.value === null) {
-    return { text: 'Not configured', color: 'neutral' as const }
+    return { text: 'Not configured', color: 'neutral' as const, icon: 'i-lucide-circle-dashed' }
   }
 
   return profile.value.enabled
-    ? { text: 'Enabled', color: 'success' as const }
-    : { text: 'Disabled', color: 'neutral' as const }
+    ? { text: 'Enabled', color: 'success' as const, icon: 'i-lucide-circle-check' }
+    : { text: 'Disabled', color: 'neutral' as const, icon: 'i-lucide-circle-pause' }
 })
 
 const quotaFull = computed(() => props.project.max_devices_quota !== null
@@ -237,7 +237,13 @@ watch(
     <div class="flex flex-wrap items-center justify-between gap-3 text-sm">
       <div class="flex items-center gap-2">
         <span class="text-muted">Profile</span>
-        <UBadge :color="profileBadge.color" variant="subtle" size="md" class="text-sm">
+        <UBadge
+          :color="profileBadge.color"
+          :icon="profileBadge.icon"
+          variant="subtle"
+          size="md"
+          class="text-sm"
+        >
           {{ profileBadge.text }}
         </UBadge>
       </div>
@@ -334,32 +340,34 @@ watch(
           </div>
         </div>
 
-        <div class="flex flex-wrap items-center gap-2">
+        <!-- Rendered in the parent modal's footer, like the device Credentials modal actions. -->
+        <Teleport defer to="#provisioning-profile-actions">
           <UButton
-            :label="profile.enabled ? 'Disable enrollment' : 'Enable enrollment'"
-            :color="profile.enabled ? 'neutral' : 'primary'"
-            :variant="profile.enabled ? 'subtle' : 'solid'"
+            :label="profile.enabled ? 'Disable' : 'Enable'"
+            :color="profile.enabled ? 'error' : 'success'"
+            variant="ghost"
             :loading="actionLoading"
             @click="setEnabled(!profile.enabled)"
           />
           <UButton
-            label="Rotate secret"
-            icon="i-lucide-refresh-cw"
+            label="Rotate"
             color="neutral"
-            variant="subtle"
+            variant="ghost"
             :disabled="actionLoading"
             @click="rotateConfirmOpen = true"
           />
-        </div>
+        </Teleport>
       </template>
     </template>
 
     <UModal
       v-model:open="rotateConfirmOpen"
       title="Rotate provisioning secret?"
-      description="The current secret will stop working for future device enrollments. Devices already provisioned keep their Access Tokens."
     >
       <template #body>
+        <p class="mb-4 text-sm text-muted">
+          The current secret will stop working for future device enrollments. Devices already provisioned keep their Access Tokens.
+        </p>
         <div class="flex justify-end gap-2">
           <UButton
             label="Cancel"

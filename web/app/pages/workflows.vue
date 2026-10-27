@@ -813,7 +813,6 @@ const errorMessage = computed(() => {
       <UModal
         v-model:open="detailsOpen"
         :title="detailsNode ? `${KIND_STYLE[detailsNode.data.kind].label} Details` : 'Details'"
-        :description="detailsNode ? `Detailed information for ${detailsNode.data.label}.` : undefined"
       >
         <template #body>
           <div v-if="detailsNode" class="space-y-4">
@@ -879,9 +878,11 @@ const errorMessage = computed(() => {
       <UModal
         v-model:open="pendingOpen"
         :title="pending?.title"
-        :description="pending?.description"
       >
         <template #body>
+          <p v-if="pending" class="mb-4 text-sm text-muted">
+            {{ pending.description }}
+          </p>
           <div class="flex justify-end gap-2">
             <UButton
               label="Cancel"

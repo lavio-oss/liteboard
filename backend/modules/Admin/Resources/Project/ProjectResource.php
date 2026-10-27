@@ -19,6 +19,7 @@ final class ProjectResource extends JsonResource
         /** @var Project $project */
         $project = $this->resource;
 
+        $provisioningProfile = $project->provisioningProfile;
         $createdAt = $project->getAttribute('created_at');
         $updatedAt = $project->getAttribute('updated_at');
 
@@ -52,6 +53,8 @@ final class ProjectResource extends JsonResource
             'status' => (string) $project->status,
             'max_devices_quota' => $project->getAttribute('max_devices_quota'),
             'device_count' => $project->devices()->count(),
+            // null when the project has no provisioning profile yet.
+            'provisioning_enabled' => $provisioningProfile === null ? null : (bool) $provisioningProfile->getAttribute('enabled'),
             'role' => $role,
             'created_at' => $createdAt instanceof CarbonInterface ? $createdAt->toISOString() : null,
             'updated_at' => $updatedAt instanceof CarbonInterface ? $updatedAt->toISOString() : null,
