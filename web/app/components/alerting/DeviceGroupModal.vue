@@ -10,11 +10,10 @@ export interface DeviceGroupChange {
 const props = defineProps<{
   devices: Device[]
   profiles: DeviceProfile[]
-  // Set when editing the group of a profile version; null for a new or draft group.
-  versionId: string | null
+  versionId: string
   // Version number of versionId; telemetry of added devices must carry it as schema_version.
   schemaVersion: number | null
-  // Devices ticked on open: the version's members, or a draft group's devices.
+  // Devices ticked on open: the version's members.
   initialDeviceIds: string[]
   title: string
   canCreate: boolean
@@ -24,7 +23,6 @@ const props = defineProps<{
 const open = defineModel<boolean>('open', { required: true })
 
 const emit = defineEmits<{
-  draft: [deviceIds: string[]]
   submit: [changes: DeviceGroupChange[]]
   create: []
 }>()
@@ -43,27 +41,20 @@ const deviceItems = computed(() => props.devices
       : profileByVersion.value.get(device.device_profile_version_id)?.name ?? 'Unknown profile'
   })))
 
+// Immediate: the page mounts this modal already open the first time a version is picked.
 watch(open, () => {
   selectedIds.value = [...props.initialDeviceIds]
   query.value = ''
-})
+}, { immediate: true })
 
 const added = computed(() => selectedIds.value.filter(id => !props.initialDeviceIds.includes(id)))
 const removed = computed(() => props.initialDeviceIds.filter(id => !selectedIds.value.includes(id)))
 // Added devices that already use another version move away from it.
 const moved = computed(() => props.devices.filter(device => added.value.includes(device.id) && device.device_profile_version_id !== null))
-// A version group is only changed by adding or removing devices; a draft needs at least one.
-const canApply = computed(() => props.versionId === null
-  ? selectedIds.value.length > 0
-  : added.value.length > 0 || removed.value.length > 0)
+const canApply = computed(() => added.value.length > 0 || removed.value.length > 0)
 
+// Unticked devices get null, which the backend turns into the project's Default profile.
 function apply(): void {
-  if (props.versionId === null) {
-    emit('draft', selectedIds.value)
-
-    return
-  }
-
   emit('submit', [
     ...added.value.map(deviceId => ({ deviceId, versionId: props.versionId })),
     ...removed.value.map(deviceId => ({ deviceId, versionId: null }))
@@ -75,9 +66,7 @@ function apply(): void {
   <UModal
     v-model:open="open"
     :title="props.title"
-    :description="props.versionId === null
-      ? 'Tick the devices of the group, then connect the group to a profile version on the canvas.'
-      : `Tick the devices that use this profile version. Unticked devices are unassigned. Added devices must send schema_version ${props.schemaVersion}.`"
+    :description="`Tick the devices that use this profile version. Unticked devices move back to the Default profile. Added devices must send schema_version ${props.schemaVersion}.`"
     :ui="{ content: 'max-w-2xl' }"
   >
     <template #body>
@@ -112,13 +101,8 @@ function apply(): void {
 
         <div class="flex items-center justify-between gap-2">
           <p class="text-sm text-muted">
-            <template v-if="props.versionId === null">
-              {{ selectedIds.length }} selected
-            </template>
-            <template v-else>
-              {{ added.length }} to add, {{ removed.length }} to unassign<template v-if="moved.length > 0">
-                , {{ moved.length }} move from another version
-              </template>
+            {{ added.length }} to add, {{ removed.length }} back to Default<template v-if="moved.length > 0">
+              , {{ moved.length }} move from another version
             </template>
           </p>
           <div class="flex gap-2">
@@ -130,7 +114,7 @@ function apply(): void {
               @click="open = false"
             />
             <UButton
-              :label="props.versionId === null ? 'Save group' : 'Apply'"
+              label="Apply"
               :loading="props.loading"
               :disabled="!canApply"
               @click="apply"

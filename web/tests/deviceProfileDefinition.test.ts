@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { deviceProfileVersionDefinitionSchema } from '../app/types/deviceProfileDefinition.ts'
+import {
+  deviceProfileVersionDefinitionSchema,
+  deviceProfileVersionInputDefinitionSchema
+} from '../app/types/deviceProfileDefinition.ts'
 
 const motorV1 = {
   strict_mode: true,
@@ -58,8 +61,18 @@ test('device profile definition rejects field names the backend does not accept'
   }
 })
 
-test('device profile definition requires at least one field and known keys', () => {
-  assert.deepEqual(issuePaths({ strict_mode: true, fields: {} }), ['fields'])
+test('device profile definition accepts the empty auto-created schema but input requires a field', () => {
+  const empty = { strict_mode: false, fields: {} }
+
+  assert.equal(deviceProfileVersionDefinitionSchema.safeParse(empty).success, true)
+
+  const input = deviceProfileVersionInputDefinitionSchema.safeParse(empty)
+
+  assert.equal(input.success, false)
+  assert.deepEqual(input.error.issues.map(issue => issue.path.join('.')), ['fields'])
+})
+
+test('device profile definition requires known keys', () => {
   assert.deepEqual(issuePaths({ ...motorV1, version: 2 }), [''])
   assert.deepEqual(issuePaths({
     strict_mode: true,

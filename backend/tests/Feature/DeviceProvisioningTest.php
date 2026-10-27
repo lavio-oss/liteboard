@@ -83,11 +83,14 @@ it('bootstraps a device atomically and returns the same active credential for an
     $deviceId = (string) $first->json('device.id');
     $token = (string) $first->json('credentials.access_token');
     expect(Device::query()->where('project_id', $project->getKey())->count())->toBe(1);
+    expect(Device::query()->findOrFail($deviceId)->profileVersion?->definition)
+        ->toBe(['strict_mode' => false, 'fields' => []]);
 
     $this->postJson('https://localhost/api/device-provisioning/bootstrap', $payload)
         ->assertOk()
         ->assertJsonPath('device.id', $deviceId)
         ->assertJsonPath('credentials.access_token', $token);
+    expect($project->deviceProfiles()->count())->toBe(1);
 
     $this->postJson('https://localhost/api/device-provisioning/bootstrap', [
         ...$payload,

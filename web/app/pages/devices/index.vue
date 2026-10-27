@@ -467,18 +467,6 @@ const columns: TableColumn<AdminTableRow>[] = [
     header: 'Code'
   },
   {
-    id: 'project_id',
-    accessorKey: 'project_id',
-    header: 'Project',
-    cell: ({ row }) => projectNameFor(row.original.project_id)
-  },
-  {
-    id: 'equipment_asset_id',
-    accessorKey: 'equipment_asset_id',
-    header: 'Equipment',
-    cell: ({ row }) => equipmentNameFor(row.original.equipment_asset_id)
-  },
-  {
     id: 'connection_state',
     accessorKey: 'connection_state',
     header: ({ column }) => {
@@ -578,6 +566,18 @@ const columns: TableColumn<AdminTableRow>[] = [
       },
       () => row.original.status
     )
+  },
+  {
+    id: 'equipment_asset_id',
+    accessorKey: 'equipment_asset_id',
+    header: 'Equipment',
+    cell: ({ row }) => equipmentNameFor(row.original.equipment_asset_id)
+  },
+  {
+    id: 'project_id',
+    accessorKey: 'project_id',
+    header: 'Project',
+    cell: ({ row }) => projectNameFor(row.original.project_id)
   },
   {
     id: 'actions',

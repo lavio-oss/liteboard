@@ -11,8 +11,8 @@ import { useAlertingProject } from '~/composables/useAlertingProject'
 import type { Device, DeviceInput, DeviceProfile, DeviceProfileInput } from '~/types/admin'
 import type { AlertRule, AlertRuleInput, WebhookEndpoint, WebhookEndpointInput } from '~/types/alerting'
 import { describeAlertRule } from '~/utils/alertRuleDefinition'
-import { DRAFT_GROUP_PREFIX, WORKFLOW_COLUMNS, buildAlertWorkflowGraph, parseWorkflowNodeId, versionProfiles } from '~/utils/alertWorkflowGraph'
-import type { DraftGroup, WorkflowEdge, WorkflowKind } from '~/utils/alertWorkflowGraph'
+import { WORKFLOW_COLUMNS, buildAlertWorkflowGraph, parseWorkflowNodeId, versionProfiles } from '~/utils/alertWorkflowGraph'
+import type { WorkflowEdge, WorkflowKind } from '~/utils/alertWorkflowGraph'
 
 definePageMeta({
   middleware: 'auth'
@@ -59,15 +59,11 @@ const { data, status, error, refresh } = await useAsyncData(
 )
 
 const source = computed(() => data.value ?? { devices: [], profiles: [], rules: [], webhooks: [] })
-// Groups created without a profile; they exist until connected to a profile or removed, and are lost on reload.
-const drafts = ref<DraftGroup[]>([])
-const graph = computed(() => buildAlertWorkflowGraph({ ...source.value, drafts: drafts.value }))
-const isDraft = (entityId: string) => entityId.startsWith(DRAFT_GROUP_PREFIX)
-let draftCounter = 0
-watch(selectedProjectId, () => {
-  drafts.value = []
-})
+const graph = computed(() => buildAlertWorkflowGraph(source.value))
 const profileByVersion = computed(() => versionProfiles(source.value.profiles))
+// Devices without another profile land on the latest version of the project's Default profile (code "default").
+const defaultVersionId = computed(() => [...source.value.profiles.find(profile => profile.code === 'default')?.versions ?? []]
+  .sort((a, b) => b.version - a.version)[0]?.id ?? null)
 
 // Same visual language as TenantHierarchyFlow: icon colour plus a matching subtle badge.
 const KIND_STYLE = {
@@ -96,14 +92,10 @@ const flowEdges = computed(() => graph.value.edges.map((edge) => {
 const findWebhook = (id: string) => source.value.webhooks.find(webhook => webhook.id === id)
 const groupMembers = (versionId: string) => source.value.devices.filter(device => device.device_profile_version_id === versionId)
 
-// Drawn by hand: device group → profile version (assigns the group's devices to it) and rule → webhook.
+// Drawn by hand: device group → profile version (moves the group's devices to it) and rule → webhook.
 // Set on both handles because Vue Flow validates with the handle the drag starts from; the VueFlow-level
 // prop would also validate, and drop, every existing edge when they are loaded.
-function groupDeviceIds(entityId: string): string[] {
-  return isDraft(entityId)
-    ? drafts.value.find(draft => draft.id === entityId)?.deviceIds ?? []
-    : groupMembers(entityId).map(device => device.id)
-}
+const groupDeviceIds = (versionId: string) => groupMembers(versionId).map(device => device.id)
 
 function isValidConnection(connection: Connection): boolean {
   if (connection.source === 'input' || connection.target === 'input') {
@@ -200,11 +192,7 @@ function onConnect(connection: Connection): void {
     confirm(
       'Assign profile version',
       `${deviceIds.length} device(s) of ${nodeLabel(connection.source)} will validate telemetry against ${nodeLabel(connection.target)} and be evaluated by its profile's rules.${schemaWarning(to.entityId)}`,
-      async () => {
-        await applyDeviceChanges(deviceIds.map(deviceId => ({ deviceId, versionId: to.entityId })))
-        // Assigned devices are real data now, so a connected draft goes away.
-        drafts.value = drafts.value.filter(draft => draft.id !== from.entityId)
-      }
+      () => applyDeviceChanges(deviceIds.map(deviceId => ({ deviceId, versionId: to.entityId })))
     )
 
     return
@@ -245,9 +233,10 @@ function onEdgeClick({ edge }: EdgeMouseEvent): void {
   )
 }
 
-// Palette: dropping a component opens a picker. A device group ticks devices; profile version, rule and
-// webhook select one existing entity and focus its node. "Add new" in a picker opens the create form
-// (a profile, since versions are published on the profile page).
+// Palette: "group" creates a device (it joins the Default profile unless another version is chosen); profile
+// version, rule and webhook open a picker that selects one existing entity and focuses its node. "Add new" in
+// a picker opens the create form (a profile, since versions are published on the profile page).
+// Devices move between versions with the "Select devices" button on a version or group node.
 type PaletteKind = 'group' | 'version' | 'rule' | 'webhook'
 type PickKind = Exclude<PaletteKind, 'group'>
 type FormKind = 'group' | 'pick' | 'device' | 'profile' | 'rule' | 'webhook'
@@ -266,23 +255,8 @@ const formProjectId = ref<string | null>(null)
 const formEquipmentAssetId = ref<string | null>(null)
 const formDeviceProfileVersionId = ref<string | null>(null)
 const pickKind = ref<PickKind>('version')
-// The group the device modal edits: a profile version's group, a draft, or null for a new group.
+// The profile version whose devices the group modal edits.
 const groupTarget = ref<string | null>(null)
-const groupVersionId = computed(() => groupTarget.value === null || isDraft(groupTarget.value) ? null : groupTarget.value)
-const groupInitialIds = computed(() => {
-  const target = groupTarget.value
-
-  if (target === null) {
-    return []
-  }
-
-  return isDraft(target)
-    ? drafts.value.find(draft => draft.id === target)?.deviceIds ?? []
-    : groupMembers(target).map(device => device.id)
-})
-const groupTitle = computed(() => groupTarget.value === null
-  ? 'New device group'
-  : `Devices of ${nodeLabel(`group:${groupTarget.value}`)}`)
 const editingRule = ref<AlertRule | null>(null)
 const credentialsOpen = ref(false)
 const credentialsDevice = ref<Device | null>(null)
@@ -298,8 +272,7 @@ function openCreate(kind: string): void {
   }
 
   if (item.kind === 'group') {
-    groupTarget.value = null
-    activeForm.value = 'group'
+    onGroupCreate()
   } else {
     pickKind.value = item.kind
     activeForm.value = 'pick'
@@ -410,19 +383,14 @@ async function saveGroup(changes: DeviceGroupChange[]): Promise<void> {
   await submitForm('Unable to update device group', () => applyDeviceChanges(changes))
 }
 
-// A draft is edited in place; otherwise a new one is added.
-function saveDraft(deviceIds: string[]): void {
-  const target = groupTarget.value
-
-  drafts.value = target !== null && isDraft(target)
-    ? drafts.value.map(draft => draft.id === target ? { ...draft, deviceIds } : draft)
-    : [...drafts.value, { id: `${DRAFT_GROUP_PREFIX}${++draftCounter}`, deviceIds }]
-  activeForm.value = null
-}
-
+// A new profile has no version yet, so it cannot appear on the canvas; its page publishes v1.
 async function saveProfile(payload: DeviceProfileInput): Promise<void> {
   const project = requireProject()
-  await submitForm('Unable to create profile', () => createDeviceProfile(project.tenant_id, project.id, payload))
+  const profile = await submitForm('Unable to create profile', () => createDeviceProfile(project.tenant_id, project.id, payload))
+
+  if (profile !== undefined) {
+    navigateTo(`/device-profiles/${project.id}/${profile.id}`, { open: { target: '_blank' } })
+  }
 }
 
 async function saveRule({ input }: { projectId: string, input: AlertRuleInput }): Promise<void> {
@@ -470,8 +438,8 @@ const paletteOpen = ref(false)
 
 /**
  * "Remove from canvas" removes the node's writable relationships, never the entity itself:
- * a device group's devices lose their profile, a rule leaves every webhook filter, a webhook
- * stops receiving any rule. Profile→rule links are fixed by the data model.
+ * a device group's devices move back to the Default profile, a rule leaves every webhook filter,
+ * a webhook stops receiving any rule. Profile→rule links are fixed by the data model.
  */
 function unlinkPlan(nodeId: string): { description: string, run: () => Promise<unknown> } | null {
   if (nodeId === 'input') {
@@ -481,20 +449,13 @@ function unlinkPlan(nodeId: string): { description: string, run: () => Promise<u
   const { kind, entityId } = parseWorkflowNodeId(nodeId)
   const label = nodeLabel(nodeId)
 
-  if (kind === 'group' && isDraft(entityId)) {
-    return {
-      description: `${label} will be removed from the canvas. Its devices keep their current profile.`,
-      run: () => Promise.resolve(drafts.value = drafts.value.filter(draft => draft.id !== entityId))
-    }
-  }
-
-  if (kind === 'group' && canWriteInSelectedProject.value) {
+  if (kind === 'group' && canWriteInSelectedProject.value && entityId !== defaultVersionId.value) {
     const members = groupMembers(entityId)
 
     return members.length === 0
       ? null
       : {
-          description: `${members.length} device(s) of ${label} will be unassigned and no longer evaluated by rules.`,
+          description: `${members.length} device(s) of ${label} will move back to the Default profile and its rules.`,
           run: () => applyDeviceChanges(members.map(device => ({ deviceId: device.id, versionId: null })))
         }
   }
@@ -562,7 +523,7 @@ const detailFields = computed<{ label: string, value: string | string[] }[]>(() 
     const members = source.value.devices.filter(device => deviceIds.includes(device.id))
 
     return [
-      { label: 'Profile version', value: isDraft(entityId) ? '—' : nodeLabel(`version:${entityId}`) },
+      { label: 'Profile version', value: nodeLabel(`version:${entityId}`) },
       { label: 'Devices', value: members.map(device => device.name) },
       { label: 'Online', value: String(members.filter(device => device.connection_state === 'online').length) }
     ]
@@ -724,7 +685,7 @@ const errorMessage = computed(() => {
                   tabindex="0"
                   :draggable="item.enabled"
                   :aria-disabled="!item.enabled"
-                  :aria-label="`Create ${KIND_STYLE[item.kind].label.toLowerCase()}`"
+                  :aria-label="`Create ${item.kind === 'group' ? 'device' : KIND_STYLE[item.kind].label.toLowerCase()}`"
                   class="flex items-center gap-2 rounded-md border border-default bg-elevated/95 px-2.5 py-2 text-sm shadow-xs transition-all"
                   :class="item.enabled ? 'cursor-grab hover:border-primary/60 hover:shadow-md' : 'cursor-not-allowed opacity-50'"
                   @dragstart="onPaletteDragStart($event, item.kind)"
@@ -733,7 +694,7 @@ const errorMessage = computed(() => {
                 >
                   <UIcon name="i-lucide-grip-vertical" class="size-3.5 shrink-0 text-dimmed" />
                   <UIcon :name="KIND_STYLE[item.kind].icon" class="size-4 shrink-0" :class="KIND_STYLE[item.kind].iconClass" />
-                  <span class="font-medium text-highlighted">{{ KIND_STYLE[item.kind].label }}</span>
+                  <span class="font-medium text-highlighted">{{ item.kind === 'group' ? 'Device' : KIND_STYLE[item.kind].label }}</span>
                 </div>
               </div>
             </div>
@@ -795,7 +756,7 @@ const errorMessage = computed(() => {
                         @mousedown.stop
                       />
                       <UButton
-                        v-if="node.kind === 'group' && canWriteInSelectedProject"
+                        v-if="(node.kind === 'group' || node.kind === 'version') && canWriteInSelectedProject"
                         icon="i-lucide-list-checks"
                         color="primary"
                         variant="ghost"
@@ -940,16 +901,16 @@ const errorMessage = computed(() => {
 
       <template v-if="selectedProject !== null">
         <AlertingDeviceGroupModal
+          v-if="groupTarget !== null"
           v-model:open="groupFormOpen"
           :devices="source.devices"
           :profiles="source.profiles"
-          :version-id="groupVersionId"
-          :schema-version="groupVersionId === null ? null : profileByVersion.get(groupVersionId)?.versions.find(version => version.id === groupVersionId)?.version ?? null"
-          :initial-device-ids="groupInitialIds"
-          :title="groupTitle"
+          :version-id="groupTarget"
+          :schema-version="profileByVersion.get(groupTarget)?.versions.find(version => version.id === groupTarget)?.version ?? null"
+          :initial-device-ids="groupDeviceIds(groupTarget)"
+          :title="`Devices of ${nodeLabel(`version:${groupTarget}`)}`"
           :can-create="canWriteInSelectedProject"
           :loading="formLoading"
-          @draft="saveDraft"
           @submit="saveGroup"
           @create="onGroupCreate"
         />

@@ -3,7 +3,7 @@ import { tenantRoleSchema } from '~/types/auth'
 import { deviceApprovalSchema } from './deviceApproval'
 import { deviceMqttConnectionSchema, deviceMqttTopicsSchema } from './deviceCredential'
 import type { deviceProfileVersionDefinitionFieldSchema } from './deviceProfileDefinition'
-import { deviceProfileVersionDefinitionSchema } from './deviceProfileDefinition'
+import { deviceProfileVersionDefinitionSchema, deviceProfileVersionInputDefinitionSchema } from './deviceProfileDefinition'
 
 export { deviceApprovalStatusSchema } from './deviceApproval'
 export { deviceMqttConnectionSchema, deviceMqttTopicsSchema } from './deviceCredential'
@@ -88,7 +88,7 @@ export const deviceProfileVersionSchema = z.object({
 
 export const deviceProfileVersionInputSchema = z.object({
   schema_code: z.string().min(1).max(64),
-  definition: deviceProfileVersionDefinitionSchema,
+  definition: deviceProfileVersionInputDefinitionSchema,
   compatibility_note: z.string().max(1000).nullable()
 })
 

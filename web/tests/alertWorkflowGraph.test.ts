@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { Device, DeviceProfile } from '../app/types/admin.ts'
 import type { AlertRule, WebhookEndpoint } from '../app/types/alerting.ts'
-import { DRAFT_GROUP_PREFIX, WORKFLOW_GRID, buildAlertWorkflowGraph, parseWorkflowNodeId } from '../app/utils/alertWorkflowGraph.ts'
+import { WORKFLOW_GRID, buildAlertWorkflowGraph, parseWorkflowNodeId } from '../app/utils/alertWorkflowGraph.ts'
 
 const at = '2026-10-18T08:00:00.000000Z'
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
@@ -73,15 +73,6 @@ test('derives edges: every version of a profile feeds its rules; only webhook fi
   assert.deepEqual(edges.filter(edge => edge.target === `webhook:${id(52)}`).map(edge => [edge.source, edge.data.removable]), [
     [`rule:${id(41)}`, true]
   ])
-})
-
-test('adds draft groups below the last version row, linked to the input only', () => {
-  const { nodes, edges } = buildAlertWorkflowGraph({ ...source, drafts: [{ id: `${DRAFT_GROUP_PREFIX}1`, deviceIds: [id(31), id(32)] }] })
-  const draft = nodes.find(node => node.id === `group:${DRAFT_GROUP_PREFIX}1`)!
-
-  assert.deepEqual([draft.data.label, draft.data.sublabel], ['New group 1', '2 device(s) · not assigned'])
-  assert.equal(draft.position.y, 3 * WORKFLOW_GRID.rowHeight)
-  assert.deepEqual(edges.filter(edge => edge.source === draft.id || edge.target === draft.id).map(edge => edge.source), ['input'])
 })
 
 test('parses node ids and rejects unknown ones', () => {

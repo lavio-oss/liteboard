@@ -99,7 +99,7 @@ const assetTypeOptions: Array<{ label: string, value: AssetType }> = [
 ]
 
 const deviceProfileOptions = computed<SelectOption[]>(() => [
-  { label: 'No profile', value: null },
+  { label: 'Default (no schema)', value: null },
   ...props.deviceProfiles.map(profile => ({ label: `${profile.name} (${profile.code})`, value: profile.id }))
 ])
 

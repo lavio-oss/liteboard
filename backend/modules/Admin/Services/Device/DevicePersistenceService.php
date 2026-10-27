@@ -3,14 +3,22 @@
 namespace Modules\Admin\Services\Device;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Modules\Admin\Models\Device\Device;
+use Modules\Admin\Models\DeviceProfile\DeviceProfileVersion;
 use Modules\Admin\Models\Project\Project;
+use Modules\Admin\Services\DeviceProfile\DeviceProfilePersistenceService;
 use RuntimeException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 final class DevicePersistenceService
 {
-    public function __construct(private readonly DeviceCredentialService $deviceCredentialService) {}
+    private const string DEFAULT_PROFILE_CODE = 'default';
+
+    public function __construct(
+        private readonly DeviceCredentialService $deviceCredentialService,
+        private readonly DeviceProfilePersistenceService $deviceProfilePersistenceService,
+    ) {}
 
     /**
      * @param  array{
@@ -32,11 +40,42 @@ final class DevicePersistenceService
                 throw new ConflictHttpException('PROJECT_DEVICE_QUOTA_EXCEEDED');
             }
 
+            $attributes['device_profile_version_id'] ??= $this->defaultProfileVersionId($lockedProject);
+
             $device = $lockedProject->devices()->create($attributes);
             $this->deviceCredentialService->issueForDevice($device);
 
             return $device->refresh()->load('credential');
         });
+    }
+
+    /**
+     * The project's Default profile (code "default") receives every device that has no other profile; it is
+     * created schemaless on first use. Callers hold the project row lock, so two devices cannot race to create it.
+     */
+    private function defaultProfileVersionId(Project $project): string
+    {
+        $profile = $project->deviceProfiles()->where('code', self::DEFAULT_PROFILE_CODE)->first()
+            ?? $this->deviceProfilePersistenceService->create($project, [
+                'code' => self::DEFAULT_PROFILE_CODE,
+                'name' => 'Default',
+            ]);
+        $version = $profile->versions()->orderByDesc('version')->first();
+
+        if ($version === null) {
+            $schemaCodeTaken = DeviceProfileVersion::query()
+                ->where('project_id', $project->getKey())
+                ->where('schema_code', self::DEFAULT_PROFILE_CODE)
+                ->exists();
+            $version = $this->deviceProfilePersistenceService->createVersion(
+                $profile,
+                $schemaCodeTaken ? self::DEFAULT_PROFILE_CODE.'-'.Str::lower(Str::random(6)) : self::DEFAULT_PROFILE_CODE,
+                ['strict_mode' => false, 'fields' => []],
+                null,
+            );
+        }
+
+        return (string) $version->getKey();
     }
 
     /**
@@ -52,6 +91,11 @@ final class DevicePersistenceService
     public function update(Device $device, array $attributes): Device
     {
         return DB::transaction(function () use ($device, $attributes): Device {
+            if (array_key_exists('device_profile_version_id', $attributes) && $attributes['device_profile_version_id'] === null) {
+                $lockedProject = Project::query()->whereKey($device->getAttribute('project_id'))->lockForUpdate()->firstOrFail();
+                $attributes['device_profile_version_id'] = $this->defaultProfileVersionId($lockedProject);
+            }
+
             $device->fill($attributes);
             $device->save();
 

@@ -33,7 +33,7 @@ const profileId = ref<string | null>(null)
 const profileVersionId = ref<string | null>(null)
 
 const profileOptions = computed<SelectOption[]>(() => [
-  { label: 'No profile', value: null },
+  { label: 'Default (no schema)', value: null },
   ...props.deviceProfiles.map(profile => ({ label: `${profile.name} (${profile.code})`, value: profile.id }))
 ])
 const versionOptions = computed<SelectOption[]>(() => props.deviceProfiles

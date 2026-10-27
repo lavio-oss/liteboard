@@ -355,7 +355,10 @@ it('rejects cross-project assignments and preserves profiles with published vers
             ['device_profile_version_id' => null],
         )
         ->assertOk()
-        ->assertJsonPath('data.device_profile_version_id', null);
+        ->assertJsonPath(
+            'data.device_profile_version_id',
+            $project->deviceProfiles()->where('code', 'default')->firstOrFail()->versions()->firstOrFail()->getKey(),
+        );
 
     $this->actingAs($owner)
         ->deleteJson("/api/tenants/$tenant->id/projects/$project->id/device-profiles/$profile->id")
@@ -673,4 +676,80 @@ it('allows the same profile code and schema code in different projects', functio
             ->assertCreated()
             ->assertJsonPath('data.version', 1);
     }
+});
+
+it('assigns devices without a profile to the project Default profile', function (): void {
+    [$owner, $tenant, $project] = createDeviceProfileOwner();
+    $otherProject = Project::factory()->for($tenant)->create();
+    $devicesUrl = "/api/tenants/$tenant->id/projects/$project->id/devices";
+
+    $firstVersionId = (string) $this->actingAs($owner)
+        ->postJson($devicesUrl, ['name' => 'Boiler sensor', 'code' => 'boiler-01'])
+        ->assertCreated()
+        ->json('data.device_profile_version_id');
+    $this->actingAs($owner)
+        ->postJson($devicesUrl, ['name' => 'Pump sensor', 'code' => 'pump-01', 'device_profile_version_id' => null])
+        ->assertCreated()
+        ->assertJsonPath('data.device_profile_version_id', $firstVersionId);
+
+    $version = DeviceProfileVersion::query()->with('profile')->findOrFail($firstVersionId);
+    expect($project->deviceProfiles()->count())->toBe(1)
+        ->and($version->project_id)->toBe($project->getKey())
+        ->and($version->version)->toBe(1)
+        ->and($version->schema_code)->toBe('default')
+        ->and($version->definition)->toBe(['strict_mode' => false, 'fields' => []])
+        ->and($version->profile?->getAttribute('code'))->toBe('default')
+        ->and($version->profile?->getAttribute('name'))->toBe('Default');
+
+    $this->actingAs($owner)
+        ->getJson("/api/tenants/$tenant->id/projects/$project->id/device-profiles/{$version->getAttribute('device_profile_id')}")
+        ->assertOk()
+        ->assertSee('"fields":{}', false);
+
+    $otherVersionId = (string) $this->actingAs($owner)
+        ->postJson("/api/tenants/$tenant->id/projects/$otherProject->id/devices", ['name' => 'Other', 'code' => 'boiler-01'])
+        ->assertCreated()
+        ->json('data.device_profile_version_id');
+    expect($otherVersionId)->not->toBe($firstVersionId)
+        ->and(DeviceProfileVersion::query()->findOrFail($otherVersionId)->project_id)->toBe($otherProject->getKey());
+});
+
+it('reuses an existing default profile and its latest version', function (): void {
+    [$owner, $tenant, $project] = createDeviceProfileOwner();
+    $profile = DeviceProfile::factory()->for($project)->create(['code' => 'default']);
+    $devicesUrl = "/api/tenants/$tenant->id/projects/$project->id/devices";
+
+    $versionOneId = (string) $this->actingAs($owner)
+        ->postJson($devicesUrl, ['name' => 'First', 'code' => 'first-01'])
+        ->assertCreated()
+        ->json('data.device_profile_version_id');
+    expect($profile->versions()->sole()->getKey())->toBe($versionOneId);
+
+    $versionTwo = DeviceProfileVersion::factory()
+        ->forProfile($profile)
+        ->create(['version' => 2, 'definition' => deviceProfileDefinition()]);
+
+    $this->actingAs($owner)
+        ->postJson($devicesUrl, ['name' => 'Second', 'code' => 'second-01'])
+        ->assertCreated()
+        ->assertJsonPath('data.device_profile_version_id', $versionTwo->getKey());
+    expect($project->deviceProfiles()->count())->toBe(1);
+});
+
+it('keeps an explicitly chosen profile version', function (): void {
+    [$owner, $tenant, $project] = createDeviceProfileOwner();
+    $version = DeviceProfileVersion::factory()
+        ->forProfile(DeviceProfile::factory()->for($project)->create())
+        ->create(['version' => 1, 'definition' => deviceProfileDefinition()]);
+
+    $this->actingAs($owner)
+        ->postJson("/api/tenants/$tenant->id/projects/$project->id/devices", [
+            'name' => 'Pinned device',
+            'code' => 'pinned-01',
+            'device_profile_version_id' => $version->getKey(),
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.device_profile_version_id', $version->getKey());
+
+    expect($project->deviceProfiles()->count())->toBe(1);
 });

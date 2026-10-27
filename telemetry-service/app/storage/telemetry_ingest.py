@@ -133,9 +133,11 @@ class PostgresTelemetryIngestor:
                     )
 
                 profile = self._profile_assignment(device)
+                # A profile with no fields (the auto-created default) admits payloads exactly like no profile.
+                validating_profile = profile if profile is not None and profile.definition['fields'] else None
                 inspection = (
                     inspect_telemetry_envelope(raw, received_at=received_at)
-                    if profile is not None
+                    if validating_profile is not None
                     else inspect_unprofiled_telemetry(raw, received_at=received_at)
                 )
                 stages.append(_stage('decoded'))
@@ -163,7 +165,7 @@ class PostgresTelemetryIngestor:
                         return IngestResult(duplicate.status, processing_id, duplicate.reasons, outcome=outcome, presence=presence)
                 stages.append(_stage('dedup_checked'))
 
-                if profile is None:
+                if validating_profile is None:
                     if inspection.reasons:
                         outcome = await record('rejected', inspection.reasons, inspection.message_id)
                         return IngestResult('rejected', processing_id, inspection.reasons, outcome=outcome, presence=presence)
@@ -172,7 +174,7 @@ class PostgresTelemetryIngestor:
                         raise AssertionError('A reason-free profile-less inspection must carry an envelope.')
                     envelope = inspection.envelope
                 else:
-                    admission = decide_admission(inspection, profile)
+                    admission = decide_admission(inspection, validating_profile)
                     stages.append(_stage('validated'))
                     if isinstance(admission, Reject):
                         outcome = await record('rejected', admission.reasons, inspection.message_id)

@@ -60,10 +60,7 @@ export const deviceProfileVersionDefinitionFieldSchema = z.object({
 
 export const deviceProfileVersionDefinitionSchema = z.object({
   strict_mode: z.boolean(),
-  fields: z.record(z.string(), deviceProfileVersionDefinitionFieldSchema).refine(
-    fields => Object.keys(fields).length > 0,
-    'At least one schema field is required'
-  )
+  fields: z.record(z.string(), deviceProfileVersionDefinitionFieldSchema)
 }).strict().superRefine((definition, context) => {
   for (const fieldName of Object.keys(definition.fields)) {
     if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(fieldName)) {
@@ -75,3 +72,9 @@ export const deviceProfileVersionDefinitionSchema = z.object({
     }
   }
 })
+
+// Auto-created device profiles carry an empty schema; only versions published by hand need fields.
+export const deviceProfileVersionInputDefinitionSchema = deviceProfileVersionDefinitionSchema.refine(
+  definition => Object.keys(definition.fields).length > 0,
+  { path: ['fields'], message: 'At least one schema field is required' }
+)

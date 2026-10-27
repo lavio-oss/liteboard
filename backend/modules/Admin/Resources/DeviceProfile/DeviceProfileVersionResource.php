@@ -21,7 +21,8 @@ final class DeviceProfileVersionResource extends JsonResource
             'device_profile_id' => (string) $version->getAttribute('device_profile_id'),
             'version' => $version->version,
             'schema_code' => $version->schema_code,
-            'definition' => $version->definition,
+            // An empty fields map must serialize as a JSON object, not [].
+            'definition' => [...$version->definition, 'fields' => (object) $version->definition['fields']],
             'compatibility_note' => $version->compatibility_note,
             'created_at' => $version->created_at?->toISOString(),
             'updated_at' => $version->updated_at?->toISOString(),

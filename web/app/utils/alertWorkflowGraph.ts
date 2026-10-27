@@ -5,13 +5,6 @@ export type WorkflowKind = 'input' | 'group' | 'version' | 'rule' | 'webhook'
 
 export const WORKFLOW_COLUMNS: WorkflowKind[] = ['input', 'group', 'version', 'rule', 'webhook']
 export const WORKFLOW_GRID = { columnWidth: 400, rowHeight: 160 }
-// Draft groups only live in the page session until they are connected to a profile version.
-export const DRAFT_GROUP_PREFIX = 'draft-'
-
-export interface DraftGroup {
-  id: string
-  deviceIds: string[]
-}
 
 export interface WorkflowNodeData {
   kind: WorkflowKind
@@ -40,7 +33,6 @@ interface WorkflowSource {
   profiles: DeviceProfile[]
   rules: AlertRule[]
   webhooks: WebhookEndpoint[]
-  drafts?: DraftGroup[]
 }
 
 const nodeId = (kind: WorkflowKind, entityId: string) => `${kind}:${entityId}`
@@ -57,7 +49,7 @@ export function versionProfiles(profiles: DeviceProfile[]): Map<string, DevicePr
  * that version's row. Devices without a version are not drawn. A rule belongs to a profile, so every
  * version of the profile feeds it.
  */
-export function buildAlertWorkflowGraph({ devices, profiles, rules, webhooks, drafts = [] }: WorkflowSource) {
+export function buildAlertWorkflowGraph({ devices, profiles, rules, webhooks }: WorkflowSource) {
   const sortedProfiles = [...profiles].sort((a, b) => a.name.localeCompare(b.name))
   const profileOrder = new Map(sortedProfiles.map((profile, index) => [profile.id, index]))
   const versions = sortedProfiles.flatMap(profile => [...profile.versions]
@@ -71,27 +63,18 @@ export function buildAlertWorkflowGraph({ devices, profiles, rules, webhooks, dr
       || a.name.localeCompare(b.name))
   const sortedWebhooks = [...webhooks].sort((a, b) => a.name.localeCompare(b.name))
 
-  // row: grid row; groups follow their version's row and drafts go below the last version.
+  // row: grid row; groups follow their version's row.
   const columns: Record<WorkflowKind, (WorkflowNodeData & { row?: number })[]> = {
     input: [{ kind: 'input', entityId: null, label: 'Telemetry', sublabel: 'MQTT ingest' }],
-    group: [
-      ...versions.flatMap(({ version, profile }, row) => membersOf(version.id).length === 0
-        ? []
-        : [{
-            kind: 'group' as const,
-            entityId: version.id,
-            label: `${profile.name} v${version.version} devices`,
-            sublabel: `${membersOf(version.id).length} device(s)`,
-            row
-          }]),
-      ...drafts.map((draft, index) => ({
-        kind: 'group' as const,
-        entityId: draft.id,
-        label: `New group ${index + 1}`,
-        sublabel: `${draft.deviceIds.length} device(s) · not assigned`,
-        row: versions.length + index
-      }))
-    ],
+    group: versions.flatMap(({ version, profile }, row) => membersOf(version.id).length === 0
+      ? []
+      : [{
+          kind: 'group' as const,
+          entityId: version.id,
+          label: `${profile.name} v${version.version} devices`,
+          sublabel: `${membersOf(version.id).length} device(s)`,
+          row
+        }]),
     version: versions.map(({ version, profile }) => ({
       kind: 'version' as const,
       entityId: version.id,

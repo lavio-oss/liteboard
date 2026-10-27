@@ -234,6 +234,28 @@ class PostgresTelemetryIngestorTest(unittest.IsolatedAsyncioTestCase):
             [stage['stage'] for stage in json.loads(outcome[8])],
         )
 
+    async def test_device_with_empty_profile_ingests_like_a_profileless_device(self) -> None:
+        # Laravel stores the auto-created empty fields map as a JSON array.
+        connection = _FakeConnection(device={
+            'device_profile_version_id': UUID(PROFILE_VERSION_ID),
+            'version': 1,
+            'definition': '{"strict_mode": false, "fields": []}',
+            'received_at': RECEIVED_AT,
+        })
+
+        result = await PostgresTelemetryIngestor(_FakePool(connection)).ingest(
+            project_id=PROJECT_ID,
+            device_id=DEVICE_ID,
+            raw=b'{"temperature":40,"mode":"auto"}',
+            retained=False,
+            received_wall=RECEIVED_AT,
+        )
+
+        self.assertEqual('persisted', result.status)
+        self.assertEqual(PROFILE_VERSION_ID, result.sample.device_profile_version_id)
+        self.assertEqual({'temperature': 40, 'mode': 'auto'}, result.sample.values)
+        self.assertIn('schema_validation_skipped', [stage['stage'] for stage in result.outcome.stages])
+
     async def test_profileless_wrapped_values_deduplicate_client_ids_by_raw_payload_hash(self) -> None:
         raw = b'{"message_id":"client-message","values":{"temperature":40}}'
         inspection = inspect_unprofiled_telemetry(raw, received_at=RECEIVED_AT)

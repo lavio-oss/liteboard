@@ -164,7 +164,9 @@ const ruleColumns: TableColumn<AlertRule>[] = [
   },
   {
     id: 'severity',
-    header: 'Severity',
+    // Alphabetical order (critical, major, minor, warning) matches severity order.
+    accessorFn: row => row.current_revision?.definition.severity ?? '',
+    header: sortableHeader('Severity'),
     cell: ({ row }) => {
       const severity = row.original.current_revision?.definition.severity
 
