@@ -37,6 +37,7 @@ return [
 
     'telemetry' => [
         'ws_secret' => env('TELEMETRY_WS_SECRET'),
+        'internal_secret' => env('TELEMETRY_INTERNAL_SECRET'),
     ],
 
 ];

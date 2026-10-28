@@ -27,12 +27,14 @@ final class DevicePersistenceService
      *     description?: string|null,
      *     equipment_asset_id?: string|null,
      *     device_profile_version_id?: string|null,
-     *     status?: string
+     *     status?: string,
+     *     is_gateway?: bool,
+     *     gateway_device_id?: string
      * }  $attributes
      */
-    public function create(Project $project, array $attributes): Device
+    public function create(Project $project, array $attributes, bool $issueCredential = true): Device
     {
-        return DB::transaction(function () use ($project, $attributes): Device {
+        return DB::transaction(function () use ($project, $attributes, $issueCredential): Device {
             $lockedProject = Project::query()->whereKey($project->getKey())->lockForUpdate()->firstOrFail();
             $quota = $lockedProject->getAttribute('max_devices_quota');
 
@@ -43,9 +45,38 @@ final class DevicePersistenceService
             $attributes['device_profile_version_id'] ??= $this->defaultProfileVersionId($lockedProject);
 
             $device = $lockedProject->devices()->create($attributes);
-            $this->deviceCredentialService->issueForDevice($device);
+
+            if ($issueCredential) {
+                $this->deviceCredentialService->issueForDevice($device);
+            }
 
             return $device->refresh()->load('credential');
+        });
+    }
+
+    /**
+     * Sub-devices only reach the platform through their gateway, so they get no credential of their own.
+     * The project row lock serializes concurrent first messages that name the same new code.
+     */
+    public function findOrCreateSubDevice(Device $gateway, string $code): Device
+    {
+        return DB::transaction(function () use ($gateway, $code): Device {
+            $project = Project::query()->whereKey($gateway->getAttribute('project_id'))->lockForUpdate()->firstOrFail();
+            $existing = $project->devices()->where('code', $code)->first();
+
+            if ($existing !== null) {
+                if ($existing->getAttribute('gateway_device_id') !== $gateway->getKey()) {
+                    throw new ConflictHttpException('GATEWAY_SUB_DEVICE_CODE_TAKEN');
+                }
+
+                return $existing;
+            }
+
+            return $this->create($project, [
+                'name' => $code,
+                'code' => $code,
+                'gateway_device_id' => (string) $gateway->getKey(),
+            ], issueCredential: false);
         });
     }
 
@@ -85,7 +116,9 @@ final class DevicePersistenceService
      *     description?: string|null,
      *     equipment_asset_id?: string|null,
      *     device_profile_version_id?: string|null,
-     *     status?: string
+     *     status?: string,
+     *     allow_plaintext?: bool,
+     *     is_gateway?: bool
      * }  $attributes
      */
     public function update(Device $device, array $attributes): Device

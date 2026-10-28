@@ -11,6 +11,7 @@ from uuid import UUID
 from gmqtt import Client as MQTTClient
 from gmqtt.mqtt.constants import MQTTv50
 
+from app.ingress.gateway import GATEWAY_ACTIONS, GatewayHandler
 from app.mqtt_tls import build_mqtt_ssl_context
 from app.pipeline.context import MessageContext
 from app.pipeline.runner import Stage, run_pipeline
@@ -20,18 +21,22 @@ from app.storage.telemetry_ingest import IngestResult, PostgresTelemetryIngestor
 
 TELEMETRY_TOPIC = 'liteboard/+/devices/+/telemetry'
 HEARTBEAT_TOPIC = 'liteboard/+/devices/+/heartbeat'
+GATEWAY_TOPIC = 'liteboard/+/devices/+/gateway/+'
 SUCCESSFUL_PUBACK = 0
 MAX_PENDING_BROADCAST_RECORDS = 256
 LOGGER = logging.getLogger(__name__)
 
 
 def parse_device_topic(topic: str) -> tuple[str, str, str] | None:
+    """Returns (project_id, device_id, channel); gateway channels come back as 'gateway/<action>'."""
     parts = topic.split('/')
+    if len(parts) == 6 and parts[4] == 'gateway' and parts[5] in GATEWAY_ACTIONS:
+        parts = [*parts[:4], f'gateway/{parts[5]}']
     if len(parts) != 5:
         return None
 
     prefix, project_id, resource, device_id, channel = parts
-    if prefix != 'liteboard' or resource != 'devices' or channel not in {'telemetry', 'heartbeat'}:
+    if prefix != 'liteboard' or resource != 'devices' or not (channel in {'telemetry', 'heartbeat'} or channel.startswith('gateway/')):
         return None
 
     try:
@@ -49,6 +54,7 @@ class MqttSubscriber:
         *,
         heartbeat_pipeline: Sequence[Stage],
         telemetry_ingestor: PostgresTelemetryIngestor,
+        gateway_handler: GatewayHandler,
         realtime_hub: RealtimeHub,
         presence_hub: PresenceHub,
     ) -> None:
@@ -61,6 +67,7 @@ class MqttSubscriber:
 
         self._heartbeat_pipeline = heartbeat_pipeline
         self._telemetry_ingestor = telemetry_ingestor
+        self._gateway_handler = gateway_handler
         self._realtime_hub = realtime_hub
         self._presence_hub = presence_hub
         self._broadcast_records: set[asyncio.Task[None]] = set()
@@ -105,6 +112,7 @@ class MqttSubscriber:
         if not session_present:
             client.subscribe(TELEMETRY_TOPIC, qos=1, retain_as_published=True)
             client.subscribe(HEARTBEAT_TOPIC, qos=1, retain_as_published=True)
+            client.subscribe(GATEWAY_TOPIC, qos=1, retain_as_published=True)
 
     def on_disconnect(
         self,
@@ -154,6 +162,18 @@ class MqttSubscriber:
                     payload_size=len(payload),
                     result=result,
                 )
+            elif channel.startswith('gateway/'):
+                results = await self._gateway_handler.handle(
+                    project_id=project_id,
+                    gateway_id=device_id,
+                    action=channel.removeprefix('gateway/'),
+                    topic=topic,
+                    raw=payload,
+                    retained=properties is not None and bool(properties.get('retain', False)),
+                    received_wall=received_wall,
+                )
+                for result in results:
+                    self._broadcast(result)
             else:
                 await run_pipeline(
                     self._heartbeat_pipeline,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import type { NavigationMenuItem, TableColumn } from '@nuxt/ui'
 import { getPaginationRowModel } from '@tanstack/table-core'
 import { VisAxis, VisDonut, VisLine, VisSingleContainer, VisXYContainer } from '@unovis/vue'
 import { ApiError } from '~/composables/useApi'
@@ -40,6 +40,7 @@ const PAGE_SIZE = 10
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
 const USelect = resolveComponent('USelect')
+const NuxtLink = resolveComponent('NuxtLink')
 const tableUi = {
   base: 'border-separate border-spacing-0',
   thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
@@ -54,8 +55,10 @@ const FUTURE_SKEW_MS = 5 * 60 * 1000
 
 const route = useRoute()
 const toast = useToast()
-const { activeTenantId, canManageActiveTenant } = useTenantContext()
-const { loadAssets, loadDevice, loadDeviceProfiles, loadProjects, updateDevice } = useAdmin()
+const { activeTenantId, canManageActiveTenant, loadTenants } = useTenantContext()
+// A direct load or refresh of this URL starts with no active tenant, so the device could not be fetched.
+await loadTenants()
+const { loadAssets, loadDevice, loadDeviceProfiles, loadDevices, loadProjects, updateDevice } = useAdmin()
 const {
   loadLatestTelemetry,
   loadMessageOutcomes,
@@ -101,6 +104,21 @@ const { data: deviceSnapshot, error: deviceError, refresh: refreshDevice } = awa
   `device-${deviceId}`,
   () => activeTenantId.value === null ? Promise.resolve(null) : loadDevice(activeTenantId.value, projectId, deviceId),
   { watch: [activeTenantId] }
+)
+
+// shortcut: filters the first 100 project devices client-side; add a gateway filter to the devices API for large gateways.
+const { data: subDevices } = await useAsyncData(
+  `device-sub-devices-${deviceId}`,
+  async () => {
+    const tenantId = activeTenantId.value
+
+    if (tenantId === null || deviceSnapshot.value?.is_gateway !== true) {
+      return []
+    }
+
+    return (await loadDevices(tenantId, projectId)).filter(item => item.gateway_device_id === deviceId)
+  },
+  { watch: [activeTenantId, () => deviceSnapshot.value?.is_gateway] }
 )
 
 // Everything the edit form needs; only fetched for users who may edit this device.
@@ -335,14 +353,22 @@ const alertColumns: TableColumn<AlertRow>[] = [
   }
 ]
 
-const tabs = computed(() => [
-  { label: 'Overview', value: 'overview', slot: 'overview' },
-  { label: 'Telemetry', value: 'telemetry', slot: 'telemetry' },
-  { label: 'Alerts', value: 'alerts', slot: 'alerts', badge: activeAlertCount.value > 0 ? activeAlertCount.value : undefined },
-  { label: 'Message Inspector', value: 'inspector', slot: 'inspector' },
-  ...(editContext.value ? [{ label: 'Settings', value: 'settings', slot: 'settings' }] : [])
+// Same tab bar as the devices list; the active tab lives in the URL.
+const tabDefinitions = computed(() => [
+  { value: 'overview', label: 'Overview', icon: 'i-lucide-gauge' },
+  // A gateway stores no samples of its own; its sub-devices' metrics are read on their own pages.
+  ...(device.value?.is_gateway ? [] : [{ value: 'telemetry', label: 'Telemetry', icon: 'i-lucide-activity' }]),
+  { value: 'alerts', label: 'Alerts', icon: 'i-lucide-bell', badge: activeAlertCount.value > 0 ? activeAlertCount.value : undefined },
+  { value: 'inspector', label: 'Message Inspector', icon: 'i-lucide-scroll-text' },
+  ...(device.value?.is_gateway ? [{ value: 'sub-devices', label: 'Sub-devices', icon: 'i-lucide-network', badge: subDevices.value?.length }] : []),
+  ...(editContext.value ? [{ value: 'settings', label: 'Settings', icon: 'i-lucide-settings' }] : [])
 ])
-const activeTab = ref('overview')
+const activeTab = computed(() => tabDefinitions.value.find(tab => tab.value === route.query.tab)?.value ?? 'overview')
+const tabs = computed<NavigationMenuItem[][]>(() => [tabDefinitions.value.map(tab => ({
+  ...tab,
+  to: { query: tab.value === 'overview' ? {} : { tab: tab.value } },
+  active: activeTab.value === tab.value
+}))])
 
 const latest = ref<TelemetryLatestValue[]>([])
 const liveSamples = ref<TelemetrySample[]>([])
@@ -627,6 +653,15 @@ watch(activeTenantId, () => {
   }
 }, { flush: 'sync' })
 
+// shortcut: the realtime stream is per device, so a gateway polls its sub-devices' outcomes; add a gateway stream if 5 s is too slow.
+const { pause: pauseGatewayPolling, resume: resumeGatewayPolling } = useIntervalFn(() => {
+  if (device.value?.is_gateway === true && document.visibilityState === 'visible') {
+    void loadOutcomes()
+  }
+}, 5000, { immediate: false })
+onMounted(resumeGatewayPolling)
+onBeforeUnmount(pauseGatewayPolling)
+
 function acceptOutcomes(incoming: TelemetryIngestOutcome[]): void {
   outcomes.value = mergeTelemetryOutcomes(outcomes.value, incoming, OUTCOME_LIMIT)
 }
@@ -653,6 +688,19 @@ const outcomeColumns = computed<TableColumn<TelemetryIngestOutcome>[]>(() => [
     header: 'Received',
     cell: ({ row }) => h('span', { class: 'whitespace-nowrap text-muted' }, formatDateTime(row.original.received_at))
   },
+  ...(device.value?.is_gateway
+    ? [{
+        id: 'device',
+        header: 'Device',
+        cell: ({ row }: { row: { original: TelemetryIngestOutcome } }) => {
+          const subDevice = subDevices.value?.find(item => item.id === row.original.device_id)
+
+          return subDevice === undefined
+            ? h('span', { class: 'text-muted' }, row.original.device_id === deviceId ? 'Gateway' : '—')
+            : h(NuxtLink, { to: `/devices/${projectId}/${subDevice.id}`, class: 'font-medium text-highlighted hover:underline' }, () => subDevice.name)
+        }
+      }]
+    : []),
   {
     id: 'message_id',
     header: 'Message ID',
@@ -782,6 +830,14 @@ async function openTrace(message: string): Promise<void> {
           />
         </template>
       </UDashboardNavbar>
+
+      <UDashboardToolbar>
+        <UNavigationMenu
+          :items="tabs"
+          highlight
+          class="-mx-1 flex-1"
+        />
+      </UDashboardToolbar>
     </template>
 
     <template #body>
@@ -793,14 +849,40 @@ async function openTrace(message: string): Promise<void> {
         :description="deviceError.message"
       />
 
-      <UTabs
-        v-else
-        v-model="activeTab"
-        :items="tabs"
-        variant="link"
-        class="w-full"
-      >
-        <template #overview>
+      <UAlert
+        v-if="device?.gateway_device_id"
+        color="info"
+        variant="subtle"
+        icon="i-lucide-router"
+        title="Connected through a gateway"
+        :actions="[{ label: 'Open gateway', color: 'neutral', variant: 'outline', to: `/devices/${projectId}/${device.gateway_device_id}` }]"
+        class="mb-4 shrink-0"
+      />
+
+      <template v-if="!deviceError">
+        <div v-if="activeTab === 'sub-devices'">
+          <div class="pt-4">
+            <p v-if="!subDevices?.length" class="py-10 text-center text-sm text-muted">
+              No sub-devices yet. They are created when this gateway first publishes for a new code.
+            </p>
+            <ul v-else class="divide-y divide-default rounded-md border border-default">
+              <li v-for="subDevice in subDevices" :key="subDevice.id">
+                <NuxtLink
+                  :to="`/devices/${projectId}/${subDevice.id}`"
+                  class="flex items-center justify-between gap-3 px-4 py-3 hover:bg-elevated"
+                >
+                  <span class="min-w-0">
+                    <span class="block truncate font-medium text-highlighted">{{ subDevice.name }}</span>
+                    <span class="block truncate font-mono text-xs text-muted">{{ subDevice.code }}</span>
+                  </span>
+                  <DevicePresenceStatus :state="subDevice.connection_state" :last-seen-at="subDevice.last_seen_at" compact />
+                </NuxtLink>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div v-if="activeTab === 'overview'">
           <div class="space-y-4 pt-4">
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <UCard>
@@ -896,9 +978,9 @@ async function openTrace(message: string): Promise<void> {
               </div>
             </div>
           </div>
-        </template>
+        </div>
 
-        <template #telemetry>
+        <div v-if="activeTab === 'telemetry'">
           <div class="space-y-4 pt-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -984,9 +1066,9 @@ async function openTrace(message: string): Promise<void> {
               />
             </div>
           </div>
-        </template>
+        </div>
 
-        <template #alerts>
+        <div v-if="activeTab === 'alerts'">
           <div class="flex flex-col gap-4 pt-4">
             <AdminTable
               :columns="alertColumns"
@@ -996,9 +1078,9 @@ async function openTrace(message: string): Promise<void> {
               search-placeholder="Search alerts..."
             />
           </div>
-        </template>
+        </div>
 
-        <template #settings>
+        <div v-if="activeTab === 'settings'">
           <AdminDeviceEditForm
             v-if="editContext && device"
             :device="device"
@@ -1008,9 +1090,9 @@ async function openTrace(message: string): Promise<void> {
             :loading="editLoading"
             @submit="saveDevice"
           />
-        </template>
+        </div>
 
-        <template #inspector>
+        <div v-if="activeTab === 'inspector'">
           <div class="space-y-4 pt-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -1073,8 +1155,8 @@ async function openTrace(message: string): Promise<void> {
               />
             </div>
           </div>
-        </template>
-      </UTabs>
+        </div>
+      </template>
 
       <AlertingAlertDetailModal
         v-model:open="alertViewOpen"

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from unittest.mock import ANY, AsyncMock, patch
 
 from app.ingress.mqtt_subscriber import (
+    GATEWAY_TOPIC,
     HEARTBEAT_TOPIC,
     SUCCESSFUL_PUBACK,
     TELEMETRY_TOPIC,
@@ -31,6 +32,16 @@ class ParseDeviceTopicTest(unittest.TestCase):
     def test_parses_telemetry_and_heartbeat_topics_without_rewriting_ids(self) -> None:
         self.assertEqual((PROJECT_ID, DEVICE_ID, 'telemetry'), parse_device_topic(TELEMETRY_PATH))
         self.assertEqual((PROJECT_ID, DEVICE_ID, 'heartbeat'), parse_device_topic(HEARTBEAT_PATH))
+
+    def test_parses_gateway_topics_and_rejects_unknown_gateway_actions(self) -> None:
+        for action in ('connect', 'telemetry', 'disconnect'):
+            with self.subTest(action=action):
+                self.assertEqual(
+                    (PROJECT_ID, DEVICE_ID, f'gateway/{action}'),
+                    parse_device_topic(f'liteboard/{PROJECT_ID}/devices/{DEVICE_ID}/gateway/{action}'),
+                )
+        self.assertIsNone(parse_device_topic(f'liteboard/{PROJECT_ID}/devices/{DEVICE_ID}/gateway/rpc'))
+        self.assertIsNone(parse_device_topic(f'liteboard/{PROJECT_ID}/devices/{DEVICE_ID}/gateway/telemetry/x'))
 
     def test_rejects_wrong_shape_prefix_resource_channel_and_invalid_uuids(self) -> None:
         invalid_topics = (
@@ -82,7 +93,7 @@ class MqttSubscriberTest(unittest.IsolatedAsyncioTestCase):
         build_ssl.assert_called_once_with('/run/secrets/ca.crt')
         self.assertEqual(('localhost', 8883, tls_context, 5), subscriber.client.connection)
         self.assertEqual(
-            [(TELEMETRY_TOPIC, 1, True), (HEARTBEAT_TOPIC, 1, True)],
+            [(TELEMETRY_TOPIC, 1, True), (HEARTBEAT_TOPIC, 1, True), (GATEWAY_TOPIC, 1, True)],
             subscriber.client.subscriptions,
         )
         self.assertTrue(subscriber.is_connected)
@@ -95,7 +106,7 @@ class MqttSubscriberTest(unittest.IsolatedAsyncioTestCase):
         subscriber.on_connect(subscriber.client, 0, 0, {})
 
         self.assertEqual(
-            [(TELEMETRY_TOPIC, 1, True), (HEARTBEAT_TOPIC, 1, True)],
+            [(TELEMETRY_TOPIC, 1, True), (HEARTBEAT_TOPIC, 1, True), (GATEWAY_TOPIC, 1, True)],
             subscriber.client.subscriptions,
         )
 
@@ -280,6 +291,29 @@ class MqttSubscriberTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(watcher.queue.empty())
         ingestor.record_broadcast.assert_awaited_once_with(processing_id, 1)
 
+    async def test_routes_gateway_messages_to_the_gateway_handler_and_broadcasts_each_result(self) -> None:
+        ingestor = _FakeIngestor()
+        gateway_handler = _FakeGatewayHandler()
+        gateway_handler.handle.return_value = [IngestResult('persisted', 'p-1'), IngestResult('rejected', 'p-2')]
+        subscriber = _subscriber(ingestor=ingestor, gateway_handler=gateway_handler)
+        topic = f'liteboard/{PROJECT_ID}/devices/{DEVICE_ID}/gateway/telemetry'
+
+        with patch.object(subscriber, '_broadcast') as broadcast:
+            ack = await subscriber.on_message(subscriber.client, topic, b'{}', 1, {'retain': False})
+
+        self.assertEqual(SUCCESSFUL_PUBACK, ack)
+        ingestor.ingest.assert_not_awaited()
+        gateway_handler.handle.assert_awaited_once_with(
+            project_id=PROJECT_ID,
+            gateway_id=DEVICE_ID,
+            action='telemetry',
+            topic=topic,
+            raw=b'{}',
+            retained=False,
+            received_wall=ANY,
+        )
+        self.assertEqual(2, broadcast.call_count)
+
     async def test_ignores_topics_outside_the_device_contract(self) -> None:
         ingestor = _FakeIngestor()
         subscriber = _subscriber(ingestor=ingestor)
@@ -309,6 +343,11 @@ class _FakeIngestor:
         self.ingest = AsyncMock(return_value=IngestResult('persisted', 'processing-1'))
         self.record_broadcast = AsyncMock()
         self.record_invalid_topic = AsyncMock(return_value='processing-invalid')
+
+
+class _FakeGatewayHandler:
+    def __init__(self) -> None:
+        self.handle = AsyncMock(return_value=[])
 
 
 class _FakeMqttClient:
@@ -341,11 +380,13 @@ def _subscriber(
     heartbeat_pipeline: list[object] | None = None,
     hub: RealtimeHub | None = None,
     presence_hub: PresenceHub | None = None,
+    gateway_handler: object | None = None,
 ) -> MqttSubscriber:
     with patch('app.ingress.mqtt_subscriber.MQTTClient', _FakeMqttClient):
         return MqttSubscriber(
             heartbeat_pipeline=heartbeat_pipeline or [],
             telemetry_ingestor=ingestor or _FakeIngestor(),
+            gateway_handler=gateway_handler or _FakeGatewayHandler(),
             realtime_hub=hub or RealtimeHub(),
             presence_hub=presence_hub or PresenceHub(),
         )

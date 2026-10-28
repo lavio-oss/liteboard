@@ -37,6 +37,8 @@ final class UpdateDeviceRequest extends FormRequest
             'device_profile_version_id' => ['sometimes', 'nullable', 'bail', 'uuid'],
             'status' => ['sometimes', Rule::enum(DeviceStatus::class)],
             'allow_plaintext' => ['sometimes', 'boolean'],
+            'is_gateway' => ['sometimes', 'boolean'],
+            'gateway_device_id' => ['missing'],
             'approval_status' => ['prohibited'],
             'tenant_id' => ['prohibited'],
             'project_id' => ['prohibited'],
@@ -51,7 +53,8 @@ final class UpdateDeviceRequest extends FormRequest
      *     equipment_asset_id?: string|null,
      *     device_profile_version_id?: string|null,
      *     status?: string,
-     *     allow_plaintext?: bool
+     *     allow_plaintext?: bool,
+     *     is_gateway?: bool
      * }
      */
     public function deviceAttributes(): array
@@ -63,7 +66,8 @@ final class UpdateDeviceRequest extends FormRequest
          *     equipment_asset_id?: string|null,
          *     device_profile_version_id?: string|null,
          *     status?: string,
-         *     allow_plaintext?: bool
+         *     allow_plaintext?: bool,
+         *     is_gateway?: bool
          * } $validated
          */
         $validated = $this->validated();
@@ -105,5 +109,19 @@ final class UpdateDeviceRequest extends FormRequest
                 ),
             ],
         ]);
+
+        $validator->after(function (Validator $validator) use ($device): void {
+            if (! $this->has('is_gateway')) {
+                return;
+            }
+
+            if ($this->boolean('is_gateway') && $device->getAttribute('gateway_device_id') !== null) {
+                $validator->errors()->add('is_gateway', 'A sub-device cannot be a gateway.');
+            }
+
+            if (! $this->boolean('is_gateway') && $device->subDevices()->exists()) {
+                $validator->errors()->add('is_gateway', 'A gateway with sub-devices cannot stop being a gateway.');
+            }
+        });
     }
 }

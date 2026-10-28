@@ -69,9 +69,12 @@ export const deviceSchema = resourceBaseSchema.extend({
   code: z.string(),
   description: z.string().nullable(),
   connection_state: deviceConnectionStateSchema,
-  credential_type: deviceCredentialTypeSchema,
-  credential_status: deviceCredentialStatusSchema,
-  mqtt_topics: deviceMqttTopicsSchema,
+  is_gateway: z.boolean(),
+  gateway_device_id: z.string().uuid().nullable(),
+  // Sub-devices (gateway_device_id set) reach the platform through their gateway and own no credential.
+  credential_type: deviceCredentialTypeSchema.nullable(),
+  credential_status: deviceCredentialStatusSchema.nullable(),
+  mqtt_topics: deviceMqttTopicsSchema.nullable(),
   allow_plaintext: z.boolean(),
   last_seen_at: z.string().nullable()
 }).extend(deviceApprovalSchema.shape)
@@ -239,6 +242,7 @@ export interface DeviceInput {
   device_profile_version_id: string | null
   status: ResourceStatus
   allow_plaintext?: boolean
+  is_gateway?: boolean
 }
 
 export type ProjectProvisioningProfile = z.infer<typeof projectProvisioningProfileSchema>
@@ -290,9 +294,11 @@ export interface AdminTableRow {
   connection_state?: DeviceConnectionState
   approval_status?: DeviceApprovalStatus
   approval_reason?: string | null
-  credential_type?: DeviceCredentialType
-  credential_status?: DeviceCredentialStatus
-  mqtt_topics?: DeviceMqttTopics
+  is_gateway?: boolean
+  gateway_device_id?: string | null
+  credential_type?: DeviceCredentialType | null
+  credential_status?: DeviceCredentialStatus | null
+  mqtt_topics?: DeviceMqttTopics | null
   last_seen_at?: string | null
   created_at?: string | null
   updated_at?: string | null

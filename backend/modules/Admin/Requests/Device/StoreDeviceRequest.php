@@ -36,6 +36,8 @@ final class StoreDeviceRequest extends FormRequest
             'equipment_asset_id' => ['sometimes', 'nullable', 'bail', 'uuid'],
             'device_profile_version_id' => ['sometimes', 'nullable', 'bail', 'uuid'],
             'status' => ['sometimes', Rule::enum(DeviceStatus::class)],
+            'is_gateway' => ['sometimes', 'boolean'],
+            'gateway_device_id' => ['missing'],
             'access_token' => ['missing'],
             'approval_status' => ['prohibited'],
             'tenant_id' => ['prohibited'],
@@ -51,7 +53,8 @@ final class StoreDeviceRequest extends FormRequest
      *         description?: string|null,
      *         equipment_asset_id?: string|null,
      *         device_profile_version_id?: string|null,
-     *         status?: string
+     *         status?: string,
+     *         is_gateway?: bool
      *     }
      * }
      */
@@ -63,7 +66,8 @@ final class StoreDeviceRequest extends FormRequest
          *     description?: string|null,
          *     equipment_asset_id?: string|null,
          *     device_profile_version_id?: string|null,
-         *     status?: string
+         *     status?: string,
+         *     is_gateway?: bool
          * } $validated
          */
         $validated = $this->validated();
@@ -74,7 +78,8 @@ final class StoreDeviceRequest extends FormRequest
          *     description?: string|null,
          *     equipment_asset_id?: string|null,
          *     device_profile_version_id?: string|null,
-         *     status?: string
+         *     status?: string,
+         *     is_gateway?: bool
          * } $attributes
          */
         $attributes = $validated;

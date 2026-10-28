@@ -46,10 +46,23 @@ final class DeviceFactory extends Factory
     public function configure(): static
     {
         return $this->afterCreating(static function (Device $device): void {
-            if (! $device->credential()->exists()) {
+            if ($device->getAttribute('gateway_device_id') === null && ! $device->credential()->exists()) {
                 app(DeviceCredentialService::class)->issueForDevice($device);
             }
         });
+    }
+
+    public function gateway(): static
+    {
+        return $this->state(['is_gateway' => true]);
+    }
+
+    public function subDeviceOf(Device $gateway): static
+    {
+        return $this->state([
+            'project_id' => (string) $gateway->getAttribute('project_id'),
+            'gateway_device_id' => (string) $gateway->getKey(),
+        ]);
     }
 
     public function forEquipment(Asset $equipment): static

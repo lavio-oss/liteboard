@@ -1,0 +1,11 @@
+#pragma once
+
+const char *LB_WIFI_SSID = "<wifi-ssid>";
+const char *LB_WIFI_PASSWORD = "<wifi-password>";
+// IPv4 address of the PC running Docker (ipconfig). The gateway uses the plaintext playground port.
+// Turn on "Allow connection without TLS" for this gateway in the LiteBoard credentials modal first.
+const char *LB_HOST = "<pc-ipv4-address>";
+constexpr uint16_t LB_PORT = 1883;
+const char *LB_PROJECT_ID = "<project-id>";
+const char *LB_GATEWAY_ID = "<gateway-device-id>";
+const char *LB_ACCESS_TOKEN = "<gateway-access-token>";

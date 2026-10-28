@@ -148,6 +148,7 @@ services:
       APP_DEBUG: '${APP_DEBUG:-true}'
       APP_URL: http://localhost:8800
       TELEMETRY_WS_SECRET: ${TELEMETRY_WS_SECRET:-local-dev-telemetry-ws-secret-change-me}
+      TELEMETRY_INTERNAL_SECRET: ${TELEMETRY_INTERNAL_SECRET:-local-dev-telemetry-internal-secret-change-me}
       DB_CONNECTION: pgsql
       DB_HOST: postgres
       DB_PORT: 5432
@@ -225,6 +226,8 @@ services:
       DB_USERNAME: ${POSTGRES_USER:-liteboard}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-liteboard}
       TELEMETRY_WS_SECRET: ${TELEMETRY_WS_SECRET:-local-dev-telemetry-ws-secret-change-me}
+      TELEMETRY_INTERNAL_SECRET: ${TELEMETRY_INTERNAL_SECRET:-local-dev-telemetry-internal-secret-change-me}
+      LARAVEL_INTERNAL_URL: ${LARAVEL_INTERNAL_URL:-http://host.docker.internal:8800}
     ports:
       - '${TELEMETRY_PORT:-8100}:8100'
     healthcheck:

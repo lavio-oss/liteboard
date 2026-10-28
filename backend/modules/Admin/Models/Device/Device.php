@@ -33,6 +33,8 @@ use Modules\Admin\Models\Telemetry\TelemetrySample;
     'connection_state',
     'last_seen_at',
     'allow_plaintext',
+    'is_gateway',
+    'gateway_device_id',
 ])]
 final class Device extends Model
 {
@@ -54,7 +56,20 @@ final class Device extends Model
             'connection_state' => DeviceConnectionState::class,
             'last_seen_at' => 'immutable_datetime',
             'allow_plaintext' => 'boolean',
+            'is_gateway' => 'boolean',
         ];
+    }
+
+    /** @return BelongsTo<Device, $this> */
+    public function gateway(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'gateway_device_id');
+    }
+
+    /** @return HasMany<Device, $this> */
+    public function subDevices(): HasMany
+    {
+        return $this->hasMany(self::class, 'gateway_device_id');
     }
 
     /** @return BelongsTo<Project, $this> */

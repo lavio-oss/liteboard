@@ -283,6 +283,22 @@ async function toggleCredentialStatus(): Promise<void> {
           </div>
         </div>
 
+        <div v-if="credential.mqtt.topics.gateway" class="space-y-1.5">
+          <span class="block text-sm text-muted">Gateway telemetry topic</span>
+          <div class="flex items-center gap-1">
+            <div class="min-w-0 flex-1 overflow-x-auto rounded-md border border-default bg-elevated/40 px-3 py-1.5 font-mono text-sm text-highlighted whitespace-nowrap">
+              {{ credential.mqtt.topics.gateway.telemetry }}
+            </div>
+            <UButton
+              icon="i-lucide-copy"
+              color="neutral"
+              variant="ghost"
+              aria-label="Copy gateway topic"
+              @click="copyText(credential.mqtt.topics.gateway.telemetry, 'Gateway topic')"
+            />
+          </div>
+        </div>
+
         <USwitch
           v-if="props.canManage"
           :model-value="plaintextEndpoint !== undefined"

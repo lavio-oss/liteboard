@@ -157,6 +157,7 @@ class LifespanCompatibilityTest(unittest.IsolatedAsyncioTestCase):
         subscriber_factory.assert_called_once_with(
             heartbeat_pipeline=[decode_json, mark_presence_factory.return_value],
             telemetry_ingestor=ingestor_factory.return_value,
+            gateway_handler=ANY,
             realtime_hub=ANY,
             presence_hub=ANY,
         )

@@ -4,7 +4,12 @@ export const deviceMqttTopicsSchema = z.object({
   telemetry: z.string(),
   heartbeat: z.string(),
   commands: z.string(),
-  commands_ack: z.string()
+  commands_ack: z.string(),
+  gateway: z.object({
+    connect: z.string(),
+    telemetry: z.string(),
+    disconnect: z.string()
+  }).nullable()
 })
 
 export const deviceMqttEndpointSchema = z.object({

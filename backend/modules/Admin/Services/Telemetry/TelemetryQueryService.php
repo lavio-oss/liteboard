@@ -147,10 +147,27 @@ final class TelemetryQueryService
         ], $rows);
     }
 
+    /**
+     * A gateway's messages are its sub-devices' messages, so it reads their outcomes alongside its own.
+     *
+     * @return Builder<TelemetryIngestOutcome>
+     */
+    private function outcomesVisibleFrom(Device $device): Builder
+    {
+        return TelemetryIngestOutcome::query()
+            ->where('project_id', $device->getAttribute('project_id'))
+            ->whereIn('device_id', Device::query()
+                ->where('project_id', $device->getAttribute('project_id'))
+                ->where(static function (Builder $query) use ($device): void {
+                    $query->whereKey($device->getKey())->orWhere('gateway_device_id', $device->getKey());
+                })
+                ->select('id'));
+    }
+
     /** @return Collection<int, TelemetryIngestOutcome> */
     public function recentOutcomes(Device $device, int $limit): Collection
     {
-        return $device->ingestOutcomes()
+        return $this->outcomesVisibleFrom($device)
             ->orderByDesc('received_at')
             ->orderByDesc('id')
             ->limit($limit)
@@ -164,7 +181,7 @@ final class TelemetryQueryService
      */
     public function trace(Device $device, string $message): array
     {
-        $outcomes = $device->ingestOutcomes()
+        $outcomes = $this->outcomesVisibleFrom($device)
             ->where(static function (Builder $query) use ($message): void {
                 $query->where('message_id', $message);
                 if (Str::isUuid($message)) {
@@ -177,16 +194,25 @@ final class TelemetryQueryService
             throw new NotFoundHttpException;
         }
 
-        $messageId = $outcomes->pluck('message_id')->filter()->first();
+        // message_id is only unique per device, so the rest of the trace stays on the device that owns the first match.
+        $ownerId = $outcomes->firstOrFail()->getAttribute('device_id');
+        $messageId = $outcomes->where('device_id', $ownerId)->pluck('message_id')->filter()->first();
 
         if (is_string($messageId)) {
-            $outcomes = $device->ingestOutcomes()->where('message_id', $messageId)->get();
+            $outcomes = $this->outcomesVisibleFrom($device)
+                ->where('device_id', $ownerId)
+                ->where('message_id', $messageId)
+                ->get();
         }
 
         return [
             'outcomes' => $outcomes->sortBy([['received_at', 'asc'], ['id', 'asc']])->values(),
             'sample' => is_string($messageId)
-                ? $device->telemetrySamples()->where('message_id', $messageId)->first()
+                ? TelemetrySample::query()
+                    ->where('project_id', $device->getAttribute('project_id'))
+                    ->where('device_id', $ownerId)
+                    ->where('message_id', $messageId)
+                    ->first()
                 : null,
         ];
     }

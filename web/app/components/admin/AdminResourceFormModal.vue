@@ -135,6 +135,7 @@ function selectDeviceProfile(profileId: string | null): void {
 const isTwoColumnLayout = computed(() => props.resourceType === 'asset')
 // Device creation is two steps: identity and profile first, then where the device belongs.
 const deviceStep = ref<1 | 2>(1)
+const isGateway = ref(false)
 
 const schema = computed(() => {
   if (props.resourceType === 'project') {
@@ -205,6 +206,7 @@ watch(
       : ''
     state.status = resource === null || resource === undefined ? 'active' : resource.status
     deviceStep.value = 1
+    isGateway.value = false
     deviceProfileId.value = props.deviceProfiles.find(
       profile => profile.versions.some(version => version.id === deviceProfileVersionId.value)
     )?.id ?? null
@@ -237,7 +239,8 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
       description: normalizedDescription,
       equipment_asset_id: props.equipmentAssetId,
       device_profile_version_id: deviceProfileVersionId.value,
-      status: data.status
+      status: data.status,
+      is_gateway: isGateway.value
     })
 
     return
@@ -405,6 +408,10 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
             label="Description"
           >
             <UTextarea v-model="state.description" class="w-full" placeholder="Enter device description" />
+          </UFormField>
+
+          <UFormField label="Gateway">
+            <USwitch v-model="isGateway" label="This device is a gateway" />
           </UFormField>
         </template>
 

@@ -9,7 +9,9 @@ import asyncpg
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from app.ingress.gateway import GatewayHandler
 from app.ingress.mqtt_subscriber import MqttSubscriber
+from app.ingress.sub_device_registry import SubDeviceRegistry
 from app.pipeline.stages import MarkPresence, decode_json
 from app.realtime.hub import DEFAULT_MAX_CONNECTIONS, RealtimeHub
 from app.realtime.presence_hub import PresenceHub
@@ -51,9 +53,16 @@ async def lifespan(application: FastAPI):
         poll_seconds=float(os.getenv('RULE_EVALUATION_POLL_SECONDS', str(DEFAULT_POLL_SECONDS))),
     )
 
+    telemetry_ingestor = PostgresTelemetryIngestor(db_pool)
     mqtt_subscriber = MqttSubscriber(
         heartbeat_pipeline=[decode_json, MarkPresence(PostgresPresenceWriter(db_pool), presence_hub)],
-        telemetry_ingestor=PostgresTelemetryIngestor(db_pool),
+        telemetry_ingestor=telemetry_ingestor,
+        gateway_handler=GatewayHandler(
+            db_pool=db_pool,
+            telemetry_ingestor=telemetry_ingestor,
+            registry=SubDeviceRegistry(),
+            presence_hub=presence_hub,
+        ),
         realtime_hub=realtime_hub,
         presence_hub=presence_hub,
     )

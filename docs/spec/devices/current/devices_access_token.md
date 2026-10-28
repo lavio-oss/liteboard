@@ -175,6 +175,25 @@ flowchart TD
 - ESP32 lưu payload bootstrap đang chờ vào Preferences/NVS trước khi gửi. Sau response thành công, sketch lưu enrollment/token và xóa payload pending. Nếu reboot giữa chừng, request ID và payload đã lưu cho phép retry idempotent. Khi còn pending, sketch thử MQTT; nếu broker từ chối credential, nó hỏi status theo chu kỳ rồi kết nối lại sau khi được duyệt. Khi bị từ chối, sketch dừng luồng kết nối và ghi lý do ra Serial.
 - Simulator lưu request/enrollment vào state file để tiếp tục sau restart. Ở provisioning mode, simulator đợi status thành `approved` rồi mới kết nối MQTT; trạng thái `rejected` kết thúc bằng lỗi có lý do.
 
+## Luồng C: Gateway và sub-device
+
+- Device có `is_gateway = true` vẫn đăng nhập MQTT bằng Access Token của chính nó. Ngoài các topic thường, `v_mqtt_acls` cho gateway quyền ghi `liteboard/{project}/devices/{gateway}/gateway/{connect|telemetry|disconnect}`. Topic vẫn nằm dưới ID của gateway, vì telemetry-service tin topic và chỉ ACL của broker gắn người publish với Device.
+- `gateway/telemetry` nhận một object, key là `code` của sub-device, value là danh sách payload telemetry bình thường. Ví dụ: `{"sensor-a":[{"temperature":21}]}`. Mỗi phần tử được ingest như message gửi thẳng tới sub-device (dedupe theo `message_id`, profile, rule, presence).
+- `gateway/connect` với `{"device":"<code>"}` tạo sub-device nếu cần và đánh dấu online. `gateway/disconnect` hiện chỉ làm mới presence của gateway; sub-device tự offline sau 90 giây.
+- Code chưa có trong Project: telemetry-service gọi `POST /api/internal/gateways/{gateway}/sub-devices` kèm header `X-Internal-Token` (`TELEMETRY_INTERNAL_SECRET`). Laravel tạo sub-device qua `DevicePersistenceService::findOrCreateSubDevice`:
+  - Tên ban đầu bằng code, trạng thái `approved`, profile Default, tính vào quota của Project.
+  - **Không có credential**, nên sub-device không xuất hiện trong `v_mqtt_users` và không kết nối trực tiếp được.
+- Code đã thuộc Device trực tiếp hoặc gateway khác thì bị từ chối, không ghi dữ liệu. telemetry-service ghi `telemetry_unresolved_messages` với một trong các lý do sau:
+
+  | Lý do | Khi nào |
+  |---|---|
+  | `gateway_mismatch` | Code đã thuộc Device trực tiếp hoặc gateway khác |
+  | `sub_device_rejected` | Laravel từ chối, ví dụ vượt quota |
+  | `gateway_payload_invalid` | Payload sai định dạng |
+  | `gateway_not_found` | Device không phải gateway, hoặc không active/approved |
+
+- Không đổi được `is_gateway` thành `false` khi gateway còn sub-device. Sub-device không thể là gateway. Xóa gateway giữ lại sub-device với `gateway_device_id = NULL`.
+
 ## 4. Bảo vệ transport và bí mật
 
 - Backend chỉ cho bootstrap/status qua HTTPS, ngoại trừ smoke test local khi `APP_ENV=local` và `DEVICE_PROVISIONING_ALLOW_INSECURE_HTTP=true`. Simulator bắt buộc URL HTTPS; firmware có thể dùng HTTP cho local smoke test nhưng cách đó không kiểm tra CA/SAN.

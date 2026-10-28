@@ -4,12 +4,13 @@
 
 ## 1. Hai bên kết nối bằng gì
 
-Laravel (control plane) và telemetry service (data plane) **không gọi API của nhau**. Chúng liên kết qua hai thứ dùng chung:
+Laravel (control plane) và telemetry service (data plane) liên kết qua các cơ chế sau. Chỉ có một lời gọi API: service gọi Laravel để tạo sub-device của gateway.
 
 | Cơ chế | Chiều | Dùng để |
 |---|---|---|
 | Cùng database PostgreSQL | Service đọc/ghi trực tiếp bảng của Laravel; Laravel đọc lại để trả REST | Resolve Device/Project/Tenant, ghi `telemetry_samples`, `telemetry_ingest_outcomes`, `telemetry_latest_values`, cập nhật presence |
 | Khóa bí mật dùng chung `TELEMETRY_WS_SECRET` | Laravel ký, service kiểm tra | Cấp và xác thực vé WebSocket (telemetry stream, device presence) |
+| `POST /api/internal/gateways/{gateway}/sub-devices` với header `X-Internal-Token` = `TELEMETRY_INTERNAL_SECRET` (≥ 32 ký tự) | Service gọi Laravel (`LARAVEL_INTERNAL_URL`) | Tạo sub-device khi gateway gửi code mới; Laravel giữ quota, Default profile và quy tắc tenant. Lỗi mạng hoặc 5xx không ack message để broker gửi lại; 409 ghi unresolved |
 
 Hệ quả: đồng bộ giữa hai bên dựa trên cùng schema và cùng quy ước, không có hợp đồng API riêng. Đổi cấu trúc bảng ở Laravel có thể làm service hỏng mà không có kiểm tra tương thích nào.
 
@@ -43,7 +44,8 @@ REST nằm ở Laravel, không nằm ở service: Sanctum, `tenant.context`, rea
 3. **Giá trị mặc định yếu trong `docker-compose.yml`:** `TELEMETRY_WS_SECRET` mặc định `local-dev-telemetry-ws-secret-change-me`, mật khẩu MQTT nội bộ mặc định `telemetry-service-secret`, DB mặc định `liteboard/liteboard`. Chấp nhận được ở local; chưa kiểm tra giá trị thật ở môi trường khác.
 4. **Không kiểm tra `Origin` trên WebSocket.** Bảo vệ hoàn toàn dựa vào vé.
 5. **Không có xác thực giữa hai bên ở tầng mạng hay lời gọi.** Ai ghi được DB hoặc biết `TELEMETRY_WS_SECRET` thì tự dựng được vé hợp lệ.
-6. **Khóa dùng chung không có cơ chế xoay.** Đổi khóa phải đổi đồng thời ở Laravel và service, các vé đang sống sẽ không hợp lệ.
+6. **Endpoint nội bộ tạo sub-device nằm chung `/api`.** Request đi qua web proxy cũng tới được endpoint này, nên chỉ secret `TELEMETRY_INTERNAL_SECRET` bảo vệ nó. Nên chặn `/api/internal/*` ở reverse proxy.
+7. **Khóa dùng chung không có cơ chế xoay.** Đổi khóa phải đổi đồng thời ở Laravel và service, các vé đang sống sẽ không hợp lệ.
 
 ## 4. Hướng làm chặt hơn (chưa thực hiện)
 

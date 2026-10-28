@@ -10,4 +10,5 @@ user plaintext-bridge
 topic write liteboard/+/devices/+/telemetry
 topic write liteboard/+/devices/+/heartbeat
 topic write liteboard/+/devices/+/commands/ack
+topic write liteboard/+/devices/+/gateway/+
 topic read liteboard/+/devices/+/commands

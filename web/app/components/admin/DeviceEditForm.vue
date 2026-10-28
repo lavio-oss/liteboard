@@ -28,6 +28,7 @@ const schema = z.object({
 
 const state = reactive({ name: '', code: '', description: '' })
 const isActive = ref(true)
+const isGateway = ref(false)
 const equipmentAssetId = ref<string | null>(null)
 const profileId = ref<string | null>(null)
 const profileVersionId = ref<string | null>(null)
@@ -52,6 +53,7 @@ function reset(): void {
   state.code = props.device.code
   state.description = props.device.description ?? ''
   isActive.value = props.device.status === 'active'
+  isGateway.value = props.device.is_gateway
   equipmentAssetId.value = props.device.equipment_asset_id
   profileVersionId.value = props.device.device_profile_version_id
   profileId.value = props.deviceProfiles.find(
@@ -65,6 +67,7 @@ const dirty = computed(() => state.name !== props.device.name
   || state.code !== props.device.code
   || state.description !== (props.device.description ?? '')
   || isActive.value !== (props.device.status === 'active')
+  || isGateway.value !== props.device.is_gateway
   || equipmentAssetId.value !== props.device.equipment_asset_id
   || profileVersionId.value !== props.device.device_profile_version_id)
 
@@ -75,7 +78,8 @@ function onSubmit(event: FormSubmitEvent<z.output<typeof schema>>): void {
     description: event.data.description.trim() === '' ? null : event.data.description,
     equipment_asset_id: equipmentAssetId.value,
     device_profile_version_id: profileVersionId.value,
-    status: isActive.value ? 'active' : 'inactive'
+    status: isActive.value ? 'active' : 'inactive',
+    is_gateway: isGateway.value
   })
 }
 </script>
@@ -169,6 +173,14 @@ function onSubmit(event: FormSubmitEvent<z.output<typeof schema>>): void {
 
     <UFormField name="status" label="Status" class="sm:col-span-2">
       <USwitch v-model="isActive" :label="isActive ? 'Active' : 'Inactive'" />
+    </UFormField>
+
+    <UFormField label="Gateway" class="sm:col-span-2">
+      <USwitch
+        v-model="isGateway"
+        label="This device is a gateway"
+        :disabled="props.device.gateway_device_id !== null"
+      />
     </UFormField>
 
     <div class="flex justify-end gap-2 border-t border-default pt-4 sm:col-span-2">

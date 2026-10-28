@@ -6,12 +6,16 @@ use Modules\Admin\Actions\Device\Http\CreateDeviceAction;
 use Modules\Admin\Actions\Device\Http\DeleteDeviceAction;
 use Modules\Admin\Actions\Device\Http\ListDevicesAction;
 use Modules\Admin\Actions\Device\Http\ListTenantDevicesAction;
+use Modules\Admin\Actions\Device\Http\RegisterGatewaySubDeviceAction;
 use Modules\Admin\Actions\Device\Http\RejectDeviceAction;
 use Modules\Admin\Actions\Device\Http\RotateDeviceCredentialAction;
 use Modules\Admin\Actions\Device\Http\ShowDeviceAction;
 use Modules\Admin\Actions\Device\Http\ShowDeviceCredentialAction;
 use Modules\Admin\Actions\Device\Http\UpdateDeviceAction;
 use Modules\Admin\Actions\Device\Http\UpdateDeviceCredentialAction;
+
+Route::post('/internal/gateways/{gateway}/sub-devices', RegisterGatewaySubDeviceAction::class)
+    ->whereUuid('gateway');
 
 Route::middleware(['auth:sanctum', 'tenant.context'])
     ->prefix('tenants/{tenant}/devices')

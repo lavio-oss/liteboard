@@ -16,6 +16,32 @@ RETURNING t.id AS tenant_id, p.id AS project_id, d.id AS device_id,
           d.connection_state, d.last_seen_at, d.updated_at
 """
 
+MARK_GATEWAY_PRESENCE_SQL = """
+UPDATE devices d
+SET connection_state = 'online',
+    last_seen_at = CURRENT_TIMESTAMP,
+    updated_at = CURRENT_TIMESTAMP
+FROM projects p
+JOIN tenants t ON t.id = p.tenant_id
+WHERE d.id = $1::uuid
+  AND d.project_id = $2::uuid
+  AND p.id = d.project_id
+  AND d.is_gateway
+  AND d.status = 'active'
+  AND d.approval_status = 'approved'
+  AND p.status = 'active'
+  AND t.status = 'active'
+RETURNING t.id AS tenant_id, p.id AS project_id, d.id AS device_id,
+          d.connection_state, d.last_seen_at, d.updated_at
+"""
+
+SELECT_DEVICE_BY_CODE_SQL = """
+SELECT id, gateway_device_id
+FROM devices
+WHERE project_id = $1::uuid
+  AND code = $2
+"""
+
 # Locks the device row at the strength MARK_DEVICE_PRESENCE_SQL needs. Taking FOR SHARE first and
 # upgrading in the UPDATE deadlocks two concurrent messages from the same device.
 SELECT_DEVICE_CONTEXT_SQL = """

@@ -422,3 +422,30 @@ it('forbids tenant owners from reading central unresolved messages', function ()
         ->getJson("/api/platform/telemetry/unresolved-messages/$processingId")
         ->assertForbidden();
 });
+
+it('lists and traces sub-device messages from their gateway only', function (): void {
+    $fixture = telemetryDeviceFixture();
+    $gateway = Device::factory()->for($fixture['project'])->gateway()->create();
+    $subDevice = Device::factory()->subDeviceOf($gateway)->create();
+    $otherGateway = Device::factory()->for($fixture['project'])->gateway()->create();
+    $foreignSubDevice = Device::factory()->subDeviceOf($otherGateway)->create();
+    insertTelemetryOutcome($subDevice, 'sub-msg', 'persisted', '2026-10-28T08:00:00Z');
+    insertTelemetrySample($subDevice, 'sub-msg', '2026-10-28T08:00:00Z', ['temperature' => 21.5]);
+    insertTelemetryOutcome($foreignSubDevice, 'foreign-msg', 'persisted', '2026-10-28T08:00:01Z');
+    $gatewayBase = "/api/tenants/{$fixture['tenant']->id}/projects/{$fixture['project']->id}/devices/$gateway->id";
+
+    $this->actingAs($fixture['owner'])
+        ->getJson("$gatewayBase/messages?limit=10")
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.device_id', $subDevice->id)
+        ->assertJsonPath('data.0.message_id', 'sub-msg');
+
+    $this->actingAs($fixture['owner'])
+        ->getJson("$gatewayBase/messages/sub-msg/trace")
+        ->assertOk()
+        ->assertJsonPath('data.sample.values.temperature', 21.5);
+
+    $this->actingAs($fixture['owner'])->getJson("$gatewayBase/messages/foreign-msg/trace")->assertNotFound();
+    $this->actingAs($fixture['owner'])->getJson($fixture['base'].'/messages/sub-msg/trace')->assertNotFound();
+});

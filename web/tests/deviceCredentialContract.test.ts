@@ -7,8 +7,32 @@ const topics = {
   telemetry: 'liteboard/project/devices/device/telemetry',
   heartbeat: 'liteboard/project/devices/device/heartbeat',
   commands: 'liteboard/project/devices/device/commands',
-  commands_ack: 'liteboard/project/devices/device/commands/ack'
+  commands_ack: 'liteboard/project/devices/device/commands/ack',
+  gateway: null
 }
+
+test('device credential contract carries gateway topics for gateway devices', () => {
+  const parsed = deviceMqttConnectionSchema.safeParse({
+    host: 'mqtt.liteboard.test',
+    endpoints: [{ port: 8883, tls: true }],
+    topics: {
+      ...topics,
+      gateway: {
+        connect: 'liteboard/project/devices/gateway/gateway/connect',
+        telemetry: 'liteboard/project/devices/gateway/gateway/telemetry',
+        disconnect: 'liteboard/project/devices/gateway/gateway/disconnect'
+      }
+    }
+  })
+  const missingKey = deviceMqttConnectionSchema.safeParse({
+    host: 'mqtt.liteboard.test',
+    endpoints: [{ port: 8883, tls: true }],
+    topics: { ...topics, gateway: undefined }
+  })
+
+  assert.equal(parsed.success, true)
+  assert.equal(missingKey.success, false)
+})
 
 test('device credential contract lists a TLS endpoint and the plaintext playground endpoint', () => {
   const parsed = deviceMqttConnectionSchema.safeParse({

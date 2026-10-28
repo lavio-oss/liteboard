@@ -121,19 +121,24 @@ final class DeviceCredentialService
      *     telemetry: string,
      *     heartbeat: string,
      *     commands: string,
-     *     commands_ack: string
+     *     commands_ack: string,
+     *     gateway: array{connect: string, telemetry: string, disconnect: string}|null
      * }
      */
     public function mqttTopicsFor(Device $device): array
     {
-        $projectId = (string) $device->getAttribute('project_id');
-        $deviceId = (string) $device->getKey();
+        $prefix = 'liteboard/'.$device->getAttribute('project_id').'/devices/'.$device->getKey();
 
         return [
-            'telemetry' => "liteboard/$projectId/devices/$deviceId/telemetry",
-            'heartbeat' => "liteboard/$projectId/devices/$deviceId/heartbeat",
-            'commands' => "liteboard/$projectId/devices/$deviceId/commands",
-            'commands_ack' => "liteboard/$projectId/devices/$deviceId/commands/ack",
+            'telemetry' => "$prefix/telemetry",
+            'heartbeat' => "$prefix/heartbeat",
+            'commands' => "$prefix/commands",
+            'commands_ack' => "$prefix/commands/ack",
+            'gateway' => $device->getAttribute('is_gateway') === true ? [
+                'connect' => "$prefix/gateway/connect",
+                'telemetry' => "$prefix/gateway/telemetry",
+                'disconnect' => "$prefix/gateway/disconnect",
+            ] : null,
         ];
     }
 }

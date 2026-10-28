@@ -532,7 +532,17 @@ const columns: TableColumn<AdminTableRow>[] = [
     id: 'name',
     accessorKey: 'name',
     header: 'Name',
-    cell: ({ row }) => h('span', { class: 'font-medium text-highlighted' }, row.original.name)
+    cell: ({ row }) => {
+      const gatewayId = row.original.gateway_device_id
+
+      return h('div', { class: 'flex flex-wrap items-center gap-1.5' }, [
+        h('span', { class: 'font-medium text-highlighted' }, row.original.name),
+        row.original.is_gateway ? h(UBadge, { color: 'info', variant: 'subtle', size: 'sm' }, () => 'Gateway') : null,
+        gatewayId
+          ? h('span', { class: 'text-xs text-muted' }, `via ${devices.value.find(device => device.id === gatewayId)?.name ?? 'gateway'}`)
+          : null
+      ])
+    }
   },
   {
     id: 'code',
@@ -693,7 +703,8 @@ const columns: TableColumn<AdminTableRow>[] = [
           )
         }
 
-        if (row.original.approval_status === 'approved') {
+        // Sub-devices connect only through their gateway, so they have no credentials to manage.
+        if (row.original.approval_status === 'approved' && row.original.gateway_device_id === null) {
           actions.push(h(UButton, {
             'icon': 'i-lucide-key-round',
             'color': 'neutral',

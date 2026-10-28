@@ -60,14 +60,20 @@ final class DeviceResource extends JsonResource
             ? $device->credential
             : $device->credential()->first();
 
+        $isSubDevice = $device->getAttribute('gateway_device_id') !== null;
         $credentialType = $credential?->getAttribute('credential_type');
         $credentialStatus = $credential?->getAttribute('status');
 
-        if (! $credentialType instanceof DeviceCredentialType) {
+        // Sub-devices connect only through their gateway and never own a credential; every other device must.
+        if ($isSubDevice !== ($credential === null)) {
+            throw new UnexpectedValueException('Only sub-devices may lack a credential.');
+        }
+
+        if ($credential !== null && ! $credentialType instanceof DeviceCredentialType) {
             throw new UnexpectedValueException('The credential_type attribute must be a DeviceCredentialType.');
         }
 
-        if (! $credentialStatus instanceof DeviceCredentialStatus) {
+        if ($credential !== null && ! $credentialStatus instanceof DeviceCredentialStatus) {
             throw new UnexpectedValueException('The credential status attribute must be a DeviceCredentialStatus.');
         }
 
@@ -88,9 +94,11 @@ final class DeviceResource extends JsonResource
             'approval_reason' => $approvalReason,
             'connection_state' => $connectionState->value,
             'allow_plaintext' => (bool) $device->getAttribute('allow_plaintext'),
-            'credential_type' => $credentialType->value,
-            'credential_status' => $credentialStatus->value,
-            'mqtt_topics' => app(DeviceCredentialService::class)->mqttTopicsFor($device),
+            'is_gateway' => (bool) $device->getAttribute('is_gateway'),
+            'gateway_device_id' => $isSubDevice ? (string) $device->getAttribute('gateway_device_id') : null,
+            'credential_type' => $credentialType instanceof DeviceCredentialType ? $credentialType->value : null,
+            'credential_status' => $credentialStatus instanceof DeviceCredentialStatus ? $credentialStatus->value : null,
+            'mqtt_topics' => $isSubDevice ? null : app(DeviceCredentialService::class)->mqttTopicsFor($device),
             'last_seen_at' => $lastSeenAt instanceof CarbonInterface ? $lastSeenAt->toISOString() : null,
             'created_at' => $createdAt instanceof CarbonInterface ? $createdAt->toISOString() : null,
             'updated_at' => $updatedAt instanceof CarbonInterface ? $updatedAt->toISOString() : null,
