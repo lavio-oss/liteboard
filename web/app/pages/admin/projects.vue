@@ -40,8 +40,6 @@ const deleteLoading = ref(false)
 const deletingProject = ref<Project | null>(null)
 const managingProject = ref<Project | null>(null)
 const projectUsersOpen = ref(false)
-const provisioningProject = ref<Project | null>(null)
-const provisioningOpen = ref(false)
 const canManageAccounts = computed(() => isPlatformAdmin.value || tenants.value.some(
   tenant => tenant.id === managingProject.value?.tenant_id && (tenant.role === 'owner' || tenant.role === 'admin')
 ))
@@ -92,17 +90,6 @@ function openProjectUsers(projectId: string): void {
 
   managingProject.value = project
   projectUsersOpen.value = true
-}
-
-function openProvisioning(projectId: string): void {
-  const project = projects.value.find(item => item.id === projectId)
-
-  if (project === undefined) {
-    throw new Error('The selected project is not available.')
-  }
-
-  provisioningProject.value = project
-  provisioningOpen.value = true
 }
 
 async function saveProject(payload: ProjectFormInput): Promise<void> {
@@ -290,16 +277,6 @@ const columns: TableColumn<AdminTableRow>[] = [
 
       if (canWriteProjectData(project.role, canManageTenant)) {
         actions.push(h(UButton, {
-          'icon': 'i-lucide-radio-tower',
-          'color': 'neutral',
-          'variant': 'ghost',
-          'aria-label': `Manage device provisioning for ${project.name}`,
-          'onClick': () => openProvisioning(project.id)
-        }))
-      }
-
-      if (canWriteProjectData(project.role, canManageTenant)) {
-        actions.push(h(UButton, {
           'icon': 'i-lucide-pencil',
           'color': 'neutral',
           'variant': 'ghost',
@@ -396,15 +373,6 @@ const errorMessage = computed(() => {
         :project="managingProject"
         :can-manage-account="canManageAccounts"
         :can-delete-account="isPlatformAdmin"
-      />
-
-      <AdminProjectProvisioningModal
-        v-if="provisioningOpen"
-        v-model:open="provisioningOpen"
-        :tenant-id="provisioningProject?.tenant_id ?? null"
-        :project="provisioningProject"
-        :can-manage-quota="provisioningProject !== null && manageableTenantIds.has(provisioningProject.tenant_id)"
-        @updated="refresh"
       />
     </template>
   </UDashboardPanel>
