@@ -1,0 +1,113 @@
+# Single-VPS production override. Usage (docs/setup/production.md):
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.production --profile application up -d
+# Every service shares the host network stack (no bridge NAT / docker-proxy on the MQTT path).
+# Only nginx (80/443) and Mosquitto (8883, optional 1883) listen publicly; everything else binds 127.0.0.1.
+
+x-host-network: &host-network
+  network_mode: host
+  ports: !reset []
+  restart: unless-stopped
+
+x-laravel-env: &laravel-env
+  APP_ENV: production
+  APP_DEBUG: 'false'
+  APP_KEY: ${APP_KEY:?APP_KEY is required}
+  APP_URL: https://${APP_DOMAIN:?APP_DOMAIN is required}
+  DB_CONNECTION: pgsql
+  DB_HOST: 127.0.0.1
+  DB_PORT: 5432
+  DB_DATABASE: ${POSTGRES_DB:-liteboard}
+  DB_USERNAME: ${POSTGRES_USER:-liteboard}
+  DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+  REDIS_HOST: 127.0.0.1
+  REDIS_PORT: 6379
+  LOG_CHANNEL: stderr
+
+services:
+  postgres:
+    <<: *host-network
+    command: ['postgres', '-c', 'listen_addresses=127.0.0.1']
+
+  redis:
+    <<: *host-network
+    command: ['redis-server', '--bind', '127.0.0.1', '--appendonly', 'yes']
+
+  mosquitto:
+    <<: *host-network
+    networks: !reset {}
+    environment:
+      MQTT_PG_HOST: 127.0.0.1
+      MQTT_REDIS_HOST: 127.0.0.1
+    # Healthcheck and the plaintext bridge dial the TLS hostname; keep that on loopback.
+    extra_hosts:
+      - '${MQTT_TLS_HOSTNAME:-mqtt.local}:127.0.0.1'
+    ulimits:
+      nofile: { soft: 65536, hard: 65536 }
+
+  mosquitto-plain:
+    <<: *host-network
+    environment:
+      MQTT_PG_HOST: 127.0.0.1
+      MQTT_REDIS_HOST: 127.0.0.1
+    extra_hosts:
+      - '${MQTT_TLS_HOSTNAME:-mqtt.local}:127.0.0.1'
+    ulimits:
+      nofile: { soft: 65536, hard: 65536 }
+
+  telemetry-service:
+    <<: *host-network
+    # One process only: the subscriber has no $share/ group, a second instance would double-ingest.
+    command: ['uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8100', '--loop', 'uvloop', '--http', 'httptools', '--no-access-log']
+    environment:
+      DB_HOST: 127.0.0.1
+      # Optional dedicated role with synchronous_commit=off (docs/setup/production.md).
+      DB_USERNAME: ${TELEMETRY_DB_USERNAME:-${POSTGRES_USER:-liteboard}}
+      DB_PASSWORD: ${TELEMETRY_DB_PASSWORD:-${POSTGRES_PASSWORD}}
+      LARAVEL_INTERNAL_URL: http://127.0.0.1:8080
+    extra_hosts:
+      - '${MQTT_TLS_HOSTNAME:-mqtt.local}:127.0.0.1'
+
+  backend:
+    <<: *host-network
+    command: ['php-fpm']
+    environment:
+      <<: *laravel-env
+      SANCTUM_STATEFUL_DOMAINS: ${APP_DOMAIN}
+      CORS_ALLOWED_ORIGINS: https://${APP_DOMAIN}
+      SESSION_SECURE_COOKIE: 'true'
+      TRUSTED_PROXIES: 127.0.0.1
+      DEVICE_PROVISIONING_MQTT_HOST: ${DEVICE_PROVISIONING_MQTT_HOST:?DEVICE_PROVISIONING_MQTT_HOST is required}
+    healthcheck:
+      test: ['CMD', 'php', '-r', "exit(@fsockopen('127.0.0.1', 9000) ? 0 : 1);"]
+
+  webhook-dispatcher:
+    <<: *host-network
+    environment:
+      <<: *laravel-env
+      CACHE_STORE: array
+
+  scheduler:
+    profiles: ['application']
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ['php', 'artisan', 'schedule:work']
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      <<: *laravel-env
+      CACHE_STORE: redis
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  frontend:
+    <<: *host-network
+    build:
+      context: web
+      target: prod
+    volumes: !reset []
+    environment:
+      NUXT_LARAVEL_API_BASE: http://127.0.0.1:8080
+      NUXT_PUBLIC_TELEMETRY_WS_BASE: wss://${APP_DOMAIN}
+      NUXT_PUBLIC_SITE_URL: https://${APP_DOMAIN}

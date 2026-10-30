@@ -81,6 +81,9 @@ services:
       default:
         aliases:
           - ${MQTT_TLS_HOSTNAME:-mqtt.local}
+    # Docker Desktop resolves host.docker.internal itself; Docker Engine on Linux needs this.
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     healthcheck:
       test:
         - CMD-SHELL
@@ -128,6 +131,8 @@ services:
       - '1883:1883'
     volumes:
       - ./infrastructure/mosquitto/mosquitto-plain.conf:/etc/mosquitto/mosquitto.conf.template:ro
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     secrets:
       - mqtt_tls_ca_certificate
     depends_on:
@@ -228,6 +233,8 @@ services:
       TELEMETRY_WS_SECRET: ${TELEMETRY_WS_SECRET:-local-dev-telemetry-ws-secret-change-me}
       TELEMETRY_INTERNAL_SECRET: ${TELEMETRY_INTERNAL_SECRET:-local-dev-telemetry-internal-secret-change-me}
       LARAVEL_INTERNAL_URL: ${LARAVEL_INTERNAL_URL:-http://host.docker.internal:8800}
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     ports:
       - '${TELEMETRY_PORT:-8100}:8100'
     healthcheck:

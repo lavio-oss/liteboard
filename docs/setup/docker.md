@@ -9,6 +9,8 @@ How to run each LiteBoard component. For the architecture overview and port map,
 | Telemetry service | [telemetry-service.md](telemetry-service.md) | FastAPI, gmqtt |
 | Mosquitto | [mosquitto.md](mosquitto.md) | `mosquitto-go-auth`, TLS `8883` |
 | ESP32 firmware | [esp32.md](esp32.md) | Arduino, `PubSubClient` |
+| Linux / WSL2 local run | [linux.md](linux.md) | Debian, Docker Engine |
+| Production (Debian VPS) | [production.md](production.md) | nginx, Compose host network |
 
 ## Run everything with Docker
 
@@ -21,6 +23,7 @@ Run these from the repository root, in order:
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 
 # 2. Generate the CA and TLS certificates for Mosquitto (run once)
+#    Linux/WSL: bash infrastructure/mosquitto/generate-dev-certs.sh
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\infrastructure\mosquitto\generate-dev-certs.ps1
 
 # 3. Generate APP_KEY and copy the output into APP_KEY in .env
