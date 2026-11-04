@@ -5,7 +5,8 @@ import { getPaginationRowModel } from '@tanstack/table-core'
 import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
 import { useTenantContext } from '~/composables/useTenantContext'
-import type { Role, TenantUser, TenantUserCreateInput, TenantUserUpdateInput } from '~/types/auth'
+import type { Project } from '~/types/admin'
+import type { ProjectAssignments, Role, TenantUser, TenantUserCreateInput, TenantUserUpdateInput } from '~/types/auth'
 
 definePageMeta({
   middleware: 'auth'
@@ -17,7 +18,18 @@ const toast = useToast()
 const table = useTemplateRef('table')
 const { user } = useAuth()
 const { activeTenant, loadTenants } = useTenantContext()
-const { createTenantUser, deleteTenantUser, loadRoles, loadTenantUsers, updateTenantUser } = useAdmin()
+const {
+  attachProjectUser,
+  createTenantUser,
+  deleteTenantUser,
+  loadProjects,
+  loadProjectUsers,
+  loadRoles,
+  loadTenantUsers,
+  removeProjectUser,
+  updateProjectUser,
+  updateTenantUser
+} = useAdmin()
 await loadTenants()
 
 const tenantId = computed(() => activeTenant.value?.id ?? null)
@@ -26,6 +38,9 @@ const users = ref<TenantUser[]>([])
 const search = ref('')
 const roleFilter = ref<string>('all')
 const tenantRoles = ref<Role[]>([])
+const projectRoles = ref<Role[]>([])
+const projects = ref<Project[]>([])
+const projectAssignments = ref<ProjectAssignments>({})
 const columnVisibility = ref()
 const columnPinning = ref({ right: ['actions'] })
 const pagination = ref({ pageIndex: 0, pageSize: 10 })
@@ -81,9 +96,11 @@ async function reload(): Promise<void> {
 
   userLoading.value = true
   try {
-    [users.value, tenantRoles.value] = await Promise.all([
+    [users.value, tenantRoles.value, projectRoles.value, projects.value] = await Promise.all([
       loadTenantUsers(tenantId.value),
-      loadRoles(tenantId.value, 'tenant')
+      loadRoles(tenantId.value, 'tenant'),
+      loadRoles(tenantId.value, 'project'),
+      loadProjects(tenantId.value)
     ])
   } catch (error: unknown) {
     if (!(error instanceof ApiError)) {
@@ -98,12 +115,63 @@ async function reload(): Promise<void> {
 
 function openCreate(): void {
   editingUser.value = null
+  projectAssignments.value = {}
   editOpen.value = true
 }
 
-function openEdit(item: TenantUser): void {
+async function openEdit(item: TenantUser): Promise<void> {
+  if (tenantId.value === null) {
+    throw new Error('A tenant is required before editing a user.')
+  }
+
+  const tenant = tenantId.value
+
+  try {
+    const memberships = await Promise.all(projects.value.map(async project => ({
+      projectId: project.id,
+      members: await loadProjectUsers(tenant, project.id)
+    })))
+
+    projectAssignments.value = Object.fromEntries(memberships.flatMap(({ projectId, members }) => {
+      const membership = members.find(member => member.id === item.id)
+
+      return membership === undefined ? [] : [[projectId, membership.role_id]]
+    }))
+  } catch (error: unknown) {
+    if (!(error instanceof ApiError)) {
+      throw error
+    }
+
+    toast.add({ title: 'Unable to load project memberships', description: error.message, color: 'error' })
+
+    return
+  }
+
   editingUser.value = item
   editOpen.value = true
+}
+
+// Brings the person's project memberships in line with the form: attach new ones, change roles, remove the rest.
+async function syncProjects(userId: string, before: ProjectAssignments, after: ProjectAssignments): Promise<void> {
+  if (tenantId.value === null) {
+    throw new Error('A tenant is required before assigning projects.')
+  }
+
+  const tenant = tenantId.value
+  const changes = [
+    ...Object.entries(after).flatMap(([projectId, roleId]) => {
+      if (!(projectId in before)) {
+        return [attachProjectUser(tenant, projectId, { user_id: userId, role_id: roleId })]
+      }
+
+      return before[projectId] === roleId ? [] : [updateProjectUser(tenant, projectId, userId, roleId)]
+    }),
+    ...Object.keys(before)
+      .filter(projectId => !(projectId in after))
+      .map(projectId => removeProjectUser(tenant, projectId, userId))
+  ]
+
+  await Promise.all(changes)
 }
 
 function openDelete(items: TenantUser[]): void {
@@ -114,7 +182,7 @@ function openDelete(items: TenantUser[]): void {
   }
 }
 
-async function createUser(payload: TenantUserCreateInput): Promise<void> {
+async function createUser(payload: TenantUserCreateInput, assigned: ProjectAssignments): Promise<void> {
   if (tenantId.value === null) {
     throw new Error('A tenant is required before creating a user.')
   }
@@ -122,7 +190,8 @@ async function createUser(payload: TenantUserCreateInput): Promise<void> {
   editLoading.value = true
 
   try {
-    await createTenantUser(tenantId.value, payload)
+    const created = await createTenantUser(tenantId.value, payload)
+    await syncProjects(created.id, {}, assigned)
     await reload()
     editOpen.value = false
     toast.add({ title: 'User created', description: 'The account has been added to the tenant.', color: 'success' })
@@ -137,7 +206,7 @@ async function createUser(payload: TenantUserCreateInput): Promise<void> {
   }
 }
 
-async function saveUser(payload: TenantUserUpdateInput): Promise<void> {
+async function saveUser(payload: TenantUserUpdateInput, assigned: ProjectAssignments): Promise<void> {
   if (tenantId.value === null || editingUser.value === null) {
     throw new Error('A tenant user is required before editing.')
   }
@@ -146,6 +215,7 @@ async function saveUser(payload: TenantUserUpdateInput): Promise<void> {
 
   try {
     await updateTenantUser(tenantId.value, editingUser.value.id, payload)
+    await syncProjects(editingUser.value.id, projectAssignments.value, assigned)
     await reload()
     editOpen.value = false
     toast.add({ title: 'User updated', description: 'The account has been saved.', color: 'success' })
@@ -183,6 +253,25 @@ async function confirmDelete(): Promise<void> {
   }
 }
 
+function sortableHeader(label: string): TableColumn<TenantUser>['header'] {
+  return ({ column }) => {
+    const isSorted = column.getIsSorted()
+
+    return h(UButton, {
+      color: 'neutral',
+      variant: 'ghost',
+      label,
+      icon: isSorted
+        ? isSorted === 'asc'
+          ? 'i-lucide-arrow-up-narrow-wide'
+          : 'i-lucide-arrow-down-wide-narrow'
+        : 'i-lucide-arrow-up-down',
+      class: '-mx-2.5',
+      onClick: () => column.toggleSorting(column.getIsSorted() === 'asc')
+    })
+  }
+}
+
 const columns: TableColumn<TenantUser>[] = [
   {
     id: 'sequence',
@@ -196,22 +285,7 @@ const columns: TableColumn<TenantUser>[] = [
   },
   {
     accessorKey: 'email',
-    header: ({ column }) => {
-      const isSorted = column.getIsSorted()
-
-      return h(UButton, {
-        color: 'neutral',
-        variant: 'ghost',
-        label: 'Email',
-        icon: isSorted
-          ? isSorted === 'asc'
-            ? 'i-lucide-arrow-up-narrow-wide'
-            : 'i-lucide-arrow-down-wide-narrow'
-          : 'i-lucide-arrow-up-down',
-        class: '-mx-2.5',
-        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc')
-      })
-    }
+    header: sortableHeader('Email')
   },
   {
     accessorKey: 'role_id',
@@ -225,6 +299,18 @@ const columns: TableColumn<TenantUser>[] = [
 
       return h(UBadge, { color: role.is_owner ? 'primary' : role.is_system ? 'success' : 'neutral', variant: 'subtle' }, () => role.name)
     }
+  },
+  {
+    id: 'projects',
+    header: 'Projects',
+    cell: ({ row }) => row.original.projects.length === 0
+      ? h('span', { class: 'text-muted' }, '—')
+      : h('div', { class: 'flex flex-wrap gap-1' }, row.original.projects.map(project => h(UBadge, { color: 'neutral', variant: 'subtle', key: project.id }, () => project.name)))
+  },
+  {
+    accessorKey: 'created_at',
+    header: sortableHeader('Created'),
+    cell: ({ row }) => row.original.created_at === null ? '—' : new Date(row.original.created_at).toLocaleDateString()
   },
   {
     id: 'actions',
@@ -368,6 +454,9 @@ watch(addRequested, (requested) => {
         v-model:open="editOpen"
         :user="editingUser"
         :roles="tenantRoles.filter(role => actorIsOwner || !role.is_owner)"
+        :projects="projects"
+        :project-roles="projectRoles"
+        :assignments="projectAssignments"
         :loading="editLoading"
         @create="createUser"
         @update="saveUser"

@@ -1,5 +1,6 @@
 <?php
 
+use Modules\Admin\Models\Project\Project;
 use Modules\Core\Models\Tenant\Tenant;
 use Modules\Core\Models\User\User;
 
@@ -45,6 +46,23 @@ it('lists users only for a tenant manager', function (): void {
         ->assertJsonFragment(['id' => $member->id]);
 
     expect($member->can('manageUsers', $tenant))->toBeFalse();
+});
+
+it('lists each user with creation date and the tenant projects they belong to', function (): void {
+    $owner = User::factory()->create();
+    $tenant = Tenant::factory()->create();
+    $project = Project::factory()->for($tenant)->create();
+    $otherProject = Project::factory()->for(Tenant::factory()->create())->create();
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
+    $owner->projects()->attach($project, ['role_id' => roleId($project, 'viewer')]);
+    $owner->projects()->attach($otherProject, ['role_id' => roleId($otherProject, 'viewer')]);
+
+    $this->actingAs($owner)
+        ->getJson('/api/tenants/'.$tenant->id.'/users')
+        ->assertOk()
+        ->assertJsonPath('data.0.created_at', $owner->created_at?->toISOString())
+        ->assertJsonCount(1, 'data.0.projects')
+        ->assertJsonPath('data.0.projects.0.id', $project->id);
 });
 
 it('allows a tenant manager to create an account with a tenant role', function (): void {

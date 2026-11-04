@@ -22,4 +22,8 @@ body {
   --color-green-800: #016538;
   --color-green-900: #0A5331;
   --color-green-950: #052E16;
+
+  /* shadcn "zinc" primary: near-black in light (500), near-white in dark (400) */
+  --color-zinc-400: #fafafa;
+  --color-zinc-500: #18181b;
 }

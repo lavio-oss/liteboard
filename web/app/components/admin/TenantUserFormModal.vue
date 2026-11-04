@@ -1,11 +1,16 @@
 <script setup lang="ts">
 import type { FormSubmitEvent } from '@nuxt/ui'
 import * as z from 'zod'
-import type { Role, TenantUser, TenantUserCreateInput, TenantUserUpdateInput } from '~/types/auth'
+import type { Project } from '~/types/admin'
+import type { ProjectAssignments, Role, TenantUser, TenantUserCreateInput, TenantUserUpdateInput } from '~/types/auth'
 
 const props = withDefaults(defineProps<{
   user: TenantUser | null
   roles: Role[]
+  projects: Project[]
+  projectRoles: Role[]
+  /** The projects the edited person already belongs to, with their project role. */
+  assignments: ProjectAssignments
   loading?: boolean
 }>(), {
   loading: false
@@ -14,9 +19,15 @@ const props = withDefaults(defineProps<{
 const open = defineModel<boolean>('open', { required: true })
 
 const emit = defineEmits<{
-  create: [payload: TenantUserCreateInput]
-  update: [payload: TenantUserUpdateInput]
+  create: [payload: TenantUserCreateInput, projects: ProjectAssignments]
+  update: [payload: TenantUserUpdateInput, projects: ProjectAssignments]
 }>()
+
+const projectAssigned = reactive<Record<string, boolean>>({})
+const projectRoleIds = reactive<Record<string, string>>({})
+const projectRoleOptions = computed(() => props.projectRoles.map(role => ({ label: role.name, value: role.id })))
+// A new assignment starts with the least privileged project role.
+const defaultProjectRoleId = computed(() => [...props.projectRoles].sort((a, b) => a.permissions.length - b.permissions.length)[0]?.id ?? '')
 
 type FormState = {
   name: string
@@ -66,6 +77,48 @@ watch(() => props.user, (user) => {
   state.role_id = user?.role_id ?? ''
 }, { immediate: true })
 
+type UserType = 'tenant' | 'project'
+
+const userType = ref<UserType>('tenant')
+const userTypeOptions = [
+  { label: 'Tenant user', value: 'tenant' },
+  { label: 'Project user', value: 'project' }
+]
+// A project user is a tenant Member whose access comes only from the projects they are assigned to.
+const memberRoleId = computed(() => props.roles.find(role => role.key === 'member')?.id ?? '')
+
+watch(() => [props.user, props.assignments], () => {
+  userType.value = props.user !== null && props.user.role_id === memberRoleId.value && Object.keys(props.assignments).length > 0
+    ? 'project'
+    : 'tenant'
+}, { immediate: true })
+
+watch(userType, (type) => {
+  if (type === 'project') {
+    state.role_id = memberRoleId.value
+  }
+})
+
+watch(() => [props.projects, props.assignments, props.projectRoles], () => {
+  for (const project of props.projects) {
+    projectAssigned[project.id] = project.id in props.assignments
+    projectRoleIds[project.id] = props.assignments[project.id] ?? defaultProjectRoleId.value
+  }
+}, { immediate: true })
+
+// A tenant user's project memberships are left as they are: their tenant role already reaches every project.
+function selectedProjects(): ProjectAssignments {
+  if (userType.value === 'tenant') {
+    return props.assignments
+  }
+
+  return Object.fromEntries(
+    props.projects
+      .filter(project => projectAssigned[project.id] === true)
+      .map(project => [project.id, projectRoleIds[project.id] ?? defaultProjectRoleId.value])
+  )
+}
+
 function onSubmit(event: FormSubmitEvent<FormState>): void {
   if (props.user === null) {
     emit('create', {
@@ -74,7 +127,7 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
       password: event.data.password,
       password_confirmation: event.data.password_confirmation,
       role_id: event.data.role_id
-    })
+    }, selectedProjects())
 
     return
   }
@@ -89,7 +142,7 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
         role_id: event.data.role_id
       }
 
-  emit('update', payload)
+  emit('update', payload, selectedProjects())
 }
 </script>
 
@@ -121,13 +174,49 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
             placeholder="Enter email address"
           />
         </UFormField>
-        <UFormField name="role_id" label="Tenant role" required>
+        <UFormField label="User type" required>
+          <USelect
+            v-model="userType"
+            :items="userTypeOptions"
+            class="w-full"
+          />
+        </UFormField>
+        <UFormField
+          v-if="userType === 'tenant'"
+          name="role_id"
+          label="Tenant role"
+          required
+        >
           <USelect
             v-model="state.role_id"
             :items="roleOptions"
             class="w-full"
             placeholder="Choose a role"
           />
+        </UFormField>
+        <UFormField
+          v-if="userType === 'project'"
+          label="Projects"
+        >
+          <div class="flex flex-col gap-2">
+            <div
+              v-for="project in props.projects"
+              :key="project.id"
+              class="flex items-center justify-between gap-3"
+            >
+              <UCheckbox
+                v-model="projectAssigned[project.id]"
+                :label="project.name"
+              />
+              <USelect
+                v-model="projectRoleIds[project.id]"
+                :items="projectRoleOptions"
+                :disabled="projectAssigned[project.id] !== true"
+                size="sm"
+                class="w-40"
+              />
+            </div>
+          </div>
         </UFormField>
         <UFormField name="password" :label="props.user === null ? 'Password' : 'New password'" :required="props.user === null">
           <UInput

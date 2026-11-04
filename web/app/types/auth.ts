@@ -58,7 +58,9 @@ export const tenantUserSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   email: z.string().email(),
-  role_id: z.string().uuid()
+  role_id: z.string().uuid(),
+  created_at: z.string().nullable(),
+  projects: z.array(z.object({ id: z.string().uuid(), name: z.string() })).default([])
 })
 
 export const tenantUserResponseSchema = z.object({
@@ -102,6 +104,9 @@ export type RoleInput = {
   scope: RoleScope
   permissions: string[]
 }
+
+/** Project id → project role id, for the projects a person is a member of. */
+export type ProjectAssignments = Record<string, string>
 
 export type RoleScope = z.infer<typeof roleScopeSchema>
 export type Role = z.infer<typeof roleSchema>

@@ -3,6 +3,7 @@
 namespace Modules\Core\Actions\Tenant\Http;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Modules\Core\Models\Tenant\Tenant;
 use Modules\Core\Requests\Tenant\TenantUserIndexRequest;
 use Modules\Core\Resources\Tenant\TenantUserResource;
@@ -19,6 +20,7 @@ final class ListTenantUsersAction
         $search = $request->string('search')->value();
 
         $users = $tenant->users()
+            ->with(['projects' => static fn (Relation $query) => $query->where('projects.tenant_id', $tenant->getKey())->orderBy('projects.name')])
             ->when($search !== '', static function (Builder $query) use ($search): void {
                 $query->where(static function (Builder $query) use ($search): void {
                     $query->where('name', 'like', "%$search%")

@@ -126,17 +126,6 @@ const assetTypeLabels: Record<AssetType, string> = {
   equipment: 'Equipment'
 }
 
-const legendKinds: FlowKind[] = [
-  'tenant',
-  'project',
-  'site',
-  'factory',
-  'area',
-  'production_line',
-  'station',
-  'equipment'
-]
-
 function getKindConfig(kind: FlowKind) {
   return kindConfig[kind]
 }
@@ -988,20 +977,6 @@ const flowKey = computed(() => `${selectedTenantId.value}-${selectedFilterKeys.v
           </div>
         </template>
       </UPopover>
-
-      <div class="ms-auto flex flex-wrap items-center gap-2 text-xs">
-        <UBadge
-          v-for="kind in legendKinds"
-          :key="kind"
-          :color="kindConfig[kind].badgeColor"
-          variant="subtle"
-          class="gap-1.5"
-          :class="kindConfig[kind].badgeClass"
-        >
-          <UIcon :name="kindConfig[kind].icon" class="size-3 shrink-0" :class="kindConfig[kind].iconClass" />
-          {{ kind === 'tenant' || kind === 'project' ? kindConfig[kind].label : assetTypeLabels[kind] }}
-        </UBadge>
-      </div>
     </div>
 
     <UAlert

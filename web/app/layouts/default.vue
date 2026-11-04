@@ -21,23 +21,28 @@ const adminLinks = [{
 }, {
   label: 'Organization',
   icon: 'i-lucide-building-2',
-  to: '/admin/tenants'
-}, {
-  label: 'Projects',
-  icon: 'i-lucide-folder-kanban',
-  to: '/admin/projects'
+  defaultOpen: true,
+  children: [{
+    label: 'Tenant',
+    icon: 'i-lucide-building',
+    to: '/admin/tenants'
+  }, {
+    label: 'Projects',
+    icon: 'i-lucide-folder-kanban',
+    to: '/admin/projects'
+  }, {
+    label: 'Users',
+    icon: 'i-lucide-users',
+    to: '/admin/users'
+  }, {
+    label: 'Roles',
+    icon: 'i-lucide-shield-check',
+    to: '/admin/roles'
+  }]
 }, {
   label: 'Assets',
   icon: 'i-lucide-boxes',
   to: '/admin/assets'
-}, {
-  label: 'Users',
-  icon: 'i-lucide-users',
-  to: '/admin/users'
-}, {
-  label: 'Roles',
-  icon: 'i-lucide-shield-check',
-  to: '/admin/roles'
 }] satisfies NavigationMenuItem[]
 
 const route = useRoute()
@@ -79,7 +84,7 @@ const groups = computed(() => [{
   id: 'links',
   label: 'Go to',
   items: [
-    ...links.value.flat().map(item => ({
+    ...links.value.flat().flatMap(item => item.children ?? [item]).map(item => ({
       label: item.label,
       icon: item.icon,
       to: item.to

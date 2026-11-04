@@ -83,7 +83,7 @@ const roleColumns: TableColumn<Role>[] = [
   {
     accessorKey: 'scope',
     header: 'Applies to',
-    cell: ({ row }) => h(UBadge, { color: 'neutral', variant: 'subtle', class: 'capitalize' }, () => row.original.scope)
+    cell: ({ row }) => h(UBadge, { color: row.original.scope === 'tenant' ? 'warning' : 'info', variant: 'subtle', class: 'capitalize' }, () => row.original.scope)
   },
   {
     id: 'type',
