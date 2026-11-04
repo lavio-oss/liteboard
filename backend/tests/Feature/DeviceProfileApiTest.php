@@ -34,7 +34,7 @@ function createDeviceProfileOwner(): array
 {
     $user = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($user, ['role' => 'owner']);
+    $tenant->users()->attach($user, ['role_id' => roleId($tenant, 'owner')]);
     $project = Project::factory()->for($tenant)->create();
 
     return [$user, $tenant, $project];
@@ -388,8 +388,8 @@ it('keeps device profile APIs inside the active tenant', function (): void {
 it('enforces project write permissions for profile mutations', function (): void {
     [$owner, $tenant, $project] = createDeviceProfileOwner();
     $member = User::factory()->create();
-    $tenant->users()->attach($member, ['role' => 'member']);
-    $project->users()->attach($member, ['role' => 'viewer']);
+    $tenant->users()->attach($member, ['role_id' => roleId($tenant, 'member')]);
+    $project->users()->attach($member, ['role_id' => roleId($project, 'viewer')]);
 
     $this->actingAs($member)
         ->postJson("/api/tenants/$tenant->id/projects/$project->id/device-profiles", [
@@ -402,8 +402,8 @@ it('enforces project write permissions for profile mutations', function (): void
 it('lets project viewers read profiles but not change them or their versions', function (): void {
     [, $tenant, $project] = createDeviceProfileOwner();
     $viewer = User::factory()->create();
-    $tenant->users()->attach($viewer, ['role' => 'member']);
-    $project->users()->attach($viewer, ['role' => 'viewer']);
+    $tenant->users()->attach($viewer, ['role_id' => roleId($tenant, 'member')]);
+    $project->users()->attach($viewer, ['role_id' => roleId($project, 'viewer')]);
     $profile = DeviceProfile::factory()->for($project)->create(['name' => 'Motor telemetry']);
     $baseUrl = "/api/tenants/$tenant->id/projects/$project->id/device-profiles";
 
@@ -440,7 +440,7 @@ it('hides project profiles from tenant members outside the project', function ()
     $profile = DeviceProfile::factory()->for($project)->create();
     $version = DeviceProfileVersion::factory()->forProfile($profile)->create();
     $outsider = User::factory()->create();
-    $tenant->users()->attach($outsider, ['role' => 'member']);
+    $tenant->users()->attach($outsider, ['role_id' => roleId($tenant, 'member')]);
 
     $this->actingAs($outsider)
         ->getJson("/api/tenants/$tenant->id/projects/$project->id/device-profiles")

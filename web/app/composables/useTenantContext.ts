@@ -11,10 +11,6 @@ export function useTenantContext() {
   const loaded = useState<boolean>('tenant-context:loaded', () => false)
   const loadedForUserId = useState<string | null>('tenant-context:user-id', () => null)
   const activeTenant = computed(() => tenants.value.find(tenant => tenant.id === activeTenantId.value) ?? null)
-  const isPlatformAdmin = computed(() => user.value?.system_role === 'platform_admin')
-  const canManageActiveTenant = computed(() => isPlatformAdmin.value
-    || activeTenant.value?.role === 'owner'
-    || activeTenant.value?.role === 'admin')
 
   async function loadTenants(force = false): Promise<Tenant[]> {
     const userId = user.value?.id ?? null
@@ -46,8 +42,6 @@ export function useTenantContext() {
   return {
     activeTenant,
     activeTenantId,
-    canManageActiveTenant,
-    isPlatformAdmin,
     loadTenants,
     selectTenant,
     tenants

@@ -24,7 +24,7 @@ it('updates only the authenticated user profile and returns tenant roles', funct
     $tenant = Tenant::factory()->create([
         'name' => 'Operations',
     ]);
-    $user->tenants()->attach($tenant, ['role' => 'admin']);
+    $user->tenants()->attach($tenant, ['role_id' => roleId($tenant, 'admin')]);
 
     $this->actingAs($user)
         ->patchJson('/api/me', [
@@ -36,7 +36,7 @@ it('updates only the authenticated user profile and returns tenant roles', funct
         ->assertJsonPath('data.email', 'updated@example.com')
         ->assertJsonPath('data.email_verified_at', null)
         ->assertJsonPath('data.tenants.0.name', 'Operations')
-        ->assertJsonPath('data.tenants.0.role', 'admin')
+        ->assertJsonPath('data.tenants.0.role.key', 'admin')
         ->assertJsonMissingPath('data.password');
 
     expect($user->refresh()->name)->toBe('Updated Operator')
@@ -50,7 +50,7 @@ it('rejects profile updates that try to change role or another user', function (
         'name' => 'Other User',
     ]);
     $tenant = Tenant::factory()->create();
-    $user->tenants()->attach($tenant, ['role' => 'admin']);
+    $user->tenants()->attach($tenant, ['role_id' => roleId($tenant, 'admin')]);
 
     $this->actingAs($user)
         ->patchJson('/api/me', [
@@ -63,7 +63,7 @@ it('rejects profile updates that try to change role or another user', function (
         ->assertJsonValidationErrors(['role', 'user_id']);
 
     expect($user->refresh()->name)->not->toBe('Updated User')
-        ->and($user->tenants()->whereKey($tenant->id)->firstOrFail()->pivot->role)->toBe('admin')
+        ->and($user->tenants()->whereKey($tenant->id)->firstOrFail()->pivot->role_id)->toBe(roleId($tenant, 'admin'))
         ->and($otherUser->refresh()->name)->toBe('Other User');
 });
 

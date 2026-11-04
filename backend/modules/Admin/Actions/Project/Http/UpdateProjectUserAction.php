@@ -3,10 +3,10 @@
 namespace Modules\Admin\Actions\Project\Http;
 
 use Modules\Admin\Actions\Project\UpdateProjectUserRoleAction;
-use Modules\Admin\Enums\Project\ProjectRole;
 use Modules\Admin\Models\Project\Project;
 use Modules\Admin\Requests\Project\UpdateProjectUserRequest;
 use Modules\Admin\Resources\Project\ProjectUserResource;
+use Modules\Core\Models\Role\Role;
 use Modules\Core\Models\Tenant\Tenant;
 use Modules\Core\Models\User\User;
 use Modules\Core\Shared\Responders\Responder;
@@ -22,12 +22,12 @@ final class UpdateProjectUserAction
         UpdateProjectUserRoleAction $updateProjectUserRole,
         Responder $responder,
     ): Response {
-        /** @var array{role: string} $attributes */
+        /** @var array{role_id: string} $attributes */
         $attributes = $request->validated();
         $projectUser = $updateProjectUserRole->execute(
             $project,
             $user,
-            ProjectRole::from($attributes['role']),
+            Role::query()->findOrFail($attributes['role_id']),
         );
 
         return $responder->resource(ProjectUserResource::make($projectUser));

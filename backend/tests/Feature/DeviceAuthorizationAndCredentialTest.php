@@ -33,7 +33,7 @@ it('rejects unauthenticated device and credential access', function (): void {
 it('creates a device with an auto-generated access token and populates mqtt views', function (): void {
     $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
     $project = Project::factory()->for($tenant)->create();
     $equipment = Asset::factory()->for($project)->ofType(AssetType::Equipment)->create();
 
@@ -130,7 +130,7 @@ it('creates a device with an auto-generated access token and populates mqtt view
 it('rejects custom access tokens when creating devices or updating credentials', function (): void {
     $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
     $project = Project::factory()->for($tenant)->create();
 
     $this->actingAs($owner)->postJson(
@@ -179,7 +179,7 @@ it('rejects custom access tokens when creating devices or updating credentials',
 it('validates equipment asset association and nulls reference when equipment is deleted', function (): void {
     $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
     $project = Project::factory()->for($tenant)->create();
     $otherProject = Project::factory()->for($tenant)->create();
 
@@ -231,8 +231,8 @@ it('allows project viewers and operators to read devices but forbids mutating or
     $device = Device::factory()->for($project)->create();
 
     $user = User::factory()->create();
-    $tenant->users()->attach($user, ['role' => 'member']);
-    $project->users()->attach($user, ['role' => $role]);
+    $tenant->users()->attach($user, ['role_id' => roleId($tenant, 'member')]);
+    $project->users()->attach($user, ['role_id' => roleId($project, $role)]);
 
     $this->actingAs($user)
         ->getJson("/api/tenants/$tenant->id/projects/$project->id/devices")
@@ -265,8 +265,8 @@ it('allows project engineers to manage devices and credentials but forbids delet
     $device = Device::factory()->for($project)->create();
 
     $engineer = User::factory()->create();
-    $tenant->users()->attach($engineer, ['role' => 'member']);
-    $project->users()->attach($engineer, ['role' => 'engineer']);
+    $tenant->users()->attach($engineer, ['role_id' => roleId($tenant, 'member')]);
+    $project->users()->attach($engineer, ['role_id' => roleId($project, 'engineer')]);
 
     $this->actingAs($engineer)
         ->patchJson("/api/tenants/$tenant->id/projects/$project->id/devices/$device->id", [
@@ -290,8 +290,8 @@ it('allows project admins to delete devices', function (): void {
     $device = Device::factory()->for($project)->create();
 
     $projectAdmin = User::factory()->create();
-    $tenant->users()->attach($projectAdmin, ['role' => 'member']);
-    $project->users()->attach($projectAdmin, ['role' => 'admin']);
+    $tenant->users()->attach($projectAdmin, ['role_id' => roleId($tenant, 'member')]);
+    $project->users()->attach($projectAdmin, ['role_id' => roleId($project, 'admin')]);
 
     $this->actingAs($projectAdmin)
         ->deleteJson("/api/tenants/$tenant->id/projects/$project->id/devices/$device->id")
@@ -303,7 +303,7 @@ it('allows project admins to delete devices', function (): void {
 it('rotates, updates, and revokes device credentials while keeping mqtt views synchronized', function (): void {
     $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
     $project = Project::factory()->for($tenant)->create();
     $device = Device::factory()->for($project)->create();
 
@@ -363,8 +363,8 @@ it('isolates devices across tenants and projects and supports tenant-level filte
 
     $tenantA = Tenant::factory()->create();
     $tenantB = Tenant::factory()->create();
-    $tenantA->users()->attach($ownerA, ['role' => 'owner']);
-    $tenantB->users()->attach($ownerB, ['role' => 'owner']);
+    $tenantA->users()->attach($ownerA, ['role_id' => roleId($tenantA, 'owner')]);
+    $tenantB->users()->attach($ownerB, ['role_id' => roleId($tenantB, 'owner')]);
 
     $projectA1 = Project::factory()->for($tenantA)->create();
     $projectA2 = Project::factory()->for($tenantA)->create();

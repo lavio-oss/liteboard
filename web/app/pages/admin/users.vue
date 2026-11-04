@@ -5,7 +5,7 @@ import { getPaginationRowModel } from '@tanstack/table-core'
 import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
 import { useTenantContext } from '~/composables/useTenantContext'
-import type { TenantRole, TenantUser, TenantUserCreateInput, TenantUserUpdateInput } from '~/types/auth'
+import type { Role, TenantUser, TenantUserCreateInput, TenantUserUpdateInput } from '~/types/auth'
 
 definePageMeta({
   middleware: 'auth'
@@ -16,15 +16,16 @@ const UButton = resolveComponent('UButton')
 const toast = useToast()
 const table = useTemplateRef('table')
 const { user } = useAuth()
-const { activeTenant, canManageActiveTenant, loadTenants } = useTenantContext()
-const { createTenantUser, deleteTenantUser, loadTenantUsers, updateTenantUser } = useAdmin()
+const { activeTenant, loadTenants } = useTenantContext()
+const { createTenantUser, deleteTenantUser, loadRoles, loadTenantUsers, updateTenantUser } = useAdmin()
 await loadTenants()
 
 const tenantId = computed(() => activeTenant.value?.id ?? null)
 const addRequested = useState('admin:add-requested', () => false)
 const users = ref<TenantUser[]>([])
 const search = ref('')
-const roleFilter = ref<'all' | TenantRole>('all')
+const roleFilter = ref<string>('all')
+const tenantRoles = ref<Role[]>([])
 const columnVisibility = ref()
 const columnPinning = ref({ right: ['actions'] })
 const pagination = ref({ pageIndex: 0, pageSize: 10 })
@@ -35,12 +36,10 @@ const deleteOpen = ref(false)
 const deleteLoading = ref(false)
 const deletingUsers = ref<TenantUser[]>([])
 
-const roleOptions = [
-  { label: 'All roles', value: 'all' as const },
-  { label: 'Owner', value: 'owner' as const },
-  { label: 'Admin', value: 'admin' as const },
-  { label: 'Member', value: 'member' as const }
-]
+const roleOptions = computed(() => [
+  { label: 'All roles', value: 'all' },
+  ...tenantRoles.value.map(role => ({ label: role.name, value: role.id }))
+])
 
 const { withScreenLoading } = useScreenLoading()
 
@@ -60,13 +59,18 @@ const filteredUsers = computed(() => {
     const matchesSearch = query === ''
       || item.name.toLowerCase().includes(query)
       || item.email.toLowerCase().includes(query)
-    const matchesRole = roleFilter.value === 'all' || item.role === roleFilter.value
+    const matchesRole = roleFilter.value === 'all' || item.role_id === roleFilter.value
 
     return matchesSearch && matchesRole
   })
 })
-const canManage = canManageActiveTenant
-const canDelete = computed(() => user.value?.system_role === 'platform_admin')
+const canManage = computed(() => activeTenant.value?.permissions.includes('user.manage') === true)
+// The API also refuses Owners for non-Owners; hiding the buttons here only avoids a dead click.
+const actorIsOwner = computed(() => activeTenant.value?.role.is_owner === true)
+const ownerRoleIds = computed(() => new Set(tenantRoles.value.filter(role => role.is_owner).map(role => role.id)))
+function canManageMember(member: TenantUser): boolean {
+  return member.id !== user.value?.id && (actorIsOwner.value || !ownerRoleIds.value.has(member.role_id))
+}
 const userLoading = ref(false)
 
 async function reload(): Promise<void> {
@@ -77,7 +81,10 @@ async function reload(): Promise<void> {
 
   userLoading.value = true
   try {
-    users.value = await loadTenantUsers(tenantId.value)
+    [users.value, tenantRoles.value] = await Promise.all([
+      loadTenantUsers(tenantId.value),
+      loadRoles(tenantId.value, 'tenant')
+    ])
   } catch (error: unknown) {
     if (!(error instanceof ApiError)) {
       throw error
@@ -100,7 +107,7 @@ function openEdit(item: TenantUser): void {
 }
 
 function openDelete(items: TenantUser[]): void {
-  deletingUsers.value = items.filter(item => item.id !== user.value?.id)
+  deletingUsers.value = items.filter(canManageMember)
 
   if (deletingUsers.value.length > 0) {
     deleteOpen.value = true
@@ -164,7 +171,7 @@ async function confirmDelete(): Promise<void> {
     await Promise.all(deletingUsers.value.map(item => deleteTenantUser(tenantId.value as string, item.id)))
     await reload()
     deleteOpen.value = false
-    toast.add({ title: 'User deleted', description: 'The account has been deleted.', color: 'success' })
+    toast.add({ title: 'User removed', description: 'The person has been removed from the tenant.', color: 'success' })
   } catch (error: unknown) {
     if (!(error instanceof ApiError)) {
       throw error
@@ -207,41 +214,38 @@ const columns: TableColumn<TenantUser>[] = [
     }
   },
   {
-    accessorKey: 'role',
+    accessorKey: 'role_id',
     header: 'Tenant role',
-    cell: ({ row }) => h(UBadge, {
-      color: row.original.role === 'owner' ? 'primary' : row.original.role === 'admin' ? 'success' : 'neutral',
-      variant: 'subtle',
-      class: 'capitalize'
-    }, () => row.original.role)
-  },
-  {
-    accessorKey: 'system_role',
-    header: 'System role',
-    cell: ({ row }) => row.original.system_role === 'platform_admin'
-      ? h(UBadge, { color: 'warning', variant: 'subtle' }, () => 'Platform admin')
-      : h('span', { class: 'text-muted' }, '—')
+    cell: ({ row }) => {
+      const role = tenantRoles.value.find(item => item.id === row.original.role_id)
+
+      if (role === undefined) {
+        throw new Error('The member role is not available.')
+      }
+
+      return h(UBadge, { color: role.is_owner ? 'primary' : role.is_system ? 'success' : 'neutral', variant: 'subtle' }, () => role.name)
+    }
   },
   {
     id: 'actions',
-    cell: ({ row }) => h('div', { class: 'flex justify-end gap-1' }, [
-      h(UButton, {
-        'icon': 'i-lucide-pencil',
-        'color': 'neutral',
-        'variant': 'ghost',
-        'aria-label': `Edit account for ${row.original.name}`,
-        'onClick': () => openEdit(row.original)
-      }),
-      ...(canDelete.value && row.original.id !== user.value?.id
-        ? [h(UButton, {
+    cell: ({ row }) => canManageMember(row.original)
+      ? h('div', { class: 'flex justify-end gap-1' }, [
+          h(UButton, {
+            'icon': 'i-lucide-pencil',
+            'color': 'neutral',
+            'variant': 'ghost',
+            'aria-label': `Edit account for ${row.original.name}`,
+            'onClick': () => openEdit(row.original)
+          }),
+          h(UButton, {
             'icon': 'i-lucide-trash-2',
             'color': 'error',
             'variant': 'ghost',
-            'aria-label': `Delete account for ${row.original.name}`,
+            'aria-label': `Remove ${row.original.name} from the tenant`,
             'onClick': () => openDelete([row.original])
-          })]
-        : [])
-    ])
+          })
+        ])
+      : null
   }
 ]
 
@@ -283,7 +287,7 @@ watch(addRequested, (requested) => {
           color="warning"
           variant="subtle"
           title="User management is restricted"
-          description="Only tenant owners, tenant admins, and platform admins can manage users."
+          description="Your role does not include user management."
         />
 
         <template v-else>
@@ -327,7 +331,7 @@ watch(addRequested, (requested) => {
             </div>
           </div>
 
-          <UTable
+          <AppTable
             ref="table"
             v-model:column-visibility="columnVisibility"
             v-model:column-pinning="columnPinning"
@@ -363,6 +367,7 @@ watch(addRequested, (requested) => {
       <AdminTenantUserFormModal
         v-model:open="editOpen"
         :user="editingUser"
+        :roles="tenantRoles.filter(role => actorIsOwner || !role.is_owner)"
         :loading="editLoading"
         @create="createUser"
         @update="saveUser"
@@ -371,7 +376,7 @@ watch(addRequested, (requested) => {
       <ConfirmDeleteModal
         v-model:open="deleteOpen"
         :title="`Delete ${deletingUsers.length} user${deletingUsers.length === 1 ? '' : 's'}`"
-        description="This permanently deletes the selected global account(s) and their memberships."
+        description="This removes the selected people from the tenant and its projects. An account is deleted when no other tenant uses it."
         :loading="deleteLoading"
         @confirm="confirmDelete"
       />

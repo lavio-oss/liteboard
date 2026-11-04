@@ -7,7 +7,6 @@ import { useProvisioningCaCertificateDownload } from '~/composables/useProvision
 import { useDevicePresenceStream } from '~/composables/useDevicePresenceStream'
 import { useTenantContext } from '~/composables/useTenantContext'
 import DevicePresenceStatus from '~/components/realtime/DevicePresenceStatus.vue'
-import { canDeleteProjectData, canWriteProjectData } from '~/utils/projectPermissions'
 import { applyDevicePresenceToDevice, mergeDevicePresenceEvents } from '~/utils/devicePresence'
 import type {
   AdminTableRow,
@@ -27,7 +26,7 @@ const UButton = resolveComponent('UButton')
 const toast = useToast()
 const downloadMqttCaCertificate = useMqttCaCertificateDownload()
 const downloadProvisioningCaCertificate = useProvisioningCaCertificateDownload()
-const { activeTenantId, canManageActiveTenant, loadTenants } = useTenantContext()
+const { activeTenantId, loadTenants } = useTenantContext()
 const {
   createDevice,
   deleteDevice,
@@ -157,7 +156,7 @@ function canWriteProject(projectId: string): boolean {
     throw new Error('The device project is not available.')
   }
 
-  return canWriteProjectData(project.role, canManageActiveTenant.value)
+  return project.permissions.includes('device.write')
 }
 
 function canDeleteProject(projectId: string): boolean {
@@ -167,7 +166,7 @@ function canDeleteProject(projectId: string): boolean {
     throw new Error('The device project is not available.')
   }
 
-  return canDeleteProjectData(project.role, canManageActiveTenant.value)
+  return project.permissions.includes('device.delete')
 }
 
 const writableProjects = computed(() => projects.value.filter(project => canWriteProject(project.id)))
@@ -817,7 +816,7 @@ const errorMessage = computed(() => {
           :ui="{ content: 'max-w-2xl' }"
           :tenant-id="provisioningProject.tenant_id"
           :project="provisioningProject"
-          :can-manage-quota="canManageActiveTenant"
+          :can-manage-quota="provisioningProject.permissions.includes('project.quota.manage')"
           :show-quota="false"
           @updated="refresh"
         />
@@ -827,7 +826,7 @@ const errorMessage = computed(() => {
           :project="provisioningProject"
           :devices="devices.filter(device => device.project_id === provisioningProject?.id)"
           :device-profiles="(response?.deviceProfiles ?? []).filter(profile => profile.project_id === provisioningProject?.id)"
-          :can-manage-quota="canManageActiveTenant"
+          :can-manage-quota="provisioningProject.permissions.includes('project.quota.manage')"
           :can-write="canWriteProject(provisioningProject.id)"
           :approving-device-id="approvalActionDeviceId"
           @updated="refresh"

@@ -4,14 +4,14 @@ import { getPaginationRowModel } from '@tanstack/table-core'
 import * as z from 'zod'
 import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
-import type { Project, ProjectRole } from '~/types/admin'
-import { projectRoleSchema } from '~/types/admin'
+import type { Project } from '~/types/admin'
+import type { Role } from '~/types/auth'
 
 export interface ProjectMemberRow {
   id: string
   name: string
   email: string
-  role: ProjectRole
+  role_id: string
   is_assigned: boolean
 }
 
@@ -44,6 +44,7 @@ const {
   deleteTenantUser,
   loadAvailableProjectUsers,
   loadProjectUsers,
+  loadRoles,
   removeProjectUser,
   updateProjectUser,
   updateTenantUser
@@ -52,7 +53,7 @@ const {
 const allUsers = ref<ProjectMemberRow[]>([])
 const loading = ref(false)
 const search = ref('')
-const roleFilter = ref<'all' | 'assigned' | 'unassigned' | ProjectRole>('all')
+const roleFilter = ref<string>('all')
 const columnVisibility = ref()
 const columnPinning = ref({ right: ['actions'] })
 const pagination = ref({ pageIndex: 0, pageSize: 10 })
@@ -60,8 +61,8 @@ const pendingUserIds = ref<Set<string>>(new Set())
 
 const editRoleOpen = ref(false)
 const editRoleLoading = ref(false)
-const editRoleState = reactive<{ role: ProjectRole }>({
-  role: 'viewer'
+const editRoleState = reactive<{ role_id: string }>({
+  role_id: ''
 })
 
 const editAccountOpen = ref(false)
@@ -85,19 +86,17 @@ const accountState = reactive<AccountForm>({
   password: '',
   password_confirmation: ''
 })
-const roleOptions = [
-  { label: 'Admin', value: 'admin' as const },
-  { label: 'Engineer', value: 'engineer' as const },
-  { label: 'Operator', value: 'operator' as const },
-  { label: 'Viewer', value: 'viewer' as const }
-]
+const projectRoles = ref<Role[]>([])
+const roleOptions = computed(() => projectRoles.value.map(role => ({ label: role.name, value: role.id })))
+// New assignments start with the least privileged project role.
+const defaultRoleId = computed(() => [...projectRoles.value].sort((a, b) => a.permissions.length - b.permissions.length)[0]?.id)
 
-const roleFilterOptions = [
+const roleFilterOptions = computed(() => [
   { label: 'All users', value: 'all' as const },
   { label: 'Assigned', value: 'assigned' as const },
   { label: 'Unassigned', value: 'unassigned' as const },
-  ...roleOptions
-]
+  ...roleOptions.value
+])
 
 const title = computed(() => props.project === null ? 'Project users' : `${props.project.name} users`)
 
@@ -124,7 +123,7 @@ const filteredUsers = computed(() => {
     } else if (roleFilter.value === 'unassigned') {
       matchesFilter = !user.is_assigned
     } else if (roleFilter.value !== 'all') {
-      matchesFilter = user.is_assigned && user.role === roleFilter.value
+      matchesFilter = user.is_assigned && user.role_id === roleFilter.value
     }
 
     return matchesSearch && matchesFilter
@@ -132,10 +131,6 @@ const filteredUsers = computed(() => {
 })
 
 const assignedUsers = computed(() => allUsers.value.filter(user => user.is_assigned))
-
-function roleLabel(role: ProjectRole): string {
-  return roleOptions.find(option => option.value === role)?.label ?? role
-}
 
 async function reload(): Promise<void> {
   if (!open.value || props.tenantId === null || props.project === null) {
@@ -145,16 +140,23 @@ async function reload(): Promise<void> {
   loading.value = true
 
   try {
-    const [projectUsers, availableUsers] = await Promise.all([
+    const [projectUsers, availableUsers, roles] = await Promise.all([
       loadProjectUsers(props.tenantId, props.project.id),
-      loadAvailableProjectUsers(props.tenantId, props.project.id)
+      loadAvailableProjectUsers(props.tenantId, props.project.id),
+      loadRoles(props.tenantId, 'project')
     ])
+    projectRoles.value = roles
+    const initialRoleId = defaultRoleId.value
+
+    if (initialRoleId === undefined) {
+      throw new Error('The tenant has no project roles.')
+    }
 
     const rows: ProjectMemberRow[] = availableUsers.map(user => ({
       id: user.id,
       name: user.name,
       email: user.email,
-      role: 'viewer' as const,
+      role_id: initialRoleId,
       is_assigned: false
     }))
 
@@ -162,7 +164,7 @@ async function reload(): Promise<void> {
       id: user.id,
       name: user.name,
       email: user.email,
-      role: user.role,
+      role_id: user.role_id,
       is_assigned: true
     })))
 
@@ -190,7 +192,7 @@ async function toggleUserAssignment(user: ProjectMemberRow): Promise<void> {
     if (willAssign) {
       await attachProjectUser(props.tenantId, props.project.id, {
         user_id: user.id,
-        role: user.role
+        role_id: user.role_id
       })
       user.is_assigned = true
       toast.add({
@@ -225,11 +227,11 @@ async function toggleUserAssignment(user: ProjectMemberRow): Promise<void> {
 
 function openRoleEdit(user: ProjectMemberRow): void {
   selectedUser.value = user
-  editRoleState.role = user.role
+  editRoleState.role_id = user.role_id
   editRoleOpen.value = true
 }
 
-async function submitRole(event: FormSubmitEvent<{ role: ProjectRole }>): Promise<void> {
+async function submitRole(event: FormSubmitEvent<{ role_id: string }>): Promise<void> {
   if (props.tenantId === null || props.project === null || selectedUser.value === null) {
     throw new Error('A project user is required before updating the role.')
   }
@@ -237,8 +239,8 @@ async function submitRole(event: FormSubmitEvent<{ role: ProjectRole }>): Promis
   editRoleLoading.value = true
 
   try {
-    await updateProjectUser(props.tenantId, props.project.id, selectedUser.value.id, event.data.role)
-    selectedUser.value.role = event.data.role
+    await updateProjectUser(props.tenantId, props.project.id, selectedUser.value.id, event.data.role_id)
+    selectedUser.value.role_id = event.data.role_id
     allUsers.value = [...allUsers.value]
     editRoleOpen.value = false
     toast.add({ title: 'Role updated', description: 'The project role has been saved.', color: 'success' })
@@ -307,7 +309,7 @@ async function confirmDeleteAccount(): Promise<void> {
     await deleteTenantUser(props.tenantId, selectedUser.value.id)
     await reload()
     deleteAccountOpen.value = false
-    toast.add({ title: 'Account deleted', description: 'The global account has been deleted.', color: 'success' })
+    toast.add({ title: 'Member removed', description: 'The person has been removed from the tenant.', color: 'success' })
   } catch (error: unknown) {
     if (!(error instanceof ApiError)) {
       throw error
@@ -359,18 +361,24 @@ const columns: TableColumn<ProjectMemberRow>[] = [
     cell: ({ row }) => h('span', { class: 'text-muted' }, row.original.email)
   },
   {
-    accessorKey: 'role',
+    accessorKey: 'role_id',
     header: 'Project role',
     cell: ({ row }) => {
       if (!row.original.is_assigned) {
         return h('span', { class: 'text-xs text-muted' }, '—')
       }
 
+      const role = projectRoles.value.find(item => item.id === row.original.role_id)
+
+      if (role === undefined) {
+        throw new Error('The member role is not available.')
+      }
+
       return h('div', { class: 'flex items-center gap-1.5' }, [
         h(UBadge, {
-          color: row.original.role === 'admin' ? 'primary' : 'neutral',
+          color: role.is_system ? 'primary' : 'neutral',
           variant: 'subtle'
-        }, () => roleLabel(row.original.role)),
+        }, () => role.name),
         h(UButton, {
           'icon': 'i-lucide-pencil-line',
           'color': 'neutral',
@@ -442,7 +450,7 @@ watch(
           </div>
         </div>
 
-        <UTable
+        <AppTable
           ref="table"
           v-model:column-visibility="columnVisibility"
           v-model:column-pinning="columnPinning"
@@ -479,15 +487,15 @@ watch(
   <UModal v-model:open="editRoleOpen" title="Edit project role">
     <template #body>
       <UForm
-        :schema="z.object({ role: projectRoleSchema })"
+        :schema="z.object({ role_id: z.string().uuid() })"
         :state="editRoleState"
         class="space-y-4"
         :disabled="editRoleLoading"
         @submit="submitRole"
       >
-        <UFormField name="role" label="Project role" required>
+        <UFormField name="role_id" label="Project role" required>
           <USelect
-            v-model="editRoleState.role"
+            v-model="editRoleState.role_id"
             :items="roleOptions"
             class="w-full"
           />
@@ -542,7 +550,7 @@ watch(
   <ConfirmDeleteModal
     v-model:open="deleteAccountOpen"
     :title="`Delete ${selectedUser?.name ?? 'user'} account`"
-    description="This permanently deletes the global account and its memberships."
+    description="This removes the person from the tenant and all its projects. The account is deleted when no other tenant uses it."
     :loading="deleteAccountLoading"
     @confirm="confirmDeleteAccount"
   />

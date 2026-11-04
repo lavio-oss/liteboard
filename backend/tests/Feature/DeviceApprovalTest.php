@@ -14,11 +14,11 @@ function createApprovalContext(): array
 {
     $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
     $engineer = User::factory()->create();
-    $tenant->users()->attach($engineer, ['role' => 'member']);
+    $tenant->users()->attach($engineer, ['role_id' => roleId($tenant, 'member')]);
     $project = Project::factory()->for($tenant)->create();
-    $project->users()->attach($engineer, ['role' => 'engineer']);
+    $project->users()->attach($engineer, ['role_id' => roleId($project, 'engineer')]);
     $secret = Str::random(64);
     $profile = $project->provisioningProfile()->create([
         'enabled' => true,
@@ -157,7 +157,7 @@ it('scopes approval and status checks to the owning tenant and blocks secret rot
 
     $otherTenant = Tenant::factory()->create();
     $outsider = User::factory()->create();
-    $otherTenant->users()->attach($outsider, ['role' => 'owner']);
+    $otherTenant->users()->attach($outsider, ['role_id' => roleId($otherTenant, 'owner')]);
 
     $this->actingAs($outsider)
         ->postJson("/api/tenants/$tenant->id/projects/$project->id/devices/$deviceId/approve")

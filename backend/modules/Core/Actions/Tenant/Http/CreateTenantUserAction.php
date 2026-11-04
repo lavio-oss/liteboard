@@ -17,7 +17,7 @@ final class CreateTenantUserAction
         CreateTenantUser $createTenantUser,
         Responder $responder,
     ): Response {
-        /** @var array{name: string, email: string, password: string} $attributes */
+        /** @var array{name: string, email: string, password: string, role_id: string} $attributes */
         $attributes = $request->validated();
         $user = $createTenantUser->execute($tenant, $attributes);
 

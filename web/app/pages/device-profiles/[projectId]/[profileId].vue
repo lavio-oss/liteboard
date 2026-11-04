@@ -3,7 +3,6 @@ import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
 import { useTenantContext } from '~/composables/useTenantContext'
 import { formatDateTime } from '~/composables/useDateTime'
-import { canWriteProjectData } from '~/utils/projectPermissions'
 import * as z from 'zod'
 import type { DeviceProfileVersion, DeviceProfileVersionInput } from '~/types/admin'
 
@@ -13,7 +12,7 @@ definePageMeta({
 
 const route = useRoute()
 const toast = useToast()
-const { activeTenantId, canManageActiveTenant, loadTenants } = useTenantContext()
+const { activeTenantId, loadTenants } = useTenantContext()
 const { createDeviceProfileVersion, loadDeviceProfiles, loadProjects } = useAdmin()
 await loadTenants()
 
@@ -45,7 +44,7 @@ const { data, status, error, refresh } = await useAsyncData(
 
 const profile = computed(() => data.value?.profile ?? null)
 const canWrite = computed(() => data.value?.project != null
-  && canWriteProjectData(data.value.project.role, canManageActiveTenant.value))
+  && data.value.project.permissions.includes('device_profile.write'))
 const versions = computed(() => [...(profile.value?.versions ?? [])].reverse())
 
 const versionSearch = ref('')

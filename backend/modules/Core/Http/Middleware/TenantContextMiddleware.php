@@ -18,11 +18,7 @@ final class TenantContextMiddleware
         $tenant = $request->route('tenant');
         $user = $request->user();
 
-        if (
-            ! $tenant instanceof Tenant
-            || ! $user instanceof User
-            || (! $user->isPlatformAdmin() && ! $tenant->hasMember($user))
-        ) {
+        if (! $tenant instanceof Tenant || ! $user instanceof User || ! $tenant->hasMember($user)) {
             abort(Response::HTTP_NOT_FOUND);
         }
 

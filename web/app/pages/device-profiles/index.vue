@@ -3,7 +3,6 @@ import type { TableColumn } from '@nuxt/ui'
 import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
 import { useTenantContext } from '~/composables/useTenantContext'
-import { canDeleteProjectData, canWriteProjectData } from '~/utils/projectPermissions'
 import type {
   AdminTableRow,
   Device,
@@ -19,7 +18,7 @@ definePageMeta({
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
 const toast = useToast()
-const { activeTenantId, canManageActiveTenant, loadTenants } = useTenantContext()
+const { activeTenantId, loadTenants } = useTenantContext()
 const {
   createDeviceProfile,
   deleteDeviceProfile,
@@ -80,7 +79,7 @@ const connectedDeviceNamesByProfileId = computed(() => {
 })
 const projects = computed(() => response.value?.projects ?? [])
 const writableProjects = computed(() => projects.value.filter(project => (
-  canWriteProjectData(project.role, canManageActiveTenant.value)
+  project.permissions.includes('device_profile.write')
 )))
 const writableProjectOptions = computed(() => writableProjects.value.map(project => ({
   label: project.name,
@@ -125,11 +124,11 @@ function projectFor(projectId: string): Project {
 }
 
 function canWriteInProject(projectId: string): boolean {
-  return canWriteProjectData(projectFor(projectId).role, canManageActiveTenant.value)
+  return projectFor(projectId).permissions.includes('device_profile.write')
 }
 
 function canDeleteInProject(projectId: string): boolean {
-  return canDeleteProjectData(projectFor(projectId).role, canManageActiveTenant.value)
+  return projectFor(projectId).permissions.includes('device_profile.delete')
 }
 
 function resetProfileFilters(): void {
@@ -338,12 +337,6 @@ const columns: TableColumn<AdminTableRow>[] = [
   {
     id: 'actions',
     header: 'Actions',
-    meta: {
-      class: {
-        th: 'w-px',
-        td: 'w-px'
-      }
-    },
     cell: ({ row }) => {
       const projectId = row.original.project_id
 

@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { tenantRoleSchema } from '~/types/auth'
 import { deviceApprovalSchema } from './deviceApproval'
 import { deviceMqttConnectionSchema, deviceMqttTopicsSchema } from './deviceCredential'
 import type { deviceProfileVersionDefinitionFieldSchema } from './deviceProfileDefinition'
@@ -23,12 +22,11 @@ const resourceBaseSchema = z.object({
   updated_at: z.string()
 })
 
-export const projectRoleSchema = z.enum(['admin', 'engineer', 'operator', 'viewer'])
-
 export const projectSchema = resourceBaseSchema.extend({
   tenant_id: z.string().uuid(),
   description: z.string().nullable(),
-  role: projectRoleSchema.nullable(),
+  // The requesting user's effective permissions on this project.
+  permissions: z.array(z.string()),
   max_devices_quota: z.number().int().nonnegative().nullable(),
   device_count: z.number().int().nonnegative(),
   // null until the project has a provisioning profile.
@@ -131,14 +129,14 @@ export const projectUserSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   email: z.string().email(),
-  role: projectRoleSchema
+  role_id: z.string().uuid()
 })
 
 export const availableProjectUserSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   email: z.string().email(),
-  tenant_role: tenantRoleSchema
+  tenant_role_id: z.string().uuid()
 })
 
 export const projectsResponseSchema = z.object({
@@ -209,7 +207,6 @@ export type DeviceProfileVersionFieldType = z.infer<typeof deviceProfileVersionD
 export type DeviceProfileVersionInput = z.infer<typeof deviceProfileVersionInputSchema>
 export type Device = z.infer<typeof deviceSchema>
 export type DeviceCredential = z.infer<typeof deviceCredentialSchema>
-export type ProjectRole = z.infer<typeof projectRoleSchema>
 export type ProjectUser = z.infer<typeof projectUserSchema>
 export type AvailableProjectUser = z.infer<typeof availableProjectUserSchema>
 
@@ -254,7 +251,7 @@ export interface DeviceCredentialInput {
 
 export interface ProjectUserInput {
   user_id: string
-  role: ProjectRole
+  role_id: string
 }
 
 export interface ProjectUserAccountInput {
@@ -262,7 +259,7 @@ export interface ProjectUserAccountInput {
   email: string
   password: string
   password_confirmation: string
-  role: ProjectRole
+  role_id: string
 }
 
 export interface TenantHierarchy {

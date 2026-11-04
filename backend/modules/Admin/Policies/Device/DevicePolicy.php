@@ -3,84 +3,54 @@
 namespace Modules\Admin\Policies\Device;
 
 use Modules\Admin\Enums\Device\DeviceApprovalStatus;
-use Modules\Admin\Enums\Project\ProjectRole;
 use Modules\Admin\Models\Device\Device;
 use Modules\Admin\Models\Project\Project;
-use Modules\Core\Enums\Tenant\TenantRole;
-use Modules\Core\Models\Tenant\Tenant;
+use Modules\Core\Enums\Role\Permission;
 use Modules\Core\Models\User\User;
+use Modules\Core\Services\Role\PermissionResolver;
 
 final class DevicePolicy
 {
+    public function __construct(private readonly PermissionResolver $permissions) {}
+
     public function viewAny(User $user, Project $project): bool
     {
-        return $this->projectAllowsView($user, $project);
+        return $this->permissions->allows($user, Permission::DeviceView, $project);
     }
 
     public function view(User $user, Device $device): bool
     {
-        return $this->projectAllowsView($user, $this->projectFor($device));
+        return $this->permissions->allows($user, Permission::DeviceView, $device->project()->firstOrFail());
     }
 
     public function create(User $user, Project $project): bool
     {
-        return $this->projectAllowsWrite($user, $project);
+        return $this->permissions->allows($user, Permission::DeviceWrite, $project);
     }
 
     public function update(User $user, Device $device): bool
     {
-        return $this->projectAllowsWrite($user, $this->projectFor($device));
+        return $this->permissions->allows($user, Permission::DeviceWrite, $device->project()->firstOrFail());
     }
 
     public function manageCredentials(User $user, Device $device): bool
     {
         return $device->getAttribute('approval_status') === DeviceApprovalStatus::Approved
-            && $this->projectAllowsWrite($user, $this->projectFor($device));
+            && $this->permissions->allows($user, Permission::DeviceCredentialManage, $device->project()->firstOrFail());
     }
 
     public function approve(User $user, Device $device): bool
     {
-        return $this->projectAllowsWrite($user, $this->projectFor($device));
+        return $this->permissions->allows($user, Permission::DeviceWrite, $device->project()->firstOrFail());
     }
 
     public function reject(User $user, Device $device): bool
     {
-        return $this->projectAllowsWrite($user, $this->projectFor($device));
+        return $this->permissions->allows($user, Permission::DeviceWrite, $device->project()->firstOrFail());
     }
 
     public function delete(User $user, Device $device): bool
     {
-        return $this->projectAllowsDelete($user, $this->projectFor($device));
-    }
-
-    private function tenantFor(Project $project): Tenant
-    {
-        return $project->tenant()->firstOrFail();
-    }
-
-    private function projectFor(Device $device): Project
-    {
-        return $device->project()->firstOrFail();
-    }
-
-    private function projectAllowsView(User $user, Project $project): bool
-    {
-        return $user->isPlatformAdmin()
-            || $this->tenantFor($project)->hasRole($user, TenantRole::Owner, TenantRole::Admin)
-            || $project->hasMember($user);
-    }
-
-    private function projectAllowsWrite(User $user, Project $project): bool
-    {
-        return $user->isPlatformAdmin()
-            || $this->tenantFor($project)->hasRole($user, TenantRole::Owner, TenantRole::Admin)
-            || $project->hasRole($user, ProjectRole::Admin, ProjectRole::Engineer);
-    }
-
-    private function projectAllowsDelete(User $user, Project $project): bool
-    {
-        return $user->isPlatformAdmin()
-            || $this->tenantFor($project)->hasRole($user, TenantRole::Owner, TenantRole::Admin)
-            || $project->hasRole($user, ProjectRole::Admin);
+        return $this->permissions->allows($user, Permission::DeviceDelete, $device->project()->firstOrFail());
     }
 }

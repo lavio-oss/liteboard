@@ -8,8 +8,8 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 use LogicException;
-use Modules\Admin\Enums\Project\ProjectRole;
 use Modules\Admin\Models\Project\Project;
+use Modules\Core\Enums\Role\RoleScope;
 use Modules\Core\Models\Tenant\Tenant;
 use Modules\Core\Models\User\User;
 
@@ -30,7 +30,7 @@ final class StoreProjectUserRequest extends FormRequest
     {
         return [
             'user_id' => ['required', 'bail', 'uuid', Rule::exists('users', 'id')],
-            'role' => ['required', 'string', Rule::enum(ProjectRole::class)],
+            'role_id' => ['required', 'bail', 'uuid'],
             'tenant_id' => ['prohibited'],
             'project_id' => ['prohibited'],
         ];
@@ -57,6 +57,12 @@ final class StoreProjectUserRequest extends FormRequest
                         $query->where('project_id', $project->getKey());
                     },
                 ),
+            ],
+            'role_id' => [
+                Rule::exists('roles', 'id')->where(static function (Builder $query) use ($tenant): void {
+                    $query->where('tenant_id', $tenant->getKey())
+                        ->where('scope', RoleScope::Project->value);
+                }),
             ],
         ]);
     }

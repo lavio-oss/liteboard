@@ -3,14 +3,19 @@
 namespace Modules\Admin\Resources\Project;
 
 use Carbon\CarbonInterface;
-use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use LogicException;
 use Modules\Admin\Models\Project\Project;
+use Modules\Core\Enums\Role\Permission;
 use Modules\Core\Models\User\User;
+use Modules\Core\Services\Role\PermissionResolver;
 
-/** @mixin Project */
+/**
+ * `permissions` are the requesting user's effective permissions on this project.
+ *
+ * @mixin Project
+ */
 final class ProjectResource extends JsonResource
 {
     /** @return array<string, mixed> */
@@ -18,32 +23,15 @@ final class ProjectResource extends JsonResource
     {
         /** @var Project $project */
         $project = $this->resource;
+        $user = $request->user();
+
+        if (! $user instanceof User) {
+            throw new LogicException('A project is only serialized for an authenticated user.');
+        }
 
         $provisioningProfile = $project->provisioningProfile;
         $createdAt = $project->getAttribute('created_at');
         $updatedAt = $project->getAttribute('updated_at');
-
-        $user = $request->user();
-        $role = null;
-
-        if ($user instanceof User) {
-            if ($user->isPlatformAdmin()) {
-                $role = 'admin';
-            } else {
-                $member = $project->relationLoaded('users')
-                    ? $project->users->firstWhere('id', $user->getKey())
-                    : $project->users()->whereKey($user->getKey())->first();
-
-                $pivot = $member?->getRelationValue('pivot');
-                $pivotRole = $pivot instanceof Pivot ? $pivot->getAttribute('role') : null;
-
-                if ($pivotRole !== null && ! is_string($pivotRole)) {
-                    throw new LogicException('The project membership pivot role must be a string when present.');
-                }
-
-                $role = $pivotRole;
-            }
-        }
 
         return [
             'id' => (string) $project->getKey(),
@@ -55,7 +43,10 @@ final class ProjectResource extends JsonResource
             'device_count' => $project->devices()->count(),
             // null when the project has no provisioning profile yet.
             'provisioning_enabled' => $provisioningProfile === null ? null : (bool) $provisioningProfile->getAttribute('enabled'),
-            'role' => $role,
+            'permissions' => array_map(
+                static fn (Permission $permission): string => $permission->value,
+                app(PermissionResolver::class)->permissions($user, $project),
+            ),
             'created_at' => $createdAt instanceof CarbonInterface ? $createdAt->toISOString() : null,
             'updated_at' => $updatedAt instanceof CarbonInterface ? $updatedAt->toISOString() : null,
         ];

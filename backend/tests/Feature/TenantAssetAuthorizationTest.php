@@ -17,7 +17,7 @@ it('lets tenant owners and admins list assets across their tenant projects', fun
     Asset::factory()->for($otherProject)->create();
 
     $user = User::factory()->create();
-    $tenant->users()->attach($user, ['role' => $role]);
+    $tenant->users()->attach($user, ['role_id' => roleId($tenant, $role)]);
 
     $this->actingAs($user)
         ->getJson('/api/tenants/'.$tenant->getKey().'/assets')
@@ -35,8 +35,8 @@ it('keeps tenant members within their assigned projects and denies tenant-wide a
     $unassignedProject = Project::factory()->for($tenant)->create();
     $assignedAsset = Asset::factory()->for($assignedProject)->create();
     Asset::factory()->for($unassignedProject)->create();
-    $tenant->users()->attach($member, ['role' => 'member']);
-    $assignedProject->users()->attach($member, ['role' => 'viewer']);
+    $tenant->users()->attach($member, ['role_id' => roleId($tenant, 'member')]);
+    $assignedProject->users()->attach($member, ['role_id' => roleId($assignedProject, 'viewer')]);
 
     $this->actingAs($member)
         ->getJson('/api/tenants/'.$tenant->getKey().'/assets')
@@ -63,8 +63,8 @@ it('does not expand a project admin or engineer role to tenant-wide asset access
     $tenant = Tenant::factory()->create();
     $project = Project::factory()->for($tenant)->create();
     Asset::factory()->for($project)->create();
-    $tenant->users()->attach($member, ['role' => 'member']);
-    $project->users()->attach($member, ['role' => $role]);
+    $tenant->users()->attach($member, ['role_id' => roleId($tenant, 'member')]);
+    $project->users()->attach($member, ['role_id' => roleId($project, $role)]);
 
     $this->actingAs($member)
         ->getJson('/api/tenants/'.$tenant->getKey().'/assets')
@@ -82,14 +82,15 @@ it('rejects unauthenticated tenant-wide asset access', function (): void {
         ->assertUnauthorized();
 });
 
-it('allows platform admins tenant-wide asset reads while keeping the requested tenant scope', function (): void {
-    $platformAdmin = User::factory()->create(['system_role' => 'platform_admin']);
+it('allows tenant owners tenant-wide asset reads while keeping the requested tenant scope', function (): void {
+    $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
     $otherTenant = Tenant::factory()->create();
     $asset = Asset::factory()->for(Project::factory()->for($tenant))->create();
     Asset::factory()->for(Project::factory()->for($otherTenant))->create();
 
-    $this->actingAs($platformAdmin)
+    $this->actingAs($owner)
         ->getJson('/api/tenants/'.$tenant->getKey().'/assets')
         ->assertOk()
         ->assertJsonCount(1, 'data')
@@ -123,7 +124,7 @@ it('filters and paginates tenant assets without accepting a project from another
         'code' => 'pump-not-equipment',
         'asset_type' => AssetType::Factory->value,
     ]);
-    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
 
     $this->actingAs($owner)
         ->getJson('/api/tenants/'.$tenant->getKey().'/assets?search=Pump&asset_type=equipment&project_id='.$project->getKey().'&per_page=1')

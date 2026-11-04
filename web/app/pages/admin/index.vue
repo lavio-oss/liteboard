@@ -85,23 +85,15 @@ const assetCardDefinitions: Array<{
   }
 ]
 
-const { isPlatformAdmin, loadTenants, selectTenant, tenants, activeTenantId } = useTenantContext()
+const { loadTenants, selectTenant, tenants, activeTenantId } = useTenantContext()
 const { loadTenantHierarchy } = useAdmin()
 await loadTenants()
 
-const scopeTenantId = ref<string | null>(isPlatformAdmin.value ? null : activeTenantId.value)
+const scopeTenantId = ref<string | null>(activeTenantId.value)
 const tenantIds = computed(() => tenants.value.map(tenant => tenant.id))
-const tenantOptions = computed<Array<{ label: string, value: string | null }>>(() => [
-  ...(isPlatformAdmin.value ? [{ label: 'All tenants', value: null }] : []),
-  ...tenants.value.map(tenant => ({
-    label: `${tenant.name} (${tenant.code})`,
-    value: tenant.id
-  }))
-])
-
 const scopedTenants = computed(() => {
   if (scopeTenantId.value === null) {
-    return isPlatformAdmin.value ? tenants.value : []
+    return []
   }
 
   const tenant = tenants.value.find(item => item.id === scopeTenantId.value)
@@ -115,7 +107,7 @@ const scopedTenants = computed(() => {
 
 const scopeLabel = computed(() => {
   if (scopeTenantId.value === null) {
-    return isPlatformAdmin.value ? 'All tenants' : 'No tenant assigned'
+    return 'No tenant assigned'
   }
 
   const tenant = tenants.value.find(item => item.id === scopeTenantId.value)
@@ -152,9 +144,7 @@ const { data: overviewData, status, error } = await useAsyncData<HomeTenantOverv
 )
 
 watch(activeTenantId, (tenantId) => {
-  if (!isPlatformAdmin.value) {
-    scopeTenantId.value = tenantId
-  }
+  scopeTenantId.value = tenantId
 })
 
 watch(scopeTenantId, (tenantId) => {
@@ -240,16 +230,6 @@ const errorMessage = computed(() => {
       <UDashboardNavbar title="Home">
         <template #leading>
           <UDashboardSidebarCollapse />
-        </template>
-
-        <template #right>
-          <USelect
-            v-if="tenantOptions.length > 0"
-            v-model="scopeTenantId"
-            :items="tenantOptions"
-            class="min-w-48"
-            aria-label="Dashboard scope"
-          />
         </template>
       </UDashboardNavbar>
     </template>

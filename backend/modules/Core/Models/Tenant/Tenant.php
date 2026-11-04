@@ -12,7 +12,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Modules\Admin\Models\Project\Project;
-use Modules\Core\Enums\Tenant\TenantRole;
+use Modules\Core\Actions\Role\SeedTenantRolesAction;
+use Modules\Core\Enums\Role\DefaultRole;
+use Modules\Core\Models\Role\Role;
 use Modules\Core\Models\User\User;
 
 #[Fillable(['parent_id', 'name', 'code', 'status'])]
@@ -27,13 +29,20 @@ final class Tenant extends Model
         return TenantFactory::new();
     }
 
+    protected static function booted(): void
+    {
+        self::created(static function (Tenant $tenant): void {
+            app(SeedTenantRolesAction::class)->execute($tenant);
+        });
+    }
+
     /**
      * @return BelongsToMany<User, $this>
      */
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(User::class)
-            ->withPivot('role')
+            ->withPivot('role_id')
             ->withTimestamps();
     }
 
@@ -61,19 +70,22 @@ final class Tenant extends Model
         return $this->hasMany(Project::class);
     }
 
+    /** @return HasMany<Role, $this> */
+    public function roles(): HasMany
+    {
+        return $this->hasMany(Role::class);
+    }
+
+    public function defaultRole(DefaultRole $role): Role
+    {
+        return $this->roles()
+            ->where('scope', $role->scope()->value)
+            ->where('key', $role->key())
+            ->firstOrFail();
+    }
+
     public function hasMember(User $user): bool
     {
         return $this->users()->whereKey($user->getKey())->exists();
-    }
-
-    public function hasRole(User $user, TenantRole ...$roles): bool
-    {
-        return $this->users()
-            ->whereKey($user->getKey())
-            ->wherePivotIn('role', array_map(
-                static fn (TenantRole $role): string => $role->value,
-                $roles,
-            ))
-            ->exists();
     }
 }

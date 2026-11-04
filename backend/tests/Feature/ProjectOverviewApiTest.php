@@ -20,7 +20,7 @@ function overviewFixture(): array
 {
     $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
     $project = Project::factory()->for($tenant)->create();
 
     return [
@@ -49,8 +49,8 @@ function overviewOutcome(Device $device, string $status, CarbonImmutable $receiv
 function overviewMember(Tenant $tenant, Project $project, string $role): User
 {
     $member = User::factory()->create();
-    $tenant->users()->attach($member, ['role' => 'member']);
-    $project->users()->attach($member, ['role' => $role]);
+    $tenant->users()->attach($member, ['role_id' => roleId($tenant, 'member')]);
+    $project->users()->attach($member, ['role_id' => roleId($project, $role)]);
 
     return $member;
 }
@@ -155,7 +155,7 @@ it('hides the project from users of another tenant', function (): void {
 it('requires a member of the project', function (): void {
     ['tenant' => $tenant, 'base' => $base] = overviewFixture();
     $stranger = User::factory()->create();
-    $tenant->users()->attach($stranger, ['role' => 'member']);
+    $tenant->users()->attach($stranger, ['role_id' => roleId($tenant, 'member')]);
 
     $this->actingAs($stranger)->getJson($base)->assertForbidden();
 });

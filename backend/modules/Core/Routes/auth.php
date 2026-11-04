@@ -11,8 +11,6 @@ use Modules\Core\Actions\Auth\Http\RevokePersonalAccessTokenAction;
 use Modules\Core\Actions\Auth\Http\RotatePersonalAccessTokenAction;
 use Modules\Core\Actions\Auth\Http\UpdatePasswordAction;
 use Modules\Core\Actions\Auth\Http\UpdateProfileAction;
-use Modules\Core\Actions\Tenant\Http\CreateTenantAction;
-use Modules\Core\Actions\Tenant\Http\DeleteTenantAction;
 use Modules\Core\Actions\Tenant\Http\ListTenantsAction;
 use Modules\Core\Actions\Tenant\Http\ShowTenantAction;
 use Modules\Core\Actions\Tenant\Http\UpdateTenantAction;
@@ -45,20 +43,12 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/tenants', ListTenantsAction::class)
         ->middleware('abilities:control-plane:read');
 
-    Route::post('/tenants', CreateTenantAction::class)
-        ->middleware('abilities:control-plane:write');
-
     Route::get('/tenants/{tenant}', ShowTenantAction::class)
         ->whereUuid('tenant')
         ->scopeBindings()
         ->middleware(['abilities:control-plane:read', 'tenant.context']);
 
     Route::patch('/tenants/{tenant}', UpdateTenantAction::class)
-        ->whereUuid('tenant')
-        ->scopeBindings()
-        ->middleware(['abilities:control-plane:write', 'tenant.context']);
-
-    Route::delete('/tenants/{tenant}', DeleteTenantAction::class)
         ->whereUuid('tenant')
         ->scopeBindings()
         ->middleware(['abilities:control-plane:write', 'tenant.context']);

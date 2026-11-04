@@ -17,7 +17,7 @@ function alertRuleFixture(): array
 {
     $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
     $project = Project::factory()->for($tenant)->create();
     $profile = DeviceProfile::factory()->for($project)->create();
     $definition = DeviceProfileVersion::factory()->make()->definition;
@@ -48,8 +48,8 @@ function alertRuleDefinitionPayload(array $overrides = []): array
 function alertRuleProjectMember(Tenant $tenant, Project $project, string $role): User
 {
     $member = User::factory()->create();
-    $tenant->users()->attach($member, ['role' => 'member']);
-    $project->users()->attach($member, ['role' => $role]);
+    $tenant->users()->attach($member, ['role_id' => roleId($tenant, 'member')]);
+    $project->users()->attach($member, ['role_id' => roleId($project, $role)]);
 
     return $member;
 }
@@ -229,7 +229,7 @@ it('hides rules from other tenants and other projects', function (): void {
     $rule = AlertRule::factory()->forProfile($profile)->withRevision()->create();
     $outsider = alertRuleFixture();
     $otherProject = Project::factory()->for($tenant)->create();
-    $tenantOwner = $tenant->users()->wherePivot('role', 'owner')->firstOrFail();
+    $tenantOwner = $tenant->users()->wherePivot('role_id', roleId($tenant, 'owner'))->firstOrFail();
 
     $this->actingAs($outsider['owner'])
         ->getJson("/api/tenants/$tenant->id/projects/$project->id/alert-rules/{$rule->getKey()}")

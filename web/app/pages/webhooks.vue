@@ -15,7 +15,7 @@ const toast = useToast()
 const alerting = useAlerting()
 const {
   canAdminInSelectedProject,
-  canWriteInSelectedProject,
+  canViewWebhooksInSelectedProject,
   formProjectOptions,
   notifyError,
   projectSelectOptions,
@@ -28,13 +28,13 @@ const {
   sortableHeader
 } = await useAlertingProject()
 
-// Endpoints are only readable by project admins and engineers, so other roles never request them.
+// Endpoints need the webhook view permission, so other members never request them.
 const { data, status, error, refresh } = await useAsyncData(
   'liteboard-webhook-endpoints',
   async () => {
     const project = selectedProject.value
 
-    if (project === null || !canWriteInSelectedProject.value) {
+    if (project === null || !canViewWebhooksInSelectedProject.value) {
       return { endpoints: [] as WebhookEndpoint[] }
     }
 
@@ -349,10 +349,10 @@ const errorMessage = computed(() => {
         />
 
         <UAlert
-          v-else-if="projectsStatus !== 'pending' && !canWriteInSelectedProject"
+          v-else-if="projectsStatus !== 'pending' && !canViewWebhooksInSelectedProject"
           color="info"
           variant="subtle"
-          title="Webhooks are managed by project admins and engineers"
+          title="You cannot view webhooks in this project"
           description="Ask a project admin for access to configure where alerts are delivered."
         />
 

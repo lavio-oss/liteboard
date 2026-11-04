@@ -2,8 +2,6 @@
 
 namespace Modules\Core\Actions\Tenant\Http;
 
-use Illuminate\Support\Facades\Gate;
-use Modules\Core\Models\Tenant\Tenant;
 use Modules\Core\Models\User\User;
 use Modules\Core\Requests\Tenant\AuthenticatedRequest;
 use Modules\Core\Resources\Tenant\TenantResource;
@@ -20,12 +18,6 @@ final class ListTenantsAction
             abort(Response::HTTP_UNAUTHORIZED);
         }
 
-        Gate::authorize('viewAny', Tenant::class);
-
-        $tenants = $user->isPlatformAdmin()
-            ? Tenant::query()->orderBy('name')->get()
-            : $user->tenants()->orderBy('name')->get();
-
-        return $responder->resource(TenantResource::collection($tenants));
+        return $responder->resource(TenantResource::collection($user->tenants()->orderBy('name')->get()));
     }
 }

@@ -1,6 +1,10 @@
 <?php
 
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Modules\Admin\Models\Project\Project;
+use Modules\Core\Enums\Role\DefaultRole;
+use Modules\Core\Enums\Role\RoleScope;
+use Modules\Core\Models\Tenant\Tenant;
 use Tests\TestCase;
 
 /*
@@ -44,7 +48,12 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
+/** The id of a default role seeded into the tenant, picking tenant or project scope from the scope model. */
+function roleId(Tenant|Project $scope, string $key): string
 {
-    // ..
+    $tenant = $scope instanceof Tenant ? $scope : $scope->tenant()->firstOrFail();
+    $roleScope = $scope instanceof Tenant ? RoleScope::Tenant : RoleScope::Project;
+
+    return (string) $tenant->defaultRole(DefaultRole::fromScopeAndKey($roleScope, $key)
+        ?? throw new InvalidArgumentException("No default $roleScope->value role [$key]."))->getKey();
 }

@@ -3,23 +3,38 @@
 namespace Modules\Core\Providers;
 
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Modules\Core\Models\Auth\PersonalAccessToken;
+use Modules\Core\Models\Role\Role;
 use Modules\Core\Models\Tenant\Tenant;
+use Modules\Core\Policies\Role\RolePolicy;
 use Modules\Core\Policies\Tenant\TenantPolicy;
+use Modules\Core\Services\Role\PermissionResolver;
 
 final class CoreServiceProvider extends ServiceProvider
 {
+    public function register(): void
+    {
+        $this->app->scoped(PermissionResolver::class);
+    }
+
     public function boot(): void
     {
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
 
         Gate::policy(Tenant::class, TenantPolicy::class);
+        Gate::policy(Role::class, RolePolicy::class);
+
+        Event::listen(RequestHandled::class, static function (): void {
+            app(PermissionResolver::class)->flush();
+        });
 
         RateLimiter::for('login', static function (Request $request): Limit {
             $email = Str::lower($request->string('email')->value());

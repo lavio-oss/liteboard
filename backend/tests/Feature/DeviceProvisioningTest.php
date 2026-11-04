@@ -15,7 +15,7 @@ function createProvisioningProject(string $status = 'active', bool $createProfil
 {
     $user = User::factory()->create();
     $tenant = Tenant::factory()->create(['status' => $status]);
-    $tenant->users()->attach($user, ['role' => 'owner']);
+    $tenant->users()->attach($user, ['role_id' => roleId($tenant, 'owner')]);
     $project = Project::factory()->for($tenant)->create();
     $secret = Str::random(64);
     $profile = $createProfile ? $project->provisioningProfile()->create([
@@ -42,8 +42,8 @@ function bootstrapPayload(ProjectProvisioningProfile $profile, string $secret, s
 it('creates a project provisioning profile that shows its secret only once and enforces project permissions', function (): void {
     [$owner, $tenant, $project] = createProvisioningProject('active', false);
     $engineer = User::factory()->create();
-    $tenant->users()->attach($engineer, ['role' => 'member']);
-    $project->users()->attach($engineer, ['role' => 'engineer']);
+    $tenant->users()->attach($engineer, ['role_id' => roleId($tenant, 'member')]);
+    $project->users()->attach($engineer, ['role_id' => roleId($project, 'engineer')]);
 
     $created = $this->actingAs($engineer)
         ->postJson("/api/tenants/$tenant->id/projects/$project->id/provisioning-profile")
@@ -191,7 +191,7 @@ it('does not allow users from another tenant to manage a project provisioning pr
     [, $tenant, $project] = createProvisioningProject();
     $otherTenant = Tenant::factory()->create();
     $outsider = User::factory()->create();
-    $otherTenant->users()->attach($outsider, ['role' => 'owner']);
+    $otherTenant->users()->attach($outsider, ['role_id' => roleId($otherTenant, 'owner')]);
 
     $this->actingAs($outsider)
         ->postJson("/api/tenants/$tenant->id/projects/$project->id/provisioning-profile")

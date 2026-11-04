@@ -12,7 +12,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Modules\Admin\Enums\Project\ProjectRole;
 use Modules\Admin\Models\Alert\Alert;
 use Modules\Admin\Models\AlertRule\AlertRule;
 use Modules\Admin\Models\Asset\Asset;
@@ -96,28 +95,12 @@ final class Project extends Model
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(User::class)
-            ->withPivot('role')
+            ->withPivot('role_id')
             ->withTimestamps();
     }
 
     public function hasMember(User $user): bool
     {
-        return $user->isPlatformAdmin()
-            || $this->users()->whereKey($user->getKey())->exists();
-    }
-
-    public function hasRole(User $user, ProjectRole ...$roles): bool
-    {
-        if ($user->isPlatformAdmin()) {
-            return true;
-        }
-
-        return $this->users()
-            ->whereKey($user->getKey())
-            ->wherePivotIn('role', array_map(
-                static fn (ProjectRole $role): string => $role->value,
-                $roles,
-            ))
-            ->exists();
+        return $this->users()->whereKey($user->getKey())->exists();
     }
 }

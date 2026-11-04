@@ -12,16 +12,11 @@ definePageMeta({
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
 const toast = useToast()
-const { isPlatformAdmin, loadTenants, tenants } = useTenantContext()
+const { loadTenants, tenants } = useTenantContext()
 const { createAsset, deleteAsset, loadAssets, loadProjects, updateAsset } = useAdmin()
 await loadTenants()
 
 const tenantIds = computed(() => tenants.value.map(tenant => tenant.id))
-const manageableTenantIds = computed(() => new Set(
-  tenants.value
-    .filter(tenant => isPlatformAdmin.value || tenant.role === 'owner' || tenant.role === 'admin')
-    .map(tenant => tenant.id)
-))
 
 const { data: projectsData, status: projectsStatus, error: projectsError } = await useAsyncData(
   'liteboard-participating-projects',
@@ -51,26 +46,8 @@ const formProjectOptions = computed(() => selectedProject.value === null
   ? []
   : [{ label: selectedProject.value.name, value: selectedProject.value.id }])
 
-const canWriteInSelectedProject = computed(() => {
-  if (selectedProject.value === null) {
-    return false
-  }
-
-  return isPlatformAdmin.value
-    || manageableTenantIds.value.has(selectedProject.value.tenant_id)
-    || selectedProject.value.role === 'admin'
-    || selectedProject.value.role === 'engineer'
-})
-
-const canDeleteInSelectedProject = computed(() => {
-  if (selectedProject.value === null) {
-    return false
-  }
-
-  return isPlatformAdmin.value
-    || manageableTenantIds.value.has(selectedProject.value.tenant_id)
-    || selectedProject.value.role === 'admin'
-})
+const canWriteInSelectedProject = computed(() => selectedProject.value?.permissions.includes('asset.write') === true)
+const canDeleteInSelectedProject = computed(() => selectedProject.value?.permissions.includes('asset.delete') === true)
 
 const viewOpen = ref(false)
 const viewingAsset = ref<Asset | null>(null)

@@ -147,7 +147,7 @@ const deviceColumns = computed<TableColumn<Device>[]>(() => [
         @updated="emit('updated')"
       />
 
-      <UTable
+      <AppTable
         v-else
         :data="tab === 'approved' ? approved : waiting"
         :columns="deviceColumns"

@@ -19,15 +19,9 @@ final class UpdateTenantUserAction
         UpdateTenantUser $updateTenantUser,
         Responder $responder,
     ): Response {
-        /** @var array{name?: string, email?: string, password?: string|null} $attributes */
+        /** @var array{name?: string, email?: string, password?: string|null, role_id?: string} $attributes */
         $attributes = $request->validated();
-        $updatedUser = $updateTenantUser->execute($user, $attributes);
-        $updatedUser->load([
-            'tenants' => static function ($query) use ($tenant): void {
-                $query->whereKey($tenant->getKey());
-            },
-        ]);
 
-        return $responder->resource(TenantUserResource::make($updatedUser));
+        return $responder->resource(TenantUserResource::make($updateTenantUser->execute($tenant, $user, $attributes)));
     }
 }

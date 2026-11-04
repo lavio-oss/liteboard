@@ -15,7 +15,7 @@ function alertFixture(): array
 {
     $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
     $project = Project::factory()->for($tenant)->create();
     $rule = AlertRule::factory()->forProfile(DeviceProfile::factory()->for($project)->create())->withRevision()->create()->refresh();
     $device = Device::factory()->for($project)->create();
@@ -33,8 +33,8 @@ function alertFixture(): array
 function alertProjectMember(Tenant $tenant, Project $project, string $role): User
 {
     $member = User::factory()->create();
-    $tenant->users()->attach($member, ['role' => 'member']);
-    $project->users()->attach($member, ['role' => $role]);
+    $tenant->users()->attach($member, ['role_id' => roleId($tenant, 'member')]);
+    $project->users()->attach($member, ['role_id' => roleId($project, $role)]);
 
     return $member;
 }
@@ -112,14 +112,22 @@ it('refuses client attempts to clear through acknowledge', function (): void {
     expect($alert->refresh()->cleared_at)->toBeNull();
 });
 
-it('only lets viewers and operators read alerts', function (string $role): void {
+it('only lets viewers read alerts', function (): void {
     ['tenant' => $tenant, 'project' => $project, 'rule' => $rule, 'device' => $device, 'base' => $base] = alertFixture();
     $alert = Alert::factory()->forRuleAndDevice($rule, $device)->create();
-    $member = alertProjectMember($tenant, $project, $role);
+    $viewer = alertProjectMember($tenant, $project, 'viewer');
 
-    $this->actingAs($member)->getJson("$base/{$alert->getKey()}")->assertOk();
-    $this->actingAs($member)->postJson("$base/{$alert->getKey()}/acknowledge")->assertForbidden();
-})->with(['viewer', 'operator']);
+    $this->actingAs($viewer)->getJson("$base/{$alert->getKey()}")->assertOk();
+    $this->actingAs($viewer)->postJson("$base/{$alert->getKey()}/acknowledge")->assertForbidden();
+});
+
+it('lets project operators acknowledge alerts', function (): void {
+    ['tenant' => $tenant, 'project' => $project, 'rule' => $rule, 'device' => $device, 'base' => $base] = alertFixture();
+    $alert = Alert::factory()->forRuleAndDevice($rule, $device)->create();
+    $operator = alertProjectMember($tenant, $project, 'operator');
+
+    $this->actingAs($operator)->postJson("$base/{$alert->getKey()}/acknowledge")->assertOk();
+});
 
 it('lets project engineers acknowledge alerts', function (): void {
     ['tenant' => $tenant, 'project' => $project, 'rule' => $rule, 'device' => $device, 'base' => $base] = alertFixture();

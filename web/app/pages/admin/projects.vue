@@ -4,11 +4,6 @@ import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
 import { useTenantContext } from '~/composables/useTenantContext'
 import type { AdminTableRow, Project, ProjectFormInput } from '~/types/admin'
-import {
-  canDeleteProjectData,
-  canManageProjectMembers,
-  canWriteProjectData
-} from '~/utils/projectPermissions'
 
 definePageMeta({
   middleware: 'auth'
@@ -17,20 +12,19 @@ definePageMeta({
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
 const toast = useToast()
-const { isPlatformAdmin, loadTenants, tenants } = useTenantContext()
+const { loadTenants, tenants } = useTenantContext()
 const addRequested = useState('admin:add-requested', () => false)
 const { createProject, deleteProject, loadProjects, updateProject } = useAdmin()
 await loadTenants()
 const tenantIds = computed(() => tenants.value.map(tenant => tenant.id))
 const manageableTenants = computed(() => tenants.value.filter(
-  tenant => isPlatformAdmin.value || tenant.role === 'owner' || tenant.role === 'admin'
+  tenant => tenant.permissions.includes('project.create')
 ))
 const tenantOptions = computed(() => manageableTenants.value.map(tenant => ({
   label: tenant.name,
   value: tenant.id
 })))
-const manageableTenantIds = computed(() => new Set(manageableTenants.value.map(tenant => tenant.id)))
-const canCreate = computed(() => isPlatformAdmin.value || manageableTenantIds.value.size > 0)
+const canCreate = computed(() => manageableTenants.value.length > 0)
 const formOpen = ref(false)
 const formLoading = ref(false)
 const selectedTenantId = ref<string | null>(null)
@@ -40,8 +34,8 @@ const deleteLoading = ref(false)
 const deletingProject = ref<Project | null>(null)
 const managingProject = ref<Project | null>(null)
 const projectUsersOpen = ref(false)
-const canManageAccounts = computed(() => isPlatformAdmin.value || tenants.value.some(
-  tenant => tenant.id === managingProject.value?.tenant_id && (tenant.role === 'owner' || tenant.role === 'admin')
+const canManageAccounts = computed(() => tenants.value.some(
+  tenant => tenant.id === managingProject.value?.tenant_id && tenant.permissions.includes('user.manage')
 ))
 
 const { data: response, status, error, refresh } = await useAsyncData('admin-projects', () => {
@@ -262,10 +256,9 @@ const columns: TableColumn<AdminTableRow>[] = [
         throw new Error('The selected project is not available.')
       }
 
-      const canManageTenant = manageableTenantIds.value.has(project.tenant_id)
       const actions: ReturnType<typeof h>[] = []
 
-      if (canManageProjectMembers(project.role, canManageTenant)) {
+      if (project.permissions.includes('project.member.manage')) {
         actions.push(h(UButton, {
           'icon': 'i-lucide-users',
           'color': 'neutral',
@@ -275,7 +268,7 @@ const columns: TableColumn<AdminTableRow>[] = [
         }))
       }
 
-      if (canWriteProjectData(project.role, canManageTenant)) {
+      if (project.permissions.includes('project.update')) {
         actions.push(h(UButton, {
           'icon': 'i-lucide-pencil',
           'color': 'neutral',
@@ -285,7 +278,7 @@ const columns: TableColumn<AdminTableRow>[] = [
         }))
       }
 
-      if (canDeleteProjectData(project.role, canManageTenant)) {
+      if (project.permissions.includes('project.delete')) {
         actions.push(h(UButton, {
           'icon': 'i-lucide-trash-2',
           'color': 'error',
@@ -372,7 +365,7 @@ const errorMessage = computed(() => {
         :tenant-id="managingProject?.tenant_id ?? null"
         :project="managingProject"
         :can-manage-account="canManageAccounts"
-        :can-delete-account="isPlatformAdmin"
+        :can-delete-account="canManageAccounts"
       />
     </template>
   </UDashboardPanel>

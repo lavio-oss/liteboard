@@ -5,6 +5,9 @@ namespace Database\Factories;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Modules\Admin\Models\Project\Project;
+use Modules\Core\Enums\Role\DefaultRole;
+use Modules\Core\Models\Tenant\Tenant;
 use Modules\Core\Models\User\User;
 
 /**
@@ -43,5 +46,21 @@ class UserFactory extends Factory
         return $this->state(fn (array $attributes) => [
             'email_verified_at' => null,
         ]);
+    }
+
+    /**
+     * Makes the user a member holding the given default role; a project role also adds tenant membership as Member.
+     */
+    public function withRole(Tenant|Project $scope, DefaultRole $role): static
+    {
+        return $this->afterCreating(static function (User $user) use ($scope, $role): void {
+            $tenant = $scope instanceof Tenant ? $scope : $scope->tenant()->firstOrFail();
+
+            if ($scope instanceof Project && ! $tenant->hasMember($user)) {
+                $tenant->users()->attach($user, ['role_id' => $tenant->defaultRole(DefaultRole::TenantMember)->getKey()]);
+            }
+
+            $scope->users()->attach($user, ['role_id' => $tenant->defaultRole($role)->getKey()]);
+        });
     }
 }

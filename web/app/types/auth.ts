@@ -1,32 +1,45 @@
 import { z } from 'zod'
 
-export const tenantRoleSchema = z.enum(['owner', 'admin', 'member'])
-export const systemRoleSchema = z.literal('platform_admin').nullable()
+export const roleScopeSchema = z.enum(['tenant', 'project'])
 export const tenantStatusSchema = z.enum(['active', 'inactive'])
+
+export const roleSchema = z.object({
+  id: z.string().uuid(),
+  scope: roleScopeSchema,
+  key: z.string().nullable(),
+  name: z.string(),
+  is_system: z.boolean(),
+  is_owner: z.boolean(),
+  // null for the default roles the system seeds.
+  created_by: z.object({ id: z.string().uuid(), name: z.string() }).nullable(),
+  created_at: z.string(),
+  permissions: z.array(z.string()),
+  locked_permissions: z.array(z.string())
+})
+
+export const permissionDefinitionSchema = z.object({
+  key: z.string(),
+  scope: roleScopeSchema
+})
 
 export const tenantSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   code: z.string(),
   status: tenantStatusSchema,
-  role: tenantRoleSchema.nullable(),
-  created_at: z.string().nullable().optional(),
-  updated_at: z.string().nullable().optional()
+  // The requesting member's tenant role and their effective tenant permissions.
+  role: roleSchema,
+  permissions: z.array(z.string()),
+  created_at: z.string().nullable(),
+  updated_at: z.string().nullable()
 })
-
-export const tenantMembershipSchema = tenantSchema.pick({
-  id: true,
-  name: true,
-  code: true
-}).extend({ role: tenantRoleSchema })
 
 export const authUserSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   email: z.string().email(),
   email_verified_at: z.string().nullable(),
-  system_role: systemRoleSchema,
-  tenants: z.array(tenantMembershipSchema)
+  tenants: z.array(tenantSchema)
 })
 
 export const authUserResponseSchema = z.object({
@@ -45,8 +58,7 @@ export const tenantUserSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   email: z.string().email(),
-  role: tenantRoleSchema,
-  system_role: systemRoleSchema
+  role_id: z.string().uuid()
 })
 
 export const tenantUserResponseSchema = z.object({
@@ -57,11 +69,24 @@ export const tenantUsersResponseSchema = z.object({
   data: z.array(tenantUserSchema)
 }).passthrough()
 
+export const rolesResponseSchema = z.object({
+  data: z.array(roleSchema)
+})
+
+export const roleResponseSchema = z.object({
+  data: roleSchema
+})
+
+export const permissionDefinitionsResponseSchema = z.object({
+  data: z.array(permissionDefinitionSchema)
+})
+
 export type TenantUserCreateInput = {
   name: string
   email: string
   password: string
   password_confirmation: string
+  role_id: string
 }
 
 export type TenantUserUpdateInput = {
@@ -69,11 +94,18 @@ export type TenantUserUpdateInput = {
   email: string
   password?: string
   password_confirmation?: string
+  role_id?: string
 }
 
-export type TenantRole = z.infer<typeof tenantRoleSchema>
-export type SystemRole = z.infer<typeof systemRoleSchema>
+export type RoleInput = {
+  name: string
+  scope: RoleScope
+  permissions: string[]
+}
+
+export type RoleScope = z.infer<typeof roleScopeSchema>
+export type Role = z.infer<typeof roleSchema>
+export type PermissionDefinition = z.infer<typeof permissionDefinitionSchema>
 export type Tenant = z.infer<typeof tenantSchema>
-export type TenantMembership = z.infer<typeof tenantMembershipSchema>
 export type AuthUser = z.infer<typeof authUserSchema>
 export type TenantUser = z.infer<typeof tenantUserSchema>

@@ -19,7 +19,7 @@ const adminLinks = [{
   label: 'Masterdata',
   type: 'label' as const
 }, {
-  label: 'Tenants',
+  label: 'Organization',
   icon: 'i-lucide-building-2',
   to: '/admin/tenants'
 }, {
@@ -34,6 +34,10 @@ const adminLinks = [{
   label: 'Users',
   icon: 'i-lucide-users',
   to: '/admin/users'
+}, {
+  label: 'Roles',
+  icon: 'i-lucide-shield-check',
+  to: '/admin/roles'
 }] satisfies NavigationMenuItem[]
 
 const route = useRoute()

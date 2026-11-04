@@ -107,6 +107,10 @@ More specific instructions override broader instructions only when they conflict
 
 Multi-tenancy is a system-wide invariant, not only a database concern.
 
+The product runs exactly one tenant: there is no API to create or delete tenants, and the roles migration refuses a database with more than one. Keep `tenant_id`, the `tenants/{tenant}` routes and the tenant context anyway, so multi-tenancy can return without a schema change.
+
+Authorization is permission-based. Never check role names in code: ask `Modules\Core\Services\Role\PermissionResolver` for a `Modules\Core\Enums\Role\Permission` (backend), or read `tenant.permissions` / `project.permissions` from the API (frontend). Roles are tenant-owned rows (`roles`) that tenants edit; a tenant role's project-scoped permissions apply to every project of the tenant. The Owner role always holds every permission.
+
 Before implementing or modifying a feature, determine whether the relevant data is:
 
 * Central data — shared across tenants or responsible for coordinating tenants.

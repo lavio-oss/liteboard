@@ -2,66 +2,53 @@
 
 namespace Modules\Admin\Policies\Project;
 
-use Modules\Admin\Enums\Project\ProjectRole;
 use Modules\Admin\Models\Project\Project;
-use Modules\Core\Enums\Tenant\TenantRole;
+use Modules\Core\Enums\Role\Permission;
 use Modules\Core\Models\Tenant\Tenant;
 use Modules\Core\Models\User\User;
+use Modules\Core\Services\Role\PermissionResolver;
 
 final class ProjectPolicy
 {
+    public function __construct(private readonly PermissionResolver $permissions) {}
+
     public function viewAny(User $user, Tenant $tenant): bool
     {
-        return $user->isPlatformAdmin() || $tenant->hasMember($user);
+        return $tenant->hasMember($user);
     }
 
     public function view(User $user, Project $project): bool
     {
-        return $this->tenantAllows($user, $project) || $project->hasMember($user);
+        return $this->permissions->allows($user, Permission::ProjectView, $project);
     }
 
     public function create(User $user, Tenant $tenant): bool
     {
-        return $user->isPlatformAdmin()
-            || $tenant->hasRole($user, TenantRole::Owner, TenantRole::Admin);
+        return $this->permissions->allows($user, Permission::ProjectCreate, $tenant);
     }
 
     public function update(User $user, Project $project): bool
     {
-        return $this->tenantAllows($user, $project)
-            || $project->hasRole($user, ProjectRole::Admin, ProjectRole::Engineer);
+        return $this->permissions->allows($user, Permission::ProjectUpdate, $project);
     }
 
     public function delete(User $user, Project $project): bool
     {
-        return $this->tenantAllows($user, $project)
-            || $project->hasRole($user, ProjectRole::Admin);
+        return $this->permissions->allows($user, Permission::ProjectDelete, $project);
     }
 
     public function manageUsers(User $user, Project $project): bool
     {
-        return $this->tenantAllows($user, $project);
+        return $this->permissions->allows($user, Permission::ProjectMemberManage, $project);
     }
 
     public function manageProfile(User $user, Project $project): bool
     {
-        return $this->tenantAllows($user, $project)
-            || $project->hasRole($user, ProjectRole::Admin, ProjectRole::Engineer);
+        return $this->permissions->allows($user, Permission::ProjectProvisioningManage, $project);
     }
 
     public function manageQuota(User $user, Project $project): bool
     {
-        return $this->tenantAllows($user, $project);
-    }
-
-    private function tenantAllows(User $user, Project $project): bool
-    {
-        return $user->isPlatformAdmin()
-            || $this->tenantFor($project)->hasRole($user, TenantRole::Owner, TenantRole::Admin);
-    }
-
-    private function tenantFor(Project $project): Tenant
-    {
-        return $project->tenant()->firstOrFail();
+        return $this->permissions->allows($user, Permission::ProjectQuotaManage, $project);
     }
 }

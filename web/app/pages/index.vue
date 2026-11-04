@@ -27,7 +27,7 @@ const toast = useToast()
 const alerting = useAlerting()
 const { loadProjectOverview } = useOverview()
 const {
-  canWriteInSelectedProject,
+  canAcknowledgeInSelectedProject,
   notifyError,
   projectSelectOptions,
   projects,
@@ -250,7 +250,7 @@ const errorMessage = computed(() => {
                     </p>
                   </div>
                   <UButton
-                    v-if="canWriteInSelectedProject"
+                    v-if="canAcknowledgeInSelectedProject"
                     label="Ack"
                     color="neutral"
                     variant="outline"

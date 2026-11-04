@@ -164,7 +164,6 @@ const filterQuery = ref('')
 const selectedFilterKeys = ref<string[]>([])
 const expandedFilterKeys = ref<string[]>([])
 const toast = useToast()
-const { user } = useAuth()
 const { createAsset, loadTenantHierarchy } = useAdmin()
 
 const displayTenants = computed(() => props.initialTenantId === null
@@ -486,9 +485,7 @@ function tenantForNode(node: FlowNodeData): Tenant {
 function canManageNode(node: FlowNodeData): boolean {
   const tenant = tenantForNode(node)
 
-  return user.value?.system_role === 'platform_admin'
-    || tenant.role === 'owner'
-    || tenant.role === 'admin'
+  return tenant.permissions.includes('asset.write')
 }
 
 function openAddAsset(node: FlowNodeData): void {
@@ -569,14 +566,12 @@ const detailFields = computed<DetailField[]>(() => {
   if (isTenantItem(node.rawItem)) {
     fields.push({ label: 'Code', value: node.rawItem.code })
 
-    if (node.rawItem.role !== null) {
-      fields.push({
-        label: 'Your role',
-        value: node.rawItem.role,
-        isBadge: true,
-        badgeColor: node.rawItem.role === 'owner' ? 'primary' : 'neutral'
-      })
-    }
+    fields.push({
+      label: 'Your role',
+      value: node.rawItem.role.name,
+      isBadge: true,
+      badgeColor: node.rawItem.role.is_owner ? 'primary' : 'neutral'
+    })
   }
 
   if (isProjectItem(node.rawItem)) {

@@ -2,6 +2,7 @@
 
 namespace Modules\Core\Actions\Tenant\Http;
 
+use Modules\Core\Actions\Tenant\RemoveTenantUserAction;
 use Modules\Core\Models\Tenant\Tenant;
 use Modules\Core\Models\User\User;
 use Modules\Core\Requests\Tenant\DeleteTenantUserRequest;
@@ -14,9 +15,10 @@ final class DeleteTenantUserAction
         DeleteTenantUserRequest $request,
         Tenant $tenant,
         User $user,
+        RemoveTenantUserAction $removeTenantUser,
         Responder $responder,
     ): Response {
-        $user->delete();
+        $removeTenantUser->execute($tenant, $user);
 
         return $responder->noContent();
     }

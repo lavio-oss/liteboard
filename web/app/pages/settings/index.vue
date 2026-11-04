@@ -163,7 +163,7 @@ async function onSubmit(event: FormSubmitEvent<ProfileSchema>): Promise<void> {
               color="neutral"
               variant="subtle"
             >
-              {{ tenant.role }}
+              {{ tenant.role.name }}
             </UBadge>
           </div>
         </div>

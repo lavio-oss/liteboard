@@ -4,7 +4,6 @@ import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
 import { useTenantContext } from '~/composables/useTenantContext'
 import type { AdminTableRow, Asset, AssetInput, AssetType } from '~/types/admin'
-import { canDeleteProjectData, canWriteProjectData } from '~/utils/projectPermissions'
 
 definePageMeta({
   middleware: 'auth'
@@ -13,17 +12,12 @@ definePageMeta({
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
 const toast = useToast()
-const { isPlatformAdmin, loadTenants, tenants } = useTenantContext()
+const { loadTenants, tenants } = useTenantContext()
 const addRequested = useState('admin:add-requested', () => false)
 const { createAsset, deleteAsset, loadTenantHierarchy, updateAsset } = useAdmin()
 await loadTenants()
 
 const tenantIds = computed(() => tenants.value.map(tenant => tenant.id))
-const manageableTenantIds = computed(() => new Set(
-  tenants.value
-    .filter(tenant => isPlatformAdmin.value || tenant.role === 'owner' || tenant.role === 'admin')
-    .map(tenant => tenant.id)
-))
 const formOpen = ref(false)
 const formLoading = ref(false)
 const viewOpen = ref(false)
@@ -110,7 +104,7 @@ function canWriteProject(projectId: string): boolean {
     throw new Error('The asset project is not available.')
   }
 
-  return canWriteProjectData(project.role, manageableTenantIds.value.has(project.tenant_id))
+  return project.permissions.includes('asset.write')
 }
 
 function canDeleteProject(projectId: string): boolean {
@@ -120,7 +114,7 @@ function canDeleteProject(projectId: string): boolean {
     throw new Error('The asset project is not available.')
   }
 
-  return canDeleteProjectData(project.role, manageableTenantIds.value.has(project.tenant_id))
+  return project.permissions.includes('asset.delete')
 }
 
 const writableProjects = computed(() => projects.value.filter(project => canWriteProject(project.id)))

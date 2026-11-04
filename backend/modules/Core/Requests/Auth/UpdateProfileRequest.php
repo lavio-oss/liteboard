@@ -34,6 +34,7 @@ final class UpdateProfileRequest extends FormRequest
                 Rule::unique('users', 'email')->ignore($user->getKey()),
             ],
             'role' => ['prohibited'],
+            'role_id' => ['prohibited'],
             'user_id' => ['prohibited'],
             'tenant_id' => ['prohibited'],
         ];

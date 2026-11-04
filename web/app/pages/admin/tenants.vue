@@ -1,128 +1,56 @@
 <script setup lang="ts">
-import { z } from 'zod'
-import type { TableColumn } from '@nuxt/ui'
-import { upperFirst } from 'scule'
-import { getPaginationRowModel } from '@tanstack/table-core'
+import * as z from 'zod'
+import type { FormError, FormSubmitEvent } from '@nuxt/ui'
 import { ApiError, useApi } from '~/composables/useApi'
-import {
-  tenantCollectionResponseSchema,
-  tenantResponseSchema
-} from '~/types/auth'
-import type { Tenant } from '~/types/auth'
+import { useTenantContext } from '~/composables/useTenantContext'
+import { tenantResponseSchema } from '~/types/auth'
 
 definePageMeta({
   middleware: 'auth'
 })
 
-type TenantPayload = {
-  name: string
-  code: string
-  status: 'active' | 'inactive'
-}
-
-const UBadge = resolveComponent('UBadge')
-const UButton = resolveComponent('UButton')
 const api = useApi()
 const toast = useToast()
-const table = useTemplateRef('table')
-const { user, load } = useAuth()
-const search = ref('')
-const statusFilter = ref<'all' | Tenant['status']>('all')
-const columnVisibility = ref()
-const columnPinning = ref({ right: ['actions'] })
-const pagination = ref({
-  pageIndex: 0,
-  pageSize: 10
-})
-const formOpen = ref(false)
-const formLoading = ref(false)
-const formErrors = ref<Record<string, string[]>>({})
-const editingTenant = ref<Tenant | null>(null)
-const deleteOpen = ref(false)
-const deleteLoading = ref(false)
-const deletingTenant = ref<Tenant | null>(null)
-const { data: response, status, error, refresh } = await useAsyncData('tenants', () =>
-  api.request('/api/tenants', tenantCollectionResponseSchema)
-)
+const { activeTenant, loadTenants } = useTenantContext()
+await loadTenants()
 
-const { withScreenLoading } = useScreenLoading()
+const organizationForm = ref<{ setErrors: (errors: FormError[]) => void }>()
+const isSubmitting = ref(false)
+const canUpdate = computed(() => activeTenant.value?.permissions.includes('tenant.update') === true)
 
-async function resetFilters(): Promise<void> {
-  search.value = ''
-  statusFilter.value = 'all'
-  await withScreenLoading(async () => {
-    await refresh()
-  }, 400)
-}
-
-const tenants = computed(() => response.value?.data ?? [])
-const filteredTenants = computed(() => {
-  const query = search.value.toLowerCase()
-
-  return tenants.value.filter((tenant) => {
-    const matchesSearch = query === ''
-      || tenant.name.toLowerCase().includes(query)
-      || tenant.code.toLowerCase().includes(query)
-    const matchesStatus = statusFilter.value === 'all' || tenant.status === statusFilter.value
-
-    return matchesSearch && matchesStatus
-  })
+const organizationSchema = z.object({
+  name: z.string().min(2, 'Name must be at least 2 characters').max(255, 'Name is too long'),
+  code: z.string().min(1, 'Code is required').max(64, 'Code is too long'),
+  active: z.boolean()
 })
 
-const canCreate = computed(() => user.value !== null && (
-  user.value.system_role === 'platform_admin'
-  || user.value.tenants.some(tenant => tenant.role === 'owner' || tenant.role === 'admin')
-))
+type OrganizationSchema = z.output<typeof organizationSchema>
 
-function canUpdate(tenant: Tenant): boolean {
-  return user.value?.system_role === 'platform_admin'
-    || tenant.role === 'owner'
-    || tenant.role === 'admin'
-}
+const organization = reactive<OrganizationSchema>({ name: '', code: '', active: true })
 
-function canDelete(tenant: Tenant): boolean {
-  return user.value?.system_role === 'platform_admin' || tenant.role === 'owner'
-}
+watch(activeTenant, (tenant) => {
+  organization.name = tenant?.name ?? ''
+  organization.code = tenant?.code ?? ''
+  organization.active = tenant?.status !== 'inactive'
+}, { immediate: true })
 
-function openCreate(): void {
-  editingTenant.value = null
-  formErrors.value = {}
-  formOpen.value = true
-}
+async function onSubmit(event: FormSubmitEvent<OrganizationSchema>): Promise<void> {
+  if (activeTenant.value === null) {
+    throw new Error('A tenant is required before saving.')
+  }
 
-function openEdit(tenant: Tenant): void {
-  editingTenant.value = tenant
-  formErrors.value = {}
-  formOpen.value = true
-}
-
-function openDelete(tenant: Tenant): void {
-  deletingTenant.value = tenant
-  deleteOpen.value = true
-}
-
-async function saveTenant(payload: TenantPayload): Promise<void> {
-  formLoading.value = true
+  isSubmitting.value = true
 
   try {
-    if (editingTenant.value === null) {
-      await api.request('/api/tenants', tenantResponseSchema, {
-        body: payload,
-        method: 'POST'
-      })
-    } else {
-      await api.request(`/api/tenants/${editingTenant.value.id}`, tenantResponseSchema, {
-        body: payload,
-        method: 'PATCH'
-      })
-    }
-
-    await Promise.all([refresh(), load(true)])
-    formOpen.value = false
-    formErrors.value = {}
+    await api.request(`/api/tenants/${activeTenant.value.id}`, tenantResponseSchema, {
+      body: { name: event.data.name, code: event.data.code, status: event.data.active ? 'active' : 'inactive' },
+      method: 'PATCH'
+    })
+    await loadTenants(true)
     toast.add({
-      title: editingTenant.value === null ? 'Tenant created' : 'Tenant updated',
-      description: 'The tenant has been saved.',
+      title: 'Success',
+      description: 'The organization has been updated.',
+      icon: 'i-lucide-check',
       color: 'success'
     })
   } catch (error: unknown) {
@@ -130,340 +58,77 @@ async function saveTenant(payload: TenantPayload): Promise<void> {
       throw error
     }
 
-    formErrors.value = error.errors
+    const errors = Object.entries(error.errors).flatMap(([name, messages]) => messages.map(message => ({ name, message })))
+    organizationForm.value?.setErrors(errors)
     toast.add({
-      title: 'Unable to save tenant',
+      title: 'Unable to update the organization',
       description: error.message,
       color: 'error'
     })
   } finally {
-    formLoading.value = false
+    isSubmitting.value = false
   }
 }
-
-async function deleteTenant(): Promise<void> {
-  if (deletingTenant.value === null) {
-    throw new Error('A tenant is required before deletion.')
-  }
-
-  deleteLoading.value = true
-
-  try {
-    await api.request(`/api/tenants/${deletingTenant.value.id}`, z.unknown(), { method: 'DELETE' })
-    await Promise.all([refresh(), load(true)])
-    deleteOpen.value = false
-    toast.add({
-      title: 'Tenant deleted',
-      description: 'The tenant and its projects and assets have been deleted.',
-      color: 'success'
-    })
-  } catch (error: unknown) {
-    if (!(error instanceof ApiError)) {
-      throw error
-    }
-
-    toast.add({
-      title: 'Unable to delete tenant',
-      description: error.message,
-      color: 'error'
-    })
-  } finally {
-    deleteLoading.value = false
-  }
-}
-
-watch(filteredTenants, () => {
-  pagination.value.pageIndex = 0
-})
-
-function getColumnKey(column: TableColumn<Tenant>): string {
-  return column.id ?? 'column'
-}
-
-const columns: TableColumn<Tenant>[] = [
-  {
-    id: 'sequence',
-    header: 'No.',
-    cell: ({ row }) => row.index + 1
-  },
-  {
-    id: 'name',
-    accessorKey: 'name',
-    header: 'Name',
-    cell: ({ row }) => h('span', { class: 'font-medium text-highlighted' }, row.original.name)
-  },
-  {
-    id: 'code',
-    accessorKey: 'code',
-    header: 'Code'
-  },
-  {
-    id: 'status',
-    accessorKey: 'status',
-    header: ({ column }) => {
-      const isSorted = column.getIsSorted()
-
-      return h(UButton, {
-        color: 'neutral',
-        variant: 'ghost',
-        label: 'Status',
-        icon: isSorted
-          ? isSorted === 'asc'
-            ? 'i-lucide-arrow-up-narrow-wide'
-            : 'i-lucide-arrow-down-wide-narrow'
-          : 'i-lucide-arrow-up-down',
-        class: '-mx-2.5',
-        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc')
-      })
-    },
-    cell: ({ row }) => h(
-      UBadge,
-      {
-        class: 'capitalize',
-        color: row.original.status === 'active' ? 'success' : 'neutral',
-        variant: 'subtle'
-      },
-      () => row.original.status
-    )
-  },
-  {
-    id: 'role',
-    accessorKey: 'role',
-    header: ({ column }) => {
-      const isSorted = column.getIsSorted()
-
-      return h(UButton, {
-        color: 'neutral',
-        variant: 'ghost',
-        label: 'Your role',
-        icon: isSorted
-          ? isSorted === 'asc'
-            ? 'i-lucide-arrow-up-narrow-wide'
-            : 'i-lucide-arrow-down-wide-narrow'
-          : 'i-lucide-arrow-up-down',
-        class: '-mx-2.5',
-        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc')
-      })
-    },
-    cell: ({ row }) => {
-      const role = row.original.role
-
-      if (role === null) {
-        return user.value?.system_role === 'platform_admin'
-          ? h(UBadge, { color: 'warning', variant: 'subtle' }, () => 'Platform admin')
-          : h('span', { class: 'text-muted' }, '—')
-      }
-
-      return h(
-        UBadge,
-        {
-          class: 'capitalize',
-          color: role === 'owner' ? 'primary' : 'neutral',
-          variant: 'subtle'
-        },
-        () => role
-      )
-    }
-  },
-  {
-    id: 'created_at',
-    accessorKey: 'created_at',
-    header: ({ column }) => {
-      const isSorted = column.getIsSorted()
-
-      return h(UButton, {
-        color: 'neutral',
-        variant: 'ghost',
-        label: 'Created at',
-        icon: isSorted
-          ? isSorted === 'asc'
-            ? 'i-lucide-arrow-up-narrow-wide'
-            : 'i-lucide-arrow-down-wide-narrow'
-          : 'i-lucide-arrow-up-down',
-        class: '-mx-2.5',
-        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc')
-      })
-    },
-    cell: ({ row }) => row.original.created_at
-      ? formatDateTime(row.original.created_at)
-      : '—'
-  },
-  {
-    id: 'actions',
-    header: 'Actions',
-    meta: { class: { th: 'w-px', td: 'w-px' } },
-    cell: ({ row }) => h('div', { class: 'flex justify-end gap-1' }, [
-      canUpdate(row.original)
-        ? h(UButton, {
-            'icon': 'i-lucide-pencil',
-            'color': 'neutral',
-            'variant': 'ghost',
-            'aria-label': `Edit ${row.original.name}`,
-            'onClick': () => openEdit(row.original)
-          })
-        : null,
-      canDelete(row.original)
-        ? h(UButton, {
-            'icon': 'i-lucide-trash-2',
-            'color': 'error',
-            'variant': 'ghost',
-            'aria-label': `Delete ${row.original.name}`,
-            'onClick': () => openDelete(row.original)
-          })
-        : null
-    ])
-  }
-]
-
-const columnLabels: Record<string, string> = {
-  sequence: 'No.',
-  name: 'Name',
-  code: 'Code',
-  status: 'Status',
-  role: 'Your role',
-  created_at: 'Created at'
-}
-
-const displayColumns = computed(() => columns
-  .filter(column => getColumnKey(column) !== 'actions')
-  .map(column => ({
-    label: columnLabels[getColumnKey(column)] ?? (typeof column.header === 'string' ? column.header : upperFirst(getColumnKey(column))),
-    type: 'checkbox' as const,
-    checked: columnVisibility.value?.[getColumnKey(column)] !== false,
-    onUpdateChecked(checked: boolean) {
-      table.value?.tableApi?.getColumn(getColumnKey(column))?.toggleVisibility(checked)
-    },
-    onSelect(event?: Event) {
-      event?.preventDefault()
-    }
-  })))
-
-const errorMessage = computed(() => {
-  if (!(error.value instanceof ApiError)) {
-    return 'The tenants could not be loaded.'
-  }
-
-  return error.value.message
-})
 </script>
 
 <template>
-  <UDashboardPanel id="tenants" :ui="{ body: 'lg:pt-4 lg:pb-12' }">
+  <UDashboardPanel id="tenants" :ui="{ body: 'lg:py-12' }">
     <template #header>
-      <UDashboardNavbar title="Tenants">
+      <UDashboardNavbar title="Organization">
         <template #leading>
           <UDashboardSidebarCollapse />
-        </template>
-
-        <template #right>
-          <UButton
-            v-if="canCreate"
-            label="Add tenant"
-            icon="i-lucide-plus"
-            @click="openCreate"
-          />
         </template>
       </UDashboardNavbar>
     </template>
 
     <template #body>
-      <div class="flex flex-col gap-4 sm:gap-6 lg:gap-8">
-        <UAlert
-          v-if="status === 'error'"
-          color="error"
+      <div class="flex flex-col gap-4 sm:gap-6 lg:gap-12 w-full lg:max-w-2xl mx-auto">
+        <UPageCard
+          title="Organization"
+          description="The name and code identify your organization across the platform."
           variant="subtle"
-          title="Unable to load tenants"
-          :description="errorMessage"
-        />
-
-        <div class="flex flex-wrap items-center justify-between gap-1.5">
-          <UInput
-            v-model="search"
-            class="w-64"
-            icon="i-lucide-search"
-            placeholder="Search tenants..."
-          />
-
-          <div class="flex flex-wrap items-center gap-1.5">
-            <USelect
-              v-model="statusFilter"
-              :items="[
-                { label: 'All', value: 'all' },
-                { label: 'Active', value: 'active' },
-                { label: 'Inactive', value: 'inactive' }
-              ]"
-              :ui="{ trailingIcon: 'group-data-[state=open]:rotate-180 transition-transform duration-200' }"
-              placeholder="Filter status"
-              class="min-w-28"
-            />
-
-            <UDropdownMenu
-              :items="[displayColumns]"
-              :content="{ align: 'end' }"
-            >
-              <UButton
-                label="Display"
-                color="neutral"
-                variant="outline"
-                trailing-icon="i-lucide-settings-2"
+        >
+          <UForm
+            ref="organizationForm"
+            :schema="organizationSchema"
+            :state="organization"
+            :disabled="isSubmitting || !canUpdate"
+            class="flex flex-col gap-4 max-w-xs"
+            @submit="onSubmit"
+          >
+            <UFormField name="name" label="Name">
+              <UInput
+                v-model="organization.name"
+                placeholder="Name"
+                class="w-full"
               />
-            </UDropdownMenu>
+            </UFormField>
 
-            <ResetFiltersButton :loading="status === 'pending'" @click="resetFilters" />
-          </div>
-        </div>
+            <UFormField name="code" label="Code">
+              <UInput
+                v-model="organization.code"
+                placeholder="Code"
+                class="w-full"
+              />
+            </UFormField>
 
-        <UTable
-          ref="table"
-          v-model:column-visibility="columnVisibility"
-          v-model:column-pinning="columnPinning"
-          v-model:pagination="pagination"
-          :pagination-options="{
-            getPaginationRowModel: getPaginationRowModel()
-          }"
-          class="shrink-0"
-          :data="filteredTenants"
-          :columns="columns"
-          :loading="status === 'pending'"
-          :ui="{
-            base: 'border-separate border-spacing-0',
-            thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
-            tbody: '[&>tr]:last:[&>td]:border-b-0',
-            th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r data-[pinned=right]:min-w-max data-[pinned=right]:whitespace-nowrap data-[pinned=right]:border-l data-[pinned=right]:bg-elevated data-[pinned=right]:z-20',
-            td: 'border-b border-default data-[pinned=right]:min-w-max data-[pinned=right]:whitespace-nowrap data-[pinned=right]:border-l data-[pinned=right]:bg-default data-[pinned=right]:z-10',
-            separator: 'h-0'
-          }"
-        />
+            <UFormField name="active" label="Status">
+              <USwitch
+                v-model="organization.active"
+                label="Active"
+              />
+            </UFormField>
 
-        <div class="flex items-center justify-between gap-3 border-t border-default pt-4 mt-auto">
-          <div class="text-sm text-muted">
-            {{ filteredTenants.length }} row(s).
-          </div>
-
-          <UPagination
-            :default-page="pagination.pageIndex + 1"
-            :items-per-page="pagination.pageSize"
-            :total="filteredTenants.length"
-            @update:page="(page: number) => table?.tableApi?.setPageIndex(page - 1)"
-          />
-        </div>
+            <UButton
+              v-if="canUpdate"
+              label="Update"
+              class="w-fit"
+              type="submit"
+              :loading="isSubmitting"
+            />
+          </UForm>
+        </UPageCard>
       </div>
     </template>
   </UDashboardPanel>
-
-  <TenantFormModal
-    v-model:open="formOpen"
-    :tenant="editingTenant"
-    :loading="formLoading"
-    :errors="formErrors"
-    @submit="saveTenant"
-  />
-
-  <ConfirmDeleteModal
-    v-model:open="deleteOpen"
-    :title="`Delete ${deletingTenant?.name ?? 'tenant'}`"
-    description="This action cannot be undone and will delete its projects and assets."
-    :loading="deleteLoading"
-    @confirm="deleteTenant"
-  />
 </template>

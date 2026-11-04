@@ -18,15 +18,15 @@ final class AvailableProjectUserResource extends JsonResource
         $user = $this->resource;
         $pivot = $user->getRelationValue('pivot');
 
-        if (! $pivot instanceof Pivot || ! is_string($pivot->getAttribute('role'))) {
-            throw new LogicException('The available project user pivot must include a string tenant role.');
+        if (! $pivot instanceof Pivot || ! is_string($pivot->getAttribute('role_id'))) {
+            throw new LogicException('The available project user pivot must include a tenant role id.');
         }
 
         return [
             'id' => (string) $user->getKey(),
             'name' => (string) $user->name,
             'email' => (string) $user->email,
-            'tenant_role' => $pivot->getAttribute('role'),
+            'tenant_role_id' => $pivot->getAttribute('role_id'),
         ];
     }
 }

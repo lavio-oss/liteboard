@@ -2,31 +2,31 @@
 
 use Modules\Admin\Enums\Asset\AssetType;
 use Modules\Admin\Models\Project\Project;
+use Modules\Core\Enums\Role\Permission;
 use Modules\Core\Models\Tenant\Tenant;
 use Modules\Core\Models\User\User;
 
-it('lets a platform admin manage tenants without a tenant membership', function (): void {
-    $platformAdmin = User::factory()->create(['system_role' => 'platform_admin']);
+it('lets a tenant owner see every project without a project membership', function (): void {
+    $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
     $project = Project::factory()->for($tenant)->create();
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
 
-    $this->actingAs($platformAdmin)
-        ->getJson('/api/tenants')
-        ->assertOk()
-        ->assertJsonPath('data.0.id', $tenant->id)
-        ->assertJsonPath('data.0.role', null);
-
-    $this->actingAs($platformAdmin)
+    $this->actingAs($owner)
         ->getJson('/api/tenants/'.$tenant->id.'/projects')
         ->assertOk()
-        ->assertJsonPath('data.0.id', $project->id);
+        ->assertJsonPath('data.0.id', $project->id)
+        ->assertJsonFragment(['permissions' => array_map(
+            static fn ($permission) => $permission->value,
+            Permission::cases(),
+        )]);
 });
 
 it('creates and assigns a new account to a project atomically', function (): void {
     $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
     $project = Project::factory()->for($tenant)->create();
-    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
 
     $response = $this->actingAs($owner)->postJson(
         '/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/user-accounts',
@@ -35,26 +35,26 @@ it('creates and assigns a new account to a project atomically', function (): voi
             'email' => 'engineer@example.com',
             'password' => 'password123',
             'password_confirmation' => 'password123',
-            'role' => 'engineer',
+            'role_id' => roleId($project, 'engineer'),
         ],
     );
 
     $response
         ->assertCreated()
         ->assertJsonPath('data.name', 'Project Engineer')
-        ->assertJsonPath('data.role', 'engineer');
+        ->assertJsonPath('data.role_id', roleId($project, 'engineer'));
 
     $createdUser = User::query()->where('email', 'engineer@example.com')->firstOrFail();
 
     $this->assertDatabaseHas('tenant_user', [
         'tenant_id' => $tenant->id,
         'user_id' => $createdUser->id,
-        'role' => 'member',
+        'role_id' => roleId($tenant, 'member'),
     ]);
     $this->assertDatabaseHas('project_user', [
         'project_id' => $project->id,
         'user_id' => $createdUser->id,
-        'role' => 'engineer',
+        'role_id' => roleId($project, 'engineer'),
     ]);
 });
 
@@ -63,13 +63,13 @@ it('assigns existing tenant users and removes only project membership', function
     $member = User::factory()->create();
     $tenant = Tenant::factory()->create();
     $project = Project::factory()->for($tenant)->create();
-    $tenant->users()->attach($owner, ['role' => 'owner']);
-    $tenant->users()->attach($member, ['role' => 'member']);
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
+    $tenant->users()->attach($member, ['role_id' => roleId($tenant, 'member')]);
 
     $this->actingAs($owner)
         ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/users', [
             'user_id' => 'not-a-uuid',
-            'role' => 'viewer',
+            'role_id' => roleId($project, 'viewer'),
         ])
         ->assertUnprocessable()
         ->assertJsonValidationErrors(['user_id']);
@@ -77,17 +77,25 @@ it('assigns existing tenant users and removes only project membership', function
     $this->actingAs($owner)
         ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/users', [
             'user_id' => $member->id,
-            'role' => 'viewer',
+            'role_id' => roleId($tenant, 'admin'),
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['role_id']);
+
+    $this->actingAs($owner)
+        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/users', [
+            'user_id' => $member->id,
+            'role_id' => roleId($project, 'viewer'),
         ])
         ->assertCreated()
-        ->assertJsonPath('data.role', 'viewer');
+        ->assertJsonPath('data.role_id', roleId($project, 'viewer'));
 
     $this->actingAs($owner)
         ->patchJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/users/'.$member->id, [
-            'role' => 'admin',
+            'role_id' => roleId($project, 'admin'),
         ])
         ->assertOk()
-        ->assertJsonPath('data.role', 'admin');
+        ->assertJsonPath('data.role_id', roleId($project, 'admin'));
 
     $this->actingAs($owner)
         ->deleteJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/users/'.$member->id)
@@ -104,12 +112,54 @@ it('assigns existing tenant users and removes only project membership', function
     ]);
 });
 
+it('lets a project admin manage project members but not create tenant accounts', function (): void {
+    $projectAdmin = User::factory()->create();
+    $member = User::factory()->create();
+    $tenant = Tenant::factory()->create();
+    $project = Project::factory()->for($tenant)->create();
+    $tenant->users()->attach($projectAdmin, ['role_id' => roleId($tenant, 'member')]);
+    $tenant->users()->attach($member, ['role_id' => roleId($tenant, 'member')]);
+    $project->users()->attach($projectAdmin, ['role_id' => roleId($project, 'admin')]);
+
+    $this->actingAs($projectAdmin)
+        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/users', [
+            'user_id' => $member->id,
+            'role_id' => roleId($project, 'operator'),
+        ])
+        ->assertCreated();
+
+    $this->actingAs($projectAdmin)
+        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/user-accounts', [
+            'name' => 'New Person',
+            'email' => 'new-person@example.com',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+            'role_id' => roleId($project, 'viewer'),
+        ])
+        ->assertForbidden();
+});
+
+it('lists tenant users not yet on the project with their tenant role', function (): void {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $tenant = Tenant::factory()->create();
+    $project = Project::factory()->for($tenant)->create();
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
+    $tenant->users()->attach($member, ['role_id' => roleId($tenant, 'member')]);
+
+    $this->actingAs($owner)
+        ->getJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/available-users?search='.$member->email)
+        ->assertOk()
+        ->assertJsonPath('data.0.id', $member->id)
+        ->assertJsonPath('data.0.tenant_role_id', roleId($tenant, 'member'));
+});
+
 it('rejects hierarchy mutations for a viewer project member', function (): void {
     $viewer = User::factory()->create();
     $tenant = Tenant::factory()->create();
     $project = Project::factory()->for($tenant)->create();
-    $tenant->users()->attach($viewer, ['role' => 'member']);
-    $project->users()->attach($viewer, ['role' => 'viewer']);
+    $tenant->users()->attach($viewer, ['role_id' => roleId($tenant, 'member')]);
+    $project->users()->attach($viewer, ['role_id' => roleId($project, 'viewer')]);
 
     $this->actingAs($viewer)
         ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets', [
@@ -124,8 +174,8 @@ it('allows an engineer project member to create hierarchy resources', function (
     $engineer = User::factory()->create();
     $tenant = Tenant::factory()->create();
     $project = Project::factory()->for($tenant)->create();
-    $tenant->users()->attach($engineer, ['role' => 'member']);
-    $project->users()->attach($engineer, ['role' => 'engineer']);
+    $tenant->users()->attach($engineer, ['role_id' => roleId($tenant, 'member')]);
+    $project->users()->attach($engineer, ['role_id' => roleId($project, 'engineer')]);
 
     $this->actingAs($engineer)
         ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets', [
@@ -142,93 +192,82 @@ it('rejects cross-tenant and duplicate project assignments', function (): void {
     $otherTenant = Tenant::factory()->create();
     $tenant = Tenant::factory()->create();
     $project = Project::factory()->for($tenant)->create();
-    $tenant->users()->attach($owner, ['role' => 'owner']);
-    $otherTenant->users()->attach($member, ['role' => 'member']);
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
+    $otherTenant->users()->attach($member, ['role_id' => roleId($otherTenant, 'member')]);
+    $payload = ['user_id' => $member->id, 'role_id' => roleId($project, 'viewer')];
 
     $this->actingAs($owner)
-        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/users', [
-            'user_id' => $member->id,
-            'role' => 'viewer',
-        ])
+        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/users', $payload)
         ->assertUnprocessable()
         ->assertJsonValidationErrors(['user_id']);
 
-    $tenant->users()->attach($member, ['role' => 'member']);
+    $tenant->users()->attach($member, ['role_id' => roleId($tenant, 'member')]);
 
     $this->actingAs($owner)
-        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/users', [
-            'user_id' => $member->id,
-            'role' => 'viewer',
-        ])
+        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/users', $payload)
         ->assertCreated();
 
     $this->actingAs($owner)
-        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/users', [
-            'user_id' => $member->id,
-            'role' => 'viewer',
-        ])
+        ->postJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/users', $payload)
         ->assertUnprocessable()
         ->assertJsonValidationErrors(['user_id']);
 });
 
-it('rejects global account deletion for a tenant owner', function (): void {
-    $owner = User::factory()->create();
+it('makes the project creator its admin', function (): void {
+    $admin = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $tenant->users()->attach($admin, ['role_id' => roleId($tenant, 'admin')]);
 
-    $this->actingAs($owner)
-        ->deleteJson('/api/tenants/'.$tenant->id.'/users/'.$owner->id)
-        ->assertForbidden();
+    $projectId = $this->actingAs($admin)
+        ->postJson('/api/tenants/'.$tenant->id.'/projects', ['name' => 'Fresh Project'])
+        ->assertCreated()
+        ->json('data.id');
+
+    $this->assertDatabaseHas('project_user', [
+        'project_id' => $projectId,
+        'user_id' => $admin->id,
+        'role_id' => roleId(Project::query()->findOrFail($projectId), 'admin'),
+    ]);
 });
 
-it('allows a platform admin to delete a global account', function (): void {
-    $platformAdmin = User::factory()->create(['system_role' => 'platform_admin']);
-    $owner = User::factory()->create();
-    $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($owner, ['role' => 'owner']);
-
-    $this->actingAs($platformAdmin)
-        ->deleteJson('/api/tenants/'.$tenant->id.'/users/'.$owner->id)
-        ->assertNoContent();
-
-    $this->assertDatabaseMissing('users', ['id' => $owner->id]);
-});
-
-it('filters participating projects only and includes user role in project resource', function (): void {
+it('filters participating projects for a tenant-wide viewer', function (): void {
     $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
     $assignedProject = Project::factory()->for($tenant)->create(['name' => 'Assigned Project']);
-    $unassignedProject = Project::factory()->for($tenant)->create(['name' => 'Unassigned Project']);
+    Project::factory()->for($tenant)->create(['name' => 'Unassigned Project']);
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
+    $assignedProject->users()->attach($owner, ['role_id' => roleId($assignedProject, 'admin')]);
 
-    $tenant->users()->attach($owner, ['role' => 'owner']);
-    $assignedProject->users()->attach($owner, ['role' => 'admin']);
-
-    $responseAll = $this->actingAs($owner)
-        ->getJson('/api/tenants/'.$tenant->id.'/projects');
-
-    $responseAll->assertOk()
+    $this->actingAs($owner)
+        ->getJson('/api/tenants/'.$tenant->id.'/projects')
+        ->assertOk()
         ->assertJsonCount(2, 'data');
 
-    $responseParticipating = $this->actingAs($owner)
-        ->getJson('/api/tenants/'.$tenant->id.'/projects?participating=1');
-
-    $responseParticipating->assertOk()
+    $this->actingAs($owner)
+        ->getJson('/api/tenants/'.$tenant->id.'/projects?participating=1')
+        ->assertOk()
         ->assertJsonCount(1, 'data')
-        ->assertJsonPath('data.0.id', $assignedProject->id)
-        ->assertJsonPath('data.0.role', 'admin');
+        ->assertJsonPath('data.0.id', $assignedProject->id);
 });
 
-it('allows platform admin to load all projects and receive admin role even when participating filter is applied', function (): void {
-    $platformAdmin = User::factory()->create(['system_role' => 'platform_admin']);
+it('lists only assigned projects with the member permissions on each', function (): void {
+    $viewer = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $projectA = Project::factory()->for($tenant)->create(['name' => 'Project A']);
-    $projectB = Project::factory()->for($tenant)->create(['name' => 'Project B']);
+    $assignedProject = Project::factory()->for($tenant)->create(['name' => 'Assigned Project']);
+    Project::factory()->for($tenant)->create(['name' => 'Unassigned Project']);
+    $tenant->users()->attach($viewer, ['role_id' => roleId($tenant, 'member')]);
+    $assignedProject->users()->attach($viewer, ['role_id' => roleId($assignedProject, 'viewer')]);
 
-    $response = $this->actingAs($platformAdmin)
-        ->getJson('/api/tenants/'.$tenant->id.'/projects?participating=1');
-
-    $response->assertOk()
-        ->assertJsonCount(2, 'data')
-        ->assertJsonPath('data.0.role', 'admin')
-        ->assertJsonPath('data.1.role', 'admin');
+    $this->actingAs($viewer)
+        ->getJson('/api/tenants/'.$tenant->id.'/projects')
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.permissions', [
+            'project.view',
+            'device.view',
+            'asset.view',
+            'device_profile.view',
+            'alert_rule.view',
+            'alert.view',
+        ]);
 });

@@ -84,7 +84,7 @@ it('returns English validation messages regardless of request language', functio
 it('returns the authenticated user and tenant memberships', function (): void {
     $user = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $user->tenants()->attach($tenant, ['role' => 'admin']);
+    $user->tenants()->attach($tenant, ['role_id' => roleId($tenant, 'admin')]);
 
     $response = $this->actingAs($user)->getJson('/api/me');
 
@@ -95,7 +95,7 @@ it('returns the authenticated user and tenant memberships', function (): void {
         ->assertOk()
         ->assertJsonPath('data.id', $user->id)
         ->assertJsonPath('data.tenants.0.id', $tenant->id)
-        ->assertJsonPath('data.tenants.0.role', 'admin');
+        ->assertJsonPath('data.tenants.0.role.key', 'admin');
 });
 
 it('creates a personal access token and never returns it from the list endpoint', function (): void {

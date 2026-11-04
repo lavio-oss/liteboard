@@ -14,7 +14,7 @@ function gatewayFixture(): array
     config()->set('services.telemetry.internal_secret', GATEWAY_INTERNAL_SECRET);
     $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
     $project = Project::factory()->for($tenant)->create();
     $gateway = Device::factory()->for($project)->gateway()->create()->refresh();
 

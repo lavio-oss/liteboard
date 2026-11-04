@@ -18,16 +18,15 @@ final class TenantUserResource extends JsonResource
         $user = $this->resource;
         $pivot = $user->getRelationValue('pivot');
 
-        if (! $pivot instanceof Pivot || ! is_string($pivot->getAttribute('role'))) {
-            throw new LogicException('The tenant user pivot must include a string role.');
+        if (! $pivot instanceof Pivot || ! is_string($pivot->getAttribute('role_id'))) {
+            throw new LogicException('The tenant user pivot must include a role id.');
         }
 
         return [
             'id' => (string) $user->getKey(),
             'name' => (string) $user->name,
             'email' => (string) $user->email,
-            'role' => $pivot->getAttribute('role'),
-            'system_role' => $user->getAttribute('system_role'),
+            'role_id' => $pivot->getAttribute('role_id'),
         ];
     }
 }

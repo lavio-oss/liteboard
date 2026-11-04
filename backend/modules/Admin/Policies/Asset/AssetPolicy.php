@@ -2,68 +2,38 @@
 
 namespace Modules\Admin\Policies\Asset;
 
-use Modules\Admin\Enums\Project\ProjectRole;
 use Modules\Admin\Models\Asset\Asset;
 use Modules\Admin\Models\Project\Project;
-use Modules\Core\Enums\Tenant\TenantRole;
-use Modules\Core\Models\Tenant\Tenant;
+use Modules\Core\Enums\Role\Permission;
 use Modules\Core\Models\User\User;
+use Modules\Core\Services\Role\PermissionResolver;
 
 final class AssetPolicy
 {
+    public function __construct(private readonly PermissionResolver $permissions) {}
+
     public function viewAny(User $user, Project $project): bool
     {
-        return $this->projectAllowsView($user, $project);
+        return $this->permissions->allows($user, Permission::AssetView, $project);
     }
 
     public function view(User $user, Asset $asset): bool
     {
-        return $this->projectAllowsView($user, $this->projectFor($asset));
+        return $this->permissions->allows($user, Permission::AssetView, $asset->project()->firstOrFail());
     }
 
     public function create(User $user, Project $project): bool
     {
-        return $this->projectAllowsWrite($user, $project);
+        return $this->permissions->allows($user, Permission::AssetWrite, $project);
     }
 
     public function update(User $user, Asset $asset): bool
     {
-        return $this->projectAllowsWrite($user, $this->projectFor($asset));
+        return $this->permissions->allows($user, Permission::AssetWrite, $asset->project()->firstOrFail());
     }
 
     public function delete(User $user, Asset $asset): bool
     {
-        return $this->projectAllowsDelete($user, $this->projectFor($asset));
-    }
-
-    private function tenantFor(Project $project): Tenant
-    {
-        return $project->tenant()->firstOrFail();
-    }
-
-    private function projectFor(Asset $asset): Project
-    {
-        return $asset->project()->firstOrFail();
-    }
-
-    private function projectAllowsView(User $user, Project $project): bool
-    {
-        return $user->isPlatformAdmin()
-            || $this->tenantFor($project)->hasRole($user, TenantRole::Owner, TenantRole::Admin)
-            || $project->hasMember($user);
-    }
-
-    private function projectAllowsWrite(User $user, Project $project): bool
-    {
-        return $user->isPlatformAdmin()
-            || $this->tenantFor($project)->hasRole($user, TenantRole::Owner, TenantRole::Admin)
-            || $project->hasRole($user, ProjectRole::Admin, ProjectRole::Engineer);
-    }
-
-    private function projectAllowsDelete(User $user, Project $project): bool
-    {
-        return $user->isPlatformAdmin()
-            || $this->tenantFor($project)->hasRole($user, TenantRole::Owner, TenantRole::Admin)
-            || $project->hasRole($user, ProjectRole::Admin);
+        return $this->permissions->allows($user, Permission::AssetDelete, $asset->project()->firstOrFail());
     }
 }

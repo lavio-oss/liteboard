@@ -6,6 +6,7 @@ use Modules\Admin\Actions\Project\CreateProjectUserAccountAction as CreateProjec
 use Modules\Admin\Models\Project\Project;
 use Modules\Admin\Requests\Project\StoreProjectUserAccountRequest;
 use Modules\Admin\Resources\Project\ProjectUserResource;
+use Modules\Core\Models\Role\Role;
 use Modules\Core\Models\Tenant\Tenant;
 use Modules\Core\Shared\Responders\Responder;
 use Symfony\Component\HttpFoundation\Response;
@@ -19,9 +20,14 @@ final class CreateProjectUserAccountAction
         CreateProjectUserAccount $createProjectUserAccount,
         Responder $responder,
     ): Response {
-        /** @var array{name: string, email: string, password: string, role: string} $attributes */
+        /** @var array{name: string, email: string, password: string, role_id: string} $attributes */
         $attributes = $request->validated();
-        $projectUser = $createProjectUserAccount->execute($tenant, $project, $attributes);
+        $projectUser = $createProjectUserAccount->execute(
+            $tenant,
+            $project,
+            Role::query()->findOrFail($attributes['role_id']),
+            $attributes,
+        );
 
         return $responder->resource(ProjectUserResource::make($projectUser), Response::HTTP_CREATED);
     }

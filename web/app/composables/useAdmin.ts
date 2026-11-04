@@ -17,7 +17,13 @@ import {
   projectUserResponseSchema,
   projectUsersResponseSchema
 } from '~/types/admin'
-import { tenantUserResponseSchema, tenantUsersResponseSchema } from '~/types/auth'
+import {
+  permissionDefinitionsResponseSchema,
+  roleResponseSchema,
+  rolesResponseSchema,
+  tenantUserResponseSchema,
+  tenantUsersResponseSchema
+} from '~/types/auth'
 import type {
   Asset,
   AssetInput,
@@ -38,7 +44,15 @@ import type {
   ProjectUserInput,
   TenantHierarchy
 } from '~/types/admin'
-import type { TenantUser, TenantUserCreateInput, TenantUserUpdateInput } from '~/types/auth'
+import type {
+  PermissionDefinition,
+  Role,
+  RoleInput,
+  RoleScope,
+  TenantUser,
+  TenantUserCreateInput,
+  TenantUserUpdateInput
+} from '~/types/auth'
 
 export function useAdmin() {
   const api = useApi()
@@ -449,12 +463,12 @@ export function useAdmin() {
     tenantId: string,
     projectId: string,
     userId: string,
-    role: ProjectUserInput['role']
+    roleId: string
   ): Promise<ProjectUser> {
     const response = await api.request(
       `/api/tenants/${tenantId}/projects/${projectId}/users/${userId}`,
       projectUserResponseSchema,
-      { body: { role }, method: 'PATCH' }
+      { body: { role_id: roleId }, method: 'PATCH' }
     )
 
     return response.data
@@ -488,6 +502,49 @@ export function useAdmin() {
     )
   }
 
+  async function loadRoles(tenantId: string, scope?: RoleScope): Promise<Role[]> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/roles${scope === undefined ? '' : `?scope=${scope}`}`,
+      rolesResponseSchema
+    )
+
+    return response.data
+  }
+
+  async function loadPermissionDefinitions(tenantId: string): Promise<PermissionDefinition[]> {
+    const response = await api.request(`/api/tenants/${tenantId}/permissions`, permissionDefinitionsResponseSchema)
+
+    return response.data
+  }
+
+  async function createRole(tenantId: string, payload: RoleInput): Promise<Role> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/roles`,
+      roleResponseSchema,
+      { body: payload, method: 'POST' }
+    )
+
+    return response.data
+  }
+
+  async function updateRole(
+    tenantId: string,
+    roleId: string,
+    payload: Partial<Pick<RoleInput, 'name' | 'permissions'>>
+  ): Promise<Role> {
+    const response = await api.request(
+      `/api/tenants/${tenantId}/roles/${roleId}`,
+      roleResponseSchema,
+      { body: payload, method: 'PATCH' }
+    )
+
+    return response.data
+  }
+
+  async function deleteRole(tenantId: string, roleId: string): Promise<void> {
+    await api.request(`/api/tenants/${tenantId}/roles/${roleId}`, z.unknown(), { method: 'DELETE' })
+  }
+
   return {
     approveDevice,
     attachProjectUser,
@@ -498,11 +555,13 @@ export function useAdmin() {
     createProject,
     createProjectProvisioningProfile,
     createProjectUserAccount,
+    createRole,
     createTenantUser,
     deleteAsset,
     deleteDevice,
     deleteDeviceProfile,
     deleteProject,
+    deleteRole,
     deleteTenantUser,
     loadAssets,
     loadAvailableProjectUsers,
@@ -512,7 +571,9 @@ export function useAdmin() {
     loadDevices,
     loadProjectUsers,
     loadProjects,
+    loadPermissionDefinitions,
     loadProjectProvisioningProfile,
+    loadRoles,
     loadTenantDevices,
     loadTenantHierarchy,
     loadTenantUsers,
@@ -528,6 +589,7 @@ export function useAdmin() {
     updateProjectDeviceQuota,
     updateProjectProvisioningProfile,
     updateProjectUser,
+    updateRole,
     updateTenantUser
   }
 }

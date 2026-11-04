@@ -31,7 +31,7 @@ it('does not expose project routes under the admin prefix', function (): void {
 it('creates a tenant-scoped multi-level asset hierarchy', function (): void {
     $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
     $project = Project::factory()->for($tenant)->create();
 
     $this->assertTrue(Str::isUuid($tenant->id, 7));
@@ -103,8 +103,8 @@ it('allows members to read but not mutate assets', function (): void {
     $tenant = Tenant::factory()->create();
     $project = Project::factory()->for($tenant)->create();
     $asset = Asset::factory()->for($project)->create();
-    $tenant->users()->attach($member, ['role' => 'member']);
-    $project->users()->attach($member, ['role' => 'viewer']);
+    $tenant->users()->attach($member, ['role_id' => roleId($tenant, 'member')]);
+    $project->users()->attach($member, ['role_id' => roleId($project, 'viewer')]);
 
     $this->actingAs($member)
         ->getJson('/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets')
@@ -139,8 +139,8 @@ it('allows project admins to create, update and delete assets', function (): voi
     $admin = User::factory()->create();
     $tenant = Tenant::factory()->create();
     $project = Project::factory()->for($tenant)->create();
-    $tenant->users()->attach($admin, ['role' => 'member']);
-    $project->users()->attach($admin, ['role' => 'admin']);
+    $tenant->users()->attach($admin, ['role_id' => roleId($tenant, 'member')]);
+    $project->users()->attach($admin, ['role_id' => roleId($project, 'admin')]);
 
     $createResponse = $this->actingAs($admin)->postJson(
         '/api/tenants/'.$tenant->id.'/projects/'.$project->id.'/assets',
@@ -179,8 +179,8 @@ it('hides assets from another tenant and rejects cross-project parents', functio
     $asset = Asset::factory()->for($project)->create();
     $otherAsset = Asset::factory()->for($otherProject)->create();
     $unassignedAsset = Asset::factory()->for($unassignedProject)->create();
-    $tenant->users()->attach($user, ['role' => 'member']);
-    $project->users()->attach($user, ['role' => 'engineer']);
+    $tenant->users()->attach($user, ['role_id' => roleId($tenant, 'member')]);
+    $project->users()->attach($user, ['role_id' => roleId($project, 'engineer')]);
 
     $this->actingAs($user)
         ->getJson('/api/tenants/'.$otherTenant->id.'/projects')
@@ -214,7 +214,7 @@ it('hides assets from another tenant and rejects cross-project parents', functio
 it('rejects invalid asset input and duplicate codes within a type', function (): void {
     $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
     $project = Project::factory()->for($tenant)->create();
     Asset::factory()->for($project)->create([
         'asset_type' => AssetType::Factory->value,
@@ -245,7 +245,7 @@ it('rejects invalid asset input and duplicate codes within a type', function ():
 it('rejects malformed UUIDs in asset identifiers and parent references', function (): void {
     $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
     $project = Project::factory()->for($tenant)->create();
 
     $this->actingAs($owner)
@@ -275,8 +275,8 @@ it('supports asset search, type filtering, parent filtering and roots', function
     $member = User::factory()->create();
     $tenant = Tenant::factory()->create();
     $project = Project::factory()->for($tenant)->create();
-    $tenant->users()->attach($member, ['role' => 'member']);
-    $project->users()->attach($member, ['role' => 'viewer']);
+    $tenant->users()->attach($member, ['role_id' => roleId($tenant, 'member')]);
+    $project->users()->attach($member, ['role_id' => roleId($project, 'viewer')]);
     $root = Asset::factory()->for($project)->create([
         'name' => 'Alpha Factory',
         'code' => 'alpha-factory',
@@ -315,7 +315,7 @@ it('supports asset search, type filtering, parent filtering and roots', function
 it('rejects self-parenting and hierarchy cycles', function (): void {
     $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
     $project = Project::factory()->for($tenant)->create();
     $parent = Asset::factory()->for($project)->create([
         'asset_type' => AssetType::Factory->value,
@@ -342,7 +342,7 @@ it('rejects self-parenting and hierarchy cycles', function (): void {
 it('replaces and removes an asset parent through contains relations', function (): void {
     $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
     $project = Project::factory()->for($tenant)->create();
     $firstParent = Asset::factory()->for($project)->create();
     $secondParent = Asset::factory()->for($project)->create();
@@ -379,7 +379,7 @@ it('replaces and removes an asset parent through contains relations', function (
 it('keeps child assets when a parent asset is deleted', function (): void {
     $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
     $project = Project::factory()->for($tenant)->create();
     $parent = Asset::factory()->for($project)->create();
     $child = Asset::factory()->for($project)->withParent($parent)->create();
@@ -441,7 +441,7 @@ it('cascades project and tenant deletion through assets', function (): void {
 it('does not expose the removed factory and production line endpoints', function (): void {
     $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
     $project = Project::factory()->for($tenant)->create();
 
     $this->actingAs($owner)

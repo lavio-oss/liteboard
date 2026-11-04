@@ -6,6 +6,7 @@ use Modules\Admin\Actions\Project\CreateProjectAction as CreateProject;
 use Modules\Admin\Requests\Project\StoreProjectRequest;
 use Modules\Admin\Resources\Project\ProjectResource;
 use Modules\Core\Models\Tenant\Tenant;
+use Modules\Core\Models\User\User;
 use Modules\Core\Shared\Responders\Responder;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -19,7 +20,13 @@ final class CreateProjectAction
     ): Response {
         /** @var array{name: string, description?: string|null, status?: string} $attributes */
         $attributes = $request->validated();
-        $project = $createProject->execute($tenant, $attributes);
+        $user = $request->user();
+
+        if (! $user instanceof User) {
+            abort(Response::HTTP_UNAUTHORIZED);
+        }
+
+        $project = $createProject->execute($tenant, $user, $attributes);
 
         return $responder->resource(ProjectResource::make($project), Response::HTTP_CREATED);
     }

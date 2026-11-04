@@ -25,7 +25,7 @@ function redeliverFixture(string $status): array
     Http::preventStrayRequests();
     $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
     $project = Project::factory()->for($tenant)->create();
     $endpoint = WebhookEndpoint::factory()->for($project)->create();
     $eventId = (string) Str::uuid();
@@ -81,8 +81,8 @@ it('refuses to redeliver pending, in-flight or succeeded deliveries', function (
 it('lets only admins redeliver', function (): void {
     ['tenant' => $tenant, 'project' => $project, 'url' => $url] = redeliverFixture('exhausted');
     $engineer = User::factory()->create();
-    $tenant->users()->attach($engineer, ['role' => 'member']);
-    $project->users()->attach($engineer, ['role' => 'engineer']);
+    $tenant->users()->attach($engineer, ['role_id' => roleId($tenant, 'member')]);
+    $project->users()->attach($engineer, ['role_id' => roleId($project, 'engineer')]);
 
     $this->actingAs($engineer)->postJson($url)->assertForbidden();
 });

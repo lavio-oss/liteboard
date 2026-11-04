@@ -10,7 +10,6 @@ import { useDevicePresenceStream } from '~/composables/useDevicePresenceStream'
 import type { TelemetryDeviceScope } from '~/composables/useTelemetry'
 import { useTelemetryStream } from '~/composables/useTelemetryStream'
 import { useTenantContext } from '~/composables/useTenantContext'
-import { canWriteProjectData } from '~/utils/projectPermissions'
 import type { DeviceInput } from '~/types/admin'
 import type { Alert, AlertRule } from '~/types/alerting'
 import DevicePresenceStatus from '~/components/realtime/DevicePresenceStatus.vue'
@@ -55,7 +54,7 @@ const FUTURE_SKEW_MS = 5 * 60 * 1000
 
 const route = useRoute()
 const toast = useToast()
-const { activeTenantId, canManageActiveTenant, loadTenants } = useTenantContext()
+const { activeTenantId, loadTenants } = useTenantContext()
 // A direct load or refresh of this URL starts with no active tenant, so the device could not be fetched.
 await loadTenants()
 const { loadAssets, loadDevice, loadDeviceProfiles, loadDevices, loadProjects, updateDevice } = useAdmin()
@@ -133,7 +132,7 @@ const { data: editContext } = await useAsyncData(
 
     const project = (await loadProjects(tenantId)).find(item => item.id === projectId) ?? null
 
-    if (project === null || !canWriteProjectData(project.role, canManageActiveTenant.value)) {
+    if (project === null || !project.permissions.includes('device.write')) {
       return null
     }
 
@@ -960,7 +959,7 @@ async function openTrace(message: string): Promise<void> {
                   class="flex h-full flex-col lg:absolute lg:inset-0"
                   :ui="{ root: 'flex flex-col', body: 'min-h-0 flex-1 overflow-hidden p-0 sm:p-0' }"
                 >
-                  <UTable
+                  <AppTable
                     sticky
                     class="h-full"
                     :data="outcomes"
@@ -973,7 +972,7 @@ async function openTrace(message: string): Promise<void> {
                         No processed messages yet.
                       </p>
                     </template>
-                  </UTable>
+                  </AppTable>
                 </UCard>
               </div>
             </div>
@@ -1036,7 +1035,7 @@ async function openTrace(message: string): Promise<void> {
               </ClientOnly>
             </UCard>
 
-            <UTable
+            <AppTable
               ref="pointTable"
               v-model:pagination="pointPagination"
               :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
@@ -1051,7 +1050,7 @@ async function openTrace(message: string): Promise<void> {
                   No numeric samples in this range.
                 </p>
               </template>
-            </UTable>
+            </AppTable>
 
             <div class="flex items-center justify-between gap-3 border-t border-default pt-4">
               <div class="text-sm text-muted">
@@ -1125,7 +1124,7 @@ async function openTrace(message: string): Promise<void> {
               </div>
             </div>
 
-            <UTable
+            <AppTable
               ref="outcomeTable"
               v-model:pagination="outcomePagination"
               :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
@@ -1140,7 +1139,7 @@ async function openTrace(message: string): Promise<void> {
                   {{ appliedMessageFilter === '' && statusFilter === ALL && reasonFilter === ALL ? 'No processed messages yet.' : 'No messages match this search.' }}
                 </p>
               </template>
-            </UTable>
+            </AppTable>
 
             <div class="flex items-center justify-between gap-3 border-t border-default pt-4">
               <div class="text-sm text-muted">

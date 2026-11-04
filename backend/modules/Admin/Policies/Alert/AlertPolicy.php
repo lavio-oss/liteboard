@@ -2,32 +2,28 @@
 
 namespace Modules\Admin\Policies\Alert;
 
-use Modules\Admin\Enums\Project\ProjectRole;
 use Modules\Admin\Models\Alert\Alert;
 use Modules\Admin\Models\Project\Project;
-use Modules\Core\Enums\Tenant\TenantRole;
+use Modules\Core\Enums\Role\Permission;
 use Modules\Core\Models\User\User;
+use Modules\Core\Services\Role\PermissionResolver;
 
 final class AlertPolicy
 {
+    public function __construct(private readonly PermissionResolver $permissions) {}
+
     public function viewAny(User $user, Project $project): bool
     {
-        return $user->isPlatformAdmin()
-            || $project->tenant()->firstOrFail()->hasRole($user, TenantRole::Owner, TenantRole::Admin)
-            || $project->hasMember($user);
+        return $this->permissions->allows($user, Permission::AlertView, $project);
     }
 
     public function view(User $user, Alert $alert): bool
     {
-        return $this->viewAny($user, $alert->project()->firstOrFail());
+        return $this->permissions->allows($user, Permission::AlertView, $alert->project()->firstOrFail());
     }
 
     public function acknowledge(User $user, Alert $alert): bool
     {
-        $project = $alert->project()->firstOrFail();
-
-        return $user->isPlatformAdmin()
-            || $project->tenant()->firstOrFail()->hasRole($user, TenantRole::Owner, TenantRole::Admin)
-            || $project->hasRole($user, ProjectRole::Admin, ProjectRole::Engineer);
+        return $this->permissions->allows($user, Permission::AlertAcknowledge, $alert->project()->firstOrFail());
     }
 }

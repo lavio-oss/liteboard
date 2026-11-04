@@ -26,7 +26,7 @@ it('issues a tenant scoped presence ticket to a user who can view tenant devices
     config(['services.telemetry.ws_secret' => str_repeat('s', 32)]);
     $user = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($user, ['role' => 'owner']);
+    $tenant->users()->attach($user, ['role_id' => roleId($tenant, 'owner')]);
 
     $response = $this->actingAs($user)
         ->postJson("/api/tenants/$tenant->id/devices/presence-stream-ticket")
@@ -44,7 +44,7 @@ it('denies presence tickets for tenants where the user cannot view devices', fun
     config(['services.telemetry.ws_secret' => str_repeat('s', 32)]);
     $user = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($user, ['role' => 'viewer']);
+    $tenant->users()->attach($user, ['role_id' => roleId($tenant, 'member')]);
 
     $this->actingAs($user)
         ->postJson("/api/tenants/$tenant->id/devices/presence-stream-ticket")

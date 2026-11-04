@@ -2,7 +2,6 @@ import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
 import { useSortableHeader } from '~/composables/useSortableHeader'
 import { useTenantContext } from '~/composables/useTenantContext'
-import { canDeleteProjectData, canWriteProjectData } from '~/utils/projectPermissions'
 
 /**
  * Project picker and permissions shared by the Alerts, Alert rules and Webhooks screens:
@@ -10,17 +9,12 @@ import { canDeleteProjectData, canWriteProjectData } from '~/utils/projectPermis
  */
 export async function useAlertingProject() {
   const toast = useToast()
-  const { isPlatformAdmin, loadTenants, tenants } = useTenantContext()
+  const { loadTenants, tenants } = useTenantContext()
   const { loadProjects } = useAdmin()
   const nuxtApp = useNuxtApp()
   await loadTenants()
 
   const tenantIds = computed(() => tenants.value.map(tenant => tenant.id))
-  const manageableTenantIds = computed(() => new Set(
-    tenants.value
-      .filter(tenant => isPlatformAdmin.value || tenant.role === 'owner' || tenant.role === 'admin')
-      .map(tenant => tenant.id)
-  ))
 
   // The Nuxt context is lost after the await above, so re-enter it before calling a Nuxt composable.
   const { data: projectsData, status: projectsStatus, error: projectsError } = await nuxtApp.runWithContext(() => useAsyncData(
@@ -48,13 +42,12 @@ export async function useAlertingProject() {
     ? []
     : [{ label: selectedProject.value.name, value: selectedProject.value.id }])
 
-  const canManageTenant = computed(() => selectedProject.value !== null
-    && (isPlatformAdmin.value || manageableTenantIds.value.has(selectedProject.value.tenant_id)))
-  // Rules and acknowledgement need Admin/Engineer; webhook changes, secrets and redelivery need Admin.
-  const canWriteInSelectedProject = computed(() => selectedProject.value !== null
-    && canWriteProjectData(selectedProject.value.role, canManageTenant.value))
-  const canAdminInSelectedProject = computed(() => selectedProject.value !== null
-    && canDeleteProjectData(selectedProject.value.role, canManageTenant.value))
+  const selectedPermissions = computed(() => selectedProject.value?.permissions ?? [])
+  const canWriteInSelectedProject = computed(() => selectedPermissions.value.includes('alert_rule.write'))
+  const canAcknowledgeInSelectedProject = computed(() => selectedPermissions.value.includes('alert.acknowledge'))
+  const canViewWebhooksInSelectedProject = computed(() => selectedPermissions.value.includes('webhook.view'))
+  // Webhook changes, secrets and redelivery.
+  const canAdminInSelectedProject = computed(() => selectedPermissions.value.includes('webhook.manage'))
 
   function requireProject() {
     if (selectedProject.value === null) {
@@ -75,7 +68,9 @@ export async function useAlertingProject() {
   const sortableHeader = useSortableHeader()
 
   return {
+    canAcknowledgeInSelectedProject,
     canAdminInSelectedProject,
+    canViewWebhooksInSelectedProject,
     canWriteInSelectedProject,
     formProjectOptions,
     notifyError,

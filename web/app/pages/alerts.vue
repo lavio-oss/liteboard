@@ -20,7 +20,7 @@ const toast = useToast()
 const { loadDevices } = useAdmin()
 const alerting = useAlerting()
 const {
-  canWriteInSelectedProject,
+  canAcknowledgeInSelectedProject,
   notifyError,
   projectSelectOptions,
   projects,
@@ -175,7 +175,7 @@ const alertColumns: TableColumn<AlertRow>[] = [
         })
       ]
 
-      if (canWriteInSelectedProject.value && row.original.acknowledged_at === null) {
+      if (canAcknowledgeInSelectedProject.value && row.original.acknowledged_at === null) {
         buttons.push(h(UButton, {
           'icon': 'i-lucide-check',
           'color': 'neutral',
@@ -257,7 +257,7 @@ const errorMessage = computed(() => {
         :device-name="viewingAlert === null ? '' : deviceNames.get(viewingAlert.device_id) ?? viewingAlert.device_id"
         :rule-name="viewingAlert === null ? 'Alert' : rulesById.get(viewingAlert.alert_rule_id)?.name ?? 'Alert'"
         :project-name="selectedProject?.name"
-        :can-acknowledge="canWriteInSelectedProject"
+        :can-acknowledge="canAcknowledgeInSelectedProject"
         :loading="viewLoading"
         @acknowledge="viewingAlert !== null && acknowledge(viewingAlert)"
       />

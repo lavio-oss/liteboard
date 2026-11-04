@@ -10,7 +10,7 @@ function plaintextFixture(): array
 {
     $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
     $project = Project::factory()->for($tenant)->create();
     $device = Device::factory()->for($project)->create()->refresh();
 

@@ -15,7 +15,7 @@ function telemetryDeviceFixture(): array
 {
     $owner = User::factory()->create();
     $tenant = Tenant::factory()->create();
-    $tenant->users()->attach($owner, ['role' => 'owner']);
+    $tenant->users()->attach($owner, ['role_id' => roleId($tenant, 'owner')]);
     $project = Project::factory()->for($tenant)->create();
     $version = DeviceProfileVersion::factory()->forProfile(DeviceProfile::factory()->for($project)->create())->create();
     $device = Device::factory()->for($project)->create();
@@ -270,8 +270,8 @@ it('isolates telemetry, traces and stream tickets across tenants and projects', 
 it('lets project viewers read telemetry', function (): void {
     $fixture = telemetryDeviceFixture();
     $viewer = User::factory()->create();
-    $fixture['tenant']->users()->attach($viewer, ['role' => 'member']);
-    $fixture['project']->users()->attach($viewer, ['role' => 'viewer']);
+    $fixture['tenant']->users()->attach($viewer, ['role_id' => roleId($fixture['tenant'], 'member')]);
+    $fixture['project']->users()->attach($viewer, ['role_id' => roleId($fixture['project'], 'viewer')]);
 
     $this->actingAs($viewer)->getJson($fixture['base'].'/telemetry/latest')->assertOk();
 });
@@ -279,7 +279,7 @@ it('lets project viewers read telemetry', function (): void {
 it('forbids tenant members outside the project from reading telemetry or streaming it', function (): void {
     $fixture = telemetryDeviceFixture();
     $outsider = User::factory()->create();
-    $fixture['tenant']->users()->attach($outsider, ['role' => 'member']);
+    $fixture['tenant']->users()->attach($outsider, ['role_id' => roleId($fixture['tenant'], 'member')]);
 
     $this->actingAs($outsider)->getJson($fixture['base'].'/telemetry/latest')->assertForbidden();
     $this->actingAs($outsider)->postJson($fixture['base'].'/telemetry/stream-ticket')->assertForbidden();
@@ -387,8 +387,8 @@ function insertUnresolvedMessage(string $reason, string $receivedAt): string
     return $processingId;
 }
 
-it('lets platform admins list and trace unresolved messages', function (): void {
-    $admin = User::factory()->create(['system_role' => 'platform_admin']);
+it('lets members with system diagnostics list and trace unresolved messages', function (): void {
+    $admin = telemetryDeviceFixture()['owner'];
     $older = insertUnresolvedMessage('device_not_found', '2026-10-13T10:00:00Z');
     $newer = insertUnresolvedMessage('invalid_topic', '2026-10-13T10:00:05Z');
 
@@ -411,14 +411,17 @@ it('lets platform admins list and trace unresolved messages', function (): void 
         ->assertNotFound();
 });
 
-it('forbids tenant owners from reading central unresolved messages', function (): void {
+it('forbids members without system diagnostics from reading central unresolved messages', function (): void {
     $fixture = telemetryDeviceFixture();
     $processingId = insertUnresolvedMessage('device_not_found', '2026-10-13T10:00:00Z');
+    $engineer = User::factory()->create();
+    $fixture['tenant']->users()->attach($engineer, ['role_id' => roleId($fixture['tenant'], 'member')]);
+    $fixture['project']->users()->attach($engineer, ['role_id' => roleId($fixture['project'], 'engineer')]);
 
-    $this->actingAs($fixture['owner'])
+    $this->actingAs($engineer)
         ->getJson('/api/platform/telemetry/unresolved-messages')
         ->assertForbidden();
-    $this->actingAs($fixture['owner'])
+    $this->actingAs($engineer)
         ->getJson("/api/platform/telemetry/unresolved-messages/$processingId")
         ->assertForbidden();
 });
