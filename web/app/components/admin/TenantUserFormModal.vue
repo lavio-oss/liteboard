@@ -67,6 +67,23 @@ const createSchema = z.object({
 })
 const schema = computed(() => props.user === null ? createSchema : editSchema)
 
+const step = ref(1)
+const stepTabs = [
+  { label: 'Account', value: 1 },
+  { label: 'Access', value: 2 }
+]
+
+watch(open, (isOpen) => {
+  if (isOpen) {
+    step.value = 1
+  }
+})
+
+// Only the role lives on the Access tab; any other invalid field sends the user back to Account.
+function onError(event: { errors: Array<{ name?: string }> }): void {
+  step.value = event.errors.every(error => error.name === 'role_id') ? 2 : 1
+}
+
 const title = computed(() => props.user === null ? 'Add user' : `Edit ${props.user.name}`)
 
 watch(() => props.user, (user) => {
@@ -150,94 +167,108 @@ function onSubmit(event: FormSubmitEvent<FormState>): void {
   <UModal
     v-model:open="open"
     :title="title"
+    :ui="{ content: 'max-w-xl' }"
   >
     <template #body>
+      <UTabs
+        v-model="step"
+        :items="stepTabs"
+        :content="false"
+        variant="link"
+        :ui="{ list: 'w-full border-default p-0', trigger: 'flex-1 justify-center rounded-none py-3' }"
+        class="-mt-2 mb-4 w-full"
+      />
+
       <UForm
         :schema="schema"
         :state="state"
         :disabled="props.loading"
         class="space-y-4"
         @submit="onSubmit"
+        @error="onError"
       >
-        <UFormField name="name" label="Name" required>
-          <UInput
-            v-model="state.name"
-            class="w-full"
-            placeholder="Enter name"
-          />
-        </UFormField>
-        <UFormField name="email" label="Email" required>
-          <UInput
-            v-model="state.email"
-            type="email"
-            class="w-full"
-            placeholder="Enter email address"
-          />
-        </UFormField>
-        <UFormField label="User type" required>
-          <USelect
-            v-model="userType"
-            :items="userTypeOptions"
-            class="w-full"
-          />
-        </UFormField>
-        <UFormField
-          v-if="userType === 'tenant'"
-          name="role_id"
-          label="Tenant role"
-          required
-        >
-          <USelect
-            v-model="state.role_id"
-            :items="roleOptions"
-            class="w-full"
-            placeholder="Choose a role"
-          />
-        </UFormField>
-        <UFormField
-          v-if="userType === 'project'"
-          label="Projects"
-        >
-          <div class="flex flex-col gap-2">
-            <div
-              v-for="project in props.projects"
-              :key="project.id"
-              class="flex items-center justify-between gap-3"
-            >
-              <UCheckbox
-                v-model="projectAssigned[project.id]"
-                :label="project.name"
-              />
-              <USelect
-                v-model="projectRoleIds[project.id]"
-                :items="projectRoleOptions"
-                :disabled="projectAssigned[project.id] !== true"
-                size="sm"
-                class="w-40"
-              />
+        <template v-if="step === 1">
+          <UFormField name="name" label="Name" required>
+            <UInput
+              v-model="state.name"
+              class="w-full"
+              placeholder="Enter name"
+            />
+          </UFormField>
+          <UFormField name="email" label="Email" required>
+            <UInput
+              v-model="state.email"
+              type="email"
+              class="w-full"
+              placeholder="Enter email address"
+            />
+          </UFormField>
+          <UFormField name="password" :label="props.user === null ? 'Password' : 'New password'" :required="props.user === null">
+            <UInput
+              v-model="state.password"
+              type="password"
+              class="w-full"
+              :placeholder="props.user === null ? 'Enter password' : 'Enter new password'"
+            />
+          </UFormField>
+          <UFormField
+            name="password_confirmation"
+            :label="props.user === null ? 'Confirm password' : 'Confirm new password'"
+            :required="props.user === null"
+          >
+            <UInput
+              v-model="state.password_confirmation"
+              type="password"
+              class="w-full"
+              :placeholder="props.user === null ? 'Confirm password' : 'Confirm new password'"
+            />
+          </UFormField>
+        </template>
+        <template v-else>
+          <UFormField label="User type" required>
+            <USelect
+              v-model="userType"
+              :items="userTypeOptions"
+              class="w-full"
+            />
+          </UFormField>
+          <UFormField
+            v-if="userType === 'tenant'"
+            name="role_id"
+            label="Tenant role"
+            required
+          >
+            <USelect
+              v-model="state.role_id"
+              :items="roleOptions"
+              class="w-full"
+              placeholder="Choose a role"
+            />
+          </UFormField>
+          <UFormField
+            v-if="userType === 'project'"
+            label="Projects"
+          >
+            <div class="flex flex-col gap-2">
+              <div
+                v-for="project in props.projects"
+                :key="project.id"
+                class="flex items-center justify-between gap-3"
+              >
+                <UCheckbox
+                  v-model="projectAssigned[project.id]"
+                  :label="project.name"
+                />
+                <USelect
+                  v-model="projectRoleIds[project.id]"
+                  :items="projectRoleOptions"
+                  :disabled="projectAssigned[project.id] !== true"
+                  class="w-40"
+                />
+              </div>
             </div>
-          </div>
-        </UFormField>
-        <UFormField name="password" :label="props.user === null ? 'Password' : 'New password'" :required="props.user === null">
-          <UInput
-            v-model="state.password"
-            type="password"
-            class="w-full"
-            :placeholder="props.user === null ? 'Enter password' : 'Enter new password'"
-          />
-        </UFormField>
-        <UFormField
-          name="password_confirmation"
-          :label="props.user === null ? 'Confirm password' : 'Confirm new password'"
-          :required="props.user === null"
-        >
-          <UInput
-            v-model="state.password_confirmation"
-            type="password"
-            class="w-full"
-            :placeholder="props.user === null ? 'Confirm password' : 'Confirm new password'"
-          />
-        </UFormField>
+          </UFormField>
+        </template>
         <div class="flex justify-end gap-2">
           <UButton
             label="Cancel"

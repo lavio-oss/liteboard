@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import type { NavigationMenuItem, TableColumn } from '@nuxt/ui'
 import { ApiError } from '~/composables/useApi'
 import { useAdmin } from '~/composables/useAdmin'
 import { useTenantContext } from '~/composables/useTenantContext'
@@ -11,7 +11,6 @@ definePageMeta({
 
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
-const UCheckbox = resolveComponent('UCheckbox')
 const toast = useToast()
 const { activeTenant, loadTenants } = useTenantContext()
 const { createRole, deleteRole, loadPermissionDefinitions, loadRoles, updateRole } = useAdmin()
@@ -82,13 +81,13 @@ const roleColumns: TableColumn<Role>[] = [
   },
   {
     accessorKey: 'scope',
-    header: 'Applies to',
+    header: sortableHeader('Applies to'),
     cell: ({ row }) => h(UBadge, { color: row.original.scope === 'tenant' ? 'warning' : 'info', variant: 'subtle', class: 'capitalize' }, () => row.original.scope)
   },
   {
     id: 'type',
-    header: 'Type',
-    cell: ({ row }) => row.original.is_system ? 'System' : 'Custom'
+    accessorFn: role => role.is_system ? 'System' : 'Custom',
+    header: sortableHeader('Type')
   },
   {
     id: 'permissions',
@@ -107,7 +106,9 @@ const roleColumns: TableColumn<Role>[] = [
   },
   {
     id: 'actions',
-    cell: ({ row }) => h('div', { class: 'flex justify-end gap-1' }, [
+    header: 'Actions',
+    meta: { class: { th: 'text-center', td: 'text-center' } },
+    cell: ({ row }) => h('div', { class: 'flex justify-center gap-1' }, [
       h(UButton, {
         'icon': 'i-lucide-shield-check',
         'color': 'neutral',
@@ -170,43 +171,67 @@ function toggleColumn(permissions: PermissionDefinition[], checked: boolean): vo
     : draftPermissions.value.filter(key => !keys.includes(key) || locked.includes(key))
 }
 
-// Rows are slots: row N holds the Nth permission of every resource column.
-const permissionRows = computed(() => Array.from(
-  { length: Math.max(0, ...permissionColumns.value.map(column => column.permissions.length)) },
-  (_, index) => index
-))
-const permissionTableColumns = computed<TableColumn<number>[]>(() => {
-  const selected = new Set(selectedRole.value?.is_owner ? assignablePermissions.value.map(permission => permission.key) : draftPermissions.value)
-  const locked = selectedRole.value?.locked_permissions ?? []
+const resourceIcons: Record<string, string> = {
+  tenant: 'i-lucide-building-2',
+  user: 'i-lucide-users',
+  role: 'i-lucide-shield-check',
+  project: 'i-lucide-folder-kanban',
+  system: 'i-lucide-server-cog',
+  device: 'i-lucide-cpu',
+  asset: 'i-lucide-boxes',
+  device_profile: 'i-lucide-file-sliders',
+  alert_rule: 'i-lucide-bell-ring',
+  alert: 'i-lucide-triangle-alert',
+  webhook: 'i-lucide-webhook'
+}
+const resourceIcon = (resource: string): string => resourceIcons[resource] ?? 'i-lucide-shield'
 
-  return permissionColumns.value.map(column => ({
-    id: column.resource,
-    header: () => {
-      const checkedCount = column.permissions.filter(permission => selected.has(permission.key)).length
+const permissionSearch = ref('')
+const permissionTab = ref('all')
+const selectedPermissionKeys = computed(() => new Set(selectedRole.value?.is_owner
+  ? assignablePermissions.value.map(permission => permission.key)
+  : draftPermissions.value))
 
-      return h('div', { class: 'flex items-center gap-2 capitalize' }, [
-        h(UCheckbox, {
-          'modelValue': checkedCount === column.permissions.length ? true : checkedCount === 0 ? false : 'indeterminate',
-          'disabled': !isEditable.value,
-          'onUpdate:modelValue': (checked: boolean | 'indeterminate') => toggleColumn(column.permissions, checked === true)
-        }),
-        column.resource.replace('_', ' ')
-      ])
-    },
-    cell: ({ row }) => {
-      const permission = column.permissions[row.original]
-
-      return permission === undefined
-        ? null
-        : h(UCheckbox, {
-            'label': permission.key.slice(column.resource.length + 1),
-            'modelValue': selected.has(permission.key),
-            'disabled': !isEditable.value || locked.includes(permission.key),
-            'onUpdate:modelValue': (checked: boolean | 'indeterminate') => togglePermission(permission.key, checked === true)
-          })
-    }
-  }))
+watch(permissionsOpen, (isOpen) => {
+  if (isOpen) {
+    permissionSearch.value = ''
+    permissionTab.value = 'all'
+  }
 })
+
+const permissionTabs = computed<NavigationMenuItem[][]>(() => [[
+  { label: 'All', icon: 'i-lucide-layout-grid', active: permissionTab.value === 'all', onSelect: () => { permissionTab.value = 'all' } },
+  ...permissionColumns.value.map(({ resource }) => ({
+    label: resource.replace('_', ' '),
+    icon: resourceIcon(resource),
+    class: 'capitalize',
+    active: permissionTab.value === resource,
+    onSelect: () => { permissionTab.value = resource }
+  }))
+]])
+
+const visiblePermissionGroups = computed(() => {
+  const needle = permissionSearch.value.trim().toLocaleLowerCase()
+
+  return permissionColumns.value
+    .filter(({ resource }) => permissionTab.value === 'all' || permissionTab.value === resource)
+    .map(({ resource, permissions }) => ({
+      resource,
+      permissions: permissions.filter(permission => permission.key.toLocaleLowerCase().includes(needle))
+    }))
+    .filter(group => group.permissions.length > 0)
+})
+
+function isGroupFullySelected(permissions: PermissionDefinition[]): boolean {
+  return permissions.every(permission => selectedPermissionKeys.value.has(permission.key))
+}
+
+const visiblePermissions = computed(() => visiblePermissionGroups.value.flatMap(group => group.permissions))
+const allVisibleSelected = computed(() => isGroupFullySelected(visiblePermissions.value))
+
+function toggleVisiblePermissions(): void {
+  toggleColumn(visiblePermissions.value, !allVisibleSelected.value)
+}
 
 function notifyError(error: unknown, title: string): void {
   if (!(error instanceof ApiError)) {
@@ -349,28 +374,80 @@ async function confirmDelete(): Promise<void> {
           title="Your role does not include role management"
         />
 
-        <div class="overflow-x-auto">
-          <AppTable
-            :data="permissionRows"
-            :columns="permissionTableColumns"
-            :ui="tableUi"
-            class="min-w-max"
+        <div class="flex items-center justify-between gap-2">
+          <UInput
+            v-model="permissionSearch"
+            icon="i-lucide-search"
+            placeholder="Search permission..."
+            class="w-64"
           />
+          <UButton
+            :icon="allVisibleSelected ? 'i-lucide-list-x' : 'i-lucide-list-checks'"
+            :label="allVisibleSelected ? 'Deselect all' : 'Select all'"
+            color="neutral"
+            variant="subtle"
+            class="shrink-0"
+            :disabled="!isEditable || visiblePermissionGroups.length === 0"
+            @click="toggleVisiblePermissions"
+          />
+        </div>
+
+        <UNavigationMenu :items="permissionTabs" highlight class="-mx-1 overflow-x-auto" />
+
+        <div class="flex max-h-[55vh] flex-col gap-5 overflow-y-auto">
+          <section v-for="group in visiblePermissionGroups" :key="group.resource">
+            <div class="mb-2 flex items-center justify-between border-b border-default pb-2">
+              <h3 class="flex items-center gap-2 text-sm font-semibold capitalize text-highlighted">
+                <UIcon :name="resourceIcon(group.resource)" class="size-4 text-muted" />
+                {{ group.resource.replace('_', ' ') }}
+              </h3>
+              <UButton
+                :label="isGroupFullySelected(group.permissions) ? 'Deselect group' : 'Select group'"
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                :disabled="!isEditable"
+                @click="toggleColumn(group.permissions, !isGroupFullySelected(group.permissions))"
+              />
+            </div>
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <label
+                v-for="permission in group.permissions"
+                :key="permission.key"
+                class="flex items-start gap-3 rounded-lg border p-3 transition-colors"
+                :class="[
+                  selectedPermissionKeys.has(permission.key) ? 'border-primary/50 bg-primary/10' : 'border-default',
+                  isEditable && !selectedRole?.locked_permissions.includes(permission.key) ? 'cursor-pointer' : 'cursor-not-allowed opacity-80'
+                ]"
+              >
+                <UCheckbox
+                  :model-value="selectedPermissionKeys.has(permission.key)"
+                  :disabled="!isEditable || selectedRole?.locked_permissions.includes(permission.key)"
+                  @update:model-value="togglePermission(permission.key, $event === true)"
+                />
+                <span class="min-w-0">
+                  <span class="block truncate text-sm font-medium capitalize text-highlighted">
+                    {{ permission.key.slice(group.resource.length + 1).replace('.', ' ') }}
+                  </span>
+                  <span class="block truncate text-xs text-muted">{{ permission.key }}</span>
+                </span>
+              </label>
+            </div>
+          </section>
+          <p v-if="visiblePermissionGroups.length === 0" class="py-6 text-center text-sm text-muted">
+            No matching permission.
+          </p>
         </div>
       </div>
     </template>
 
     <template #footer>
       <div class="flex w-full items-center gap-2">
+        <span class="text-sm text-muted">
+          Selected: {{ selectedPermissionKeys.size }} / {{ assignablePermissions.length }} permissions
+        </span>
         <UButton
-          v-if="isEditable && selectedRole !== null && !selectedRole.is_system"
-          label="Delete role"
-          color="error"
-          variant="subtle"
-          @click="deleteOpen = true"
-        />
-        <UButton
-          label="Close"
+          label="Cancel"
           color="neutral"
           variant="subtle"
           class="ml-auto"
@@ -378,7 +455,7 @@ async function confirmDelete(): Promise<void> {
         />
         <UButton
           v-if="isEditable"
-          label="Save permissions"
+          label="Save"
           :disabled="!isDirty"
           :loading="saving"
           @click="savePermissions"
@@ -406,6 +483,7 @@ async function confirmDelete(): Promise<void> {
           <UInput
             v-model="createState.name"
             class="w-full"
+            placeholder="Enter role name"
           />
         </UFormField>
         <UFormField
@@ -417,6 +495,7 @@ async function confirmDelete(): Promise<void> {
             v-model="createState.scope"
             :items="[{ label: 'Project members', value: 'project' }, { label: 'Tenant members', value: 'tenant' }]"
             class="w-full"
+            placeholder="Choose who the role applies to"
           />
         </UFormField>
         <div class="flex justify-end gap-2">
