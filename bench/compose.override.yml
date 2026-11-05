@@ -1,0 +1,8 @@
+# Same resource limits as the first benchmark, so results stay comparable. No config overrides: the repo's own mosquitto.conf is what gets measured.
+services:
+  postgres:
+    cpus: 2
+    mem_limit: 1g
+  telemetry-service:
+    cpus: 2
+    mem_limit: 1g

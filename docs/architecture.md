@@ -7,7 +7,7 @@ Tài liệu này mô tả các thành phần, luồng dữ liệu, cổng và c�
 - `web/` là dashboard Nuxt; `backend/` là Laravel API và nơi xử lý đăng nhập, phân quyền, tenant/project và dữ liệu nghiệp vụ.
 - Thiết bị gửi MQTT qua **TLS cổng `8883`** vào Mosquitto. Cổng plaintext `1883` là playground do service `mosquitto-plain` phục vụ: cùng Access Token và ACL, token đi không mã hóa, và chỉ thiết bị có `allow_plaintext` mới đăng nhập được. WebSocket `9001` không được mở.
 - `telemetry-service/` nhận telemetry từ broker và cập nhật trạng thái online/last-seen của Device. Service cũng lưu sample, latest value và outcome vào PostgreSQL, kiểm tra theo Profile Version và khử trùng lặp (xem [telemetry-flow](./spec/industrial-telemetry/current/telemetry-flow.md)).
-- PostgreSQL lưu dữ liệu ứng dụng; Redis được Mosquitto dùng cho cache xác thực/ACL với TTL 5 giây.
+- PostgreSQL lưu dữ liệu ứng dụng; Redis được Mosquitto dùng cho cache xác thực/ACL với TTL 30 giây.
 - Thiết bị đăng nhập MQTT bằng Access Token. Provisioning tự tạo Device ở trạng thái chờ duyệt; broker chỉ cho Device kết nối sau khi được Project duyệt.
 
 ## Các thành phần

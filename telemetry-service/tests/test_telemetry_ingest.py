@@ -256,6 +256,46 @@ class PostgresTelemetryIngestorTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual({'temperature': 40, 'mode': 'auto'}, result.sample.values)
         self.assertIn('schema_validation_skipped', [stage['stage'] for stage in result.outcome.stages])
 
+    async def test_empty_profile_ignores_client_occurred_at_and_schema_version(self) -> None:
+        connection = _FakeConnection(device={
+            'device_profile_version_id': UUID(PROFILE_VERSION_ID),
+            'version': 1,
+            'definition': '{"strict_mode": false, "fields": []}',
+            'received_at': RECEIVED_AT,
+        })
+
+        result = await PostgresTelemetryIngestor(_FakePool(connection)).ingest(
+            project_id=PROJECT_ID,
+            device_id=DEVICE_ID,
+            raw=b'{"message_id":"m-1","schema_version":9,"occurred_at":"2030-01-01T00:00:00Z","temperature":40}',
+            retained=False,
+            received_wall=RECEIVED_AT,
+        )
+
+        self.assertEqual('persisted', result.status)
+        self.assertEqual(RECEIVED_AT, result.sample.occurred_at)
+        self.assertEqual({'temperature': 40}, result.sample.values)
+
+    async def test_profile_with_fields_rejects_far_future_occurred_at_and_wrong_schema_version(self) -> None:
+        for patch_, code in (
+            (('"occurred_at":"2026-10-11T03:59:00Z"', '"occurred_at":"2030-01-01T00:00:00Z"'), 'occurred_at_too_far_in_future'),
+            (('"schema_version":1', '"schema_version":9'), 'schema_version_mismatch'),
+        ):
+            with self.subTest(code=code):
+                raw = RAW.replace(patch_[0].encode(), patch_[1].encode())
+                self.assertNotEqual(RAW, raw)
+
+                result = await PostgresTelemetryIngestor(_FakePool(_FakeConnection())).ingest(
+                    project_id=PROJECT_ID,
+                    device_id=DEVICE_ID,
+                    raw=raw,
+                    retained=False,
+                    received_wall=RECEIVED_AT,
+                )
+
+                self.assertEqual('rejected', result.status)
+                self.assertIn(code, [reason.code for reason in result.reasons])
+
     async def test_profileless_wrapped_values_deduplicate_client_ids_by_raw_payload_hash(self) -> None:
         raw = b'{"message_id":"client-message","values":{"temperature":40}}'
         inspection = inspect_unprofiled_telemetry(raw, received_at=RECEIVED_AT)

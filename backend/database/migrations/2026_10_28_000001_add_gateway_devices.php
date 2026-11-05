@@ -38,31 +38,26 @@ WHERE dc.status = 'active'
   AND t.status = 'active'
 SQL);
 
+        // One join of v_mqtt_users against a constant suffix list, instead of 8 UNION ALL branches that each re-join it.
         DB::statement(<<<'SQL'
 CREATE VIEW v_mqtt_acls AS
-SELECT u.token_hash, 'liteboard/' || u.project_id || '/devices/' || u.device_id || '/telemetry' AS topic, 2 AS rw
+SELECT
+    u.token_hash,
+    'liteboard/' || u.project_id || '/devices/' || u.device_id || '/' || s.suffix AS topic,
+    s.rw,
+    u.device_id
 FROM v_mqtt_users u
-UNION ALL
-SELECT u.token_hash, 'liteboard/' || u.project_id || '/devices/' || u.device_id || '/heartbeat' AS topic, 2 AS rw
-FROM v_mqtt_users u
-UNION ALL
-SELECT u.token_hash, 'liteboard/' || u.project_id || '/devices/' || u.device_id || '/commands/ack' AS topic, 2 AS rw
-FROM v_mqtt_users u
-UNION ALL
-SELECT u.token_hash, 'liteboard/' || u.project_id || '/devices/' || u.device_id || '/commands' AS topic, 1 AS rw
-FROM v_mqtt_users u
-UNION ALL
-SELECT u.token_hash, 'liteboard/' || u.project_id || '/devices/' || u.device_id || '/commands' AS topic, 4 AS rw
-FROM v_mqtt_users u
-UNION ALL
-SELECT u.token_hash, 'liteboard/' || u.project_id || '/devices/' || u.device_id || '/gateway/connect' AS topic, 2 AS rw
-FROM v_mqtt_users u WHERE u.is_gateway
-UNION ALL
-SELECT u.token_hash, 'liteboard/' || u.project_id || '/devices/' || u.device_id || '/gateway/telemetry' AS topic, 2 AS rw
-FROM v_mqtt_users u WHERE u.is_gateway
-UNION ALL
-SELECT u.token_hash, 'liteboard/' || u.project_id || '/devices/' || u.device_id || '/gateway/disconnect' AS topic, 2 AS rw
-FROM v_mqtt_users u WHERE u.is_gateway
+CROSS JOIN (
+    SELECT 'telemetry' AS suffix, 2 AS rw
+    UNION ALL SELECT 'heartbeat', 2
+    UNION ALL SELECT 'commands/ack', 2
+    UNION ALL SELECT 'commands', 1
+    UNION ALL SELECT 'commands', 4
+    UNION ALL SELECT 'gateway/connect', 2
+    UNION ALL SELECT 'gateway/telemetry', 2
+    UNION ALL SELECT 'gateway/disconnect', 2
+) s
+WHERE s.suffix NOT LIKE 'gateway/%' OR u.is_gateway
 SQL);
 
         if (DB::getDriverName() === 'pgsql') {

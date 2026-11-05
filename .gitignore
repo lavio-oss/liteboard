@@ -22,3 +22,5 @@ simulator/state/*.json
 web/public/mqtt/ca.crt
 web/public/mqtt/ca.txt
 web/public/provisioning/ca.crt
+
+bench/results/

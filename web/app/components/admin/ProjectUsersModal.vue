@@ -12,27 +12,16 @@ export interface ProjectMemberRow {
   name: string
   email: string
   role_id: string
+  created_at: string | null
   is_assigned: boolean
 }
 
-const props = withDefaults(defineProps<{
+const props = defineProps<{
   tenantId: string | null
   project: Project | null
-  canManageAccount?: boolean
-  canDeleteAccount?: boolean
-}>(), {
-  canManageAccount: false,
-  canDeleteAccount: false
-})
+}>()
 
 const open = defineModel<boolean>('open', { required: true })
-
-type AccountForm = {
-  name: string
-  email: string
-  password: string
-  password_confirmation: string
-}
 
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
@@ -41,21 +30,18 @@ const toast = useToast()
 const table = useTemplateRef('table')
 const {
   attachProjectUser,
-  deleteTenantUser,
   loadAvailableProjectUsers,
   loadProjectUsers,
   loadRoles,
   removeProjectUser,
-  updateProjectUser,
-  updateTenantUser
+  updateProjectUser
 } = useAdmin()
 
 const allUsers = ref<ProjectMemberRow[]>([])
 const loading = ref(false)
 const search = ref('')
-const roleFilter = ref<string>('all')
+const roleFilter = ref<string>('assigned')
 const columnVisibility = ref()
-const columnPinning = ref({ right: ['actions'] })
 const pagination = ref({ pageIndex: 0, pageSize: 10 })
 const pendingUserIds = ref<Set<string>>(new Set())
 
@@ -65,27 +51,8 @@ const editRoleState = reactive<{ role_id: string }>({
   role_id: ''
 })
 
-const editAccountOpen = ref(false)
-const editAccountLoading = ref(false)
-const deleteAccountOpen = ref(false)
-const deleteAccountLoading = ref(false)
 const selectedUser = ref<ProjectMemberRow | null>(null)
 
-const accountSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters').max(255, 'Name is too long'),
-  email: z.string().email('Enter a valid email address'),
-  password: z.string().refine(value => value === '' || value.length >= 8, 'Password must be at least 8 characters'),
-  password_confirmation: z.string()
-}).refine(value => value.password === value.password_confirmation, {
-  message: 'Passwords do not match',
-  path: ['password_confirmation']
-})
-const accountState = reactive<AccountForm>({
-  name: '',
-  email: '',
-  password: '',
-  password_confirmation: ''
-})
 const projectRoles = ref<Role[]>([])
 const roleOptions = computed(() => projectRoles.value.map(role => ({ label: role.name, value: role.id })))
 // New assignments start with the least privileged project role.
@@ -157,6 +124,7 @@ async function reload(): Promise<void> {
       name: user.name,
       email: user.email,
       role_id: initialRoleId,
+      created_at: user.created_at,
       is_assigned: false
     }))
 
@@ -165,6 +133,7 @@ async function reload(): Promise<void> {
       name: user.name,
       email: user.email,
       role_id: user.role_id,
+      created_at: user.created_at,
       is_assigned: true
     })))
 
@@ -255,72 +224,6 @@ async function submitRole(event: FormSubmitEvent<{ role_id: string }>): Promise<
   }
 }
 
-function openAccountEdit(user: ProjectMemberRow): void {
-  selectedUser.value = user
-  accountState.name = user.name
-  accountState.email = user.email
-  accountState.password = ''
-  accountState.password_confirmation = ''
-  editAccountOpen.value = true
-}
-
-async function submitAccount(event: FormSubmitEvent<AccountForm>): Promise<void> {
-  if (props.tenantId === null || selectedUser.value === null) {
-    throw new Error('A user is required before updating the account.')
-  }
-
-  editAccountLoading.value = true
-
-  try {
-    const payload = event.data.password === ''
-      ? { name: event.data.name, email: event.data.email }
-      : {
-          name: event.data.name,
-          email: event.data.email,
-          password: event.data.password,
-          password_confirmation: event.data.password_confirmation
-        }
-
-    await updateTenantUser(props.tenantId, selectedUser.value.id, payload)
-    selectedUser.value.name = event.data.name
-    selectedUser.value.email = event.data.email
-    allUsers.value = [...allUsers.value]
-    editAccountOpen.value = false
-    toast.add({ title: 'Account updated', description: 'The account has been saved.', color: 'success' })
-  } catch (error: unknown) {
-    if (!(error instanceof ApiError)) {
-      throw error
-    }
-
-    toast.add({ title: 'Unable to update account', description: error.message, color: 'error' })
-  } finally {
-    editAccountLoading.value = false
-  }
-}
-
-async function confirmDeleteAccount(): Promise<void> {
-  if (props.tenantId === null || selectedUser.value === null) {
-    throw new Error('A user is required before deletion.')
-  }
-
-  deleteAccountLoading.value = true
-
-  try {
-    await deleteTenantUser(props.tenantId, selectedUser.value.id)
-    await reload()
-    deleteAccountOpen.value = false
-    toast.add({ title: 'Member removed', description: 'The person has been removed from the tenant.', color: 'success' })
-  } catch (error: unknown) {
-    if (!(error instanceof ApiError)) {
-      throw error
-    }
-
-    toast.add({ title: 'Unable to delete account', description: error.message, color: 'error' })
-  } finally {
-    deleteAccountLoading.value = false
-  }
-}
-
 const columns: TableColumn<ProjectMemberRow>[] = [
   {
     id: 'select',
@@ -375,10 +278,6 @@ const columns: TableColumn<ProjectMemberRow>[] = [
       }
 
       return h('div', { class: 'flex items-center gap-1.5' }, [
-        h(UBadge, {
-          color: role.is_system ? 'primary' : 'neutral',
-          variant: 'subtle'
-        }, () => role.name),
         h(UButton, {
           'icon': 'i-lucide-pencil-line',
           'color': 'neutral',
@@ -386,36 +285,18 @@ const columns: TableColumn<ProjectMemberRow>[] = [
           'size': 'xs',
           'aria-label': `Edit role for ${row.original.name}`,
           'onClick': () => openRoleEdit(row.original)
-        })
+        }),
+        h(UBadge, {
+          color: role.is_system ? 'primary' : 'neutral',
+          variant: 'subtle'
+        }, () => role.name)
       ])
     }
   },
   {
-    id: 'actions',
-    header: 'Actions',
-    cell: ({ row }) => h('div', { class: 'flex justify-end gap-1' }, [
-      ...(props.canManageAccount
-        ? [h(UButton, {
-            'icon': 'i-lucide-user-pen',
-            'color': 'neutral',
-            'variant': 'ghost',
-            'aria-label': `Edit account for ${row.original.name}`,
-            'onClick': () => openAccountEdit(row.original)
-          })]
-        : []),
-      ...(props.canDeleteAccount
-        ? [h(UButton, {
-            'icon': 'i-lucide-trash-2',
-            'color': 'error',
-            'variant': 'ghost',
-            'aria-label': `Delete account for ${row.original.name}`,
-            'onClick': () => {
-              selectedUser.value = row.original
-              deleteAccountOpen.value = true
-            }
-          })]
-        : [])
-    ])
+    accessorKey: 'created_at',
+    header: 'Created',
+    cell: ({ row }) => h('span', { class: 'text-muted' }, row.original.created_at === null ? '—' : new Date(row.original.created_at).toLocaleDateString())
   }
 ]
 
@@ -453,7 +334,6 @@ watch(
         <AppTable
           ref="table"
           v-model:column-visibility="columnVisibility"
-          v-model:column-pinning="columnPinning"
           v-model:pagination="pagination"
           :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
           :data="filteredUsers"
@@ -463,8 +343,8 @@ watch(
             base: 'border-separate border-spacing-0',
             thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
             tbody: '[&>tr]:last:[&>td]:border-b-0',
-            th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r data-[pinned=right]:min-w-max data-[pinned=right]:whitespace-nowrap data-[pinned=right]:border-l data-[pinned=right]:bg-elevated data-[pinned=right]:z-20',
-            td: 'border-b border-default data-[pinned=right]:min-w-max data-[pinned=right]:whitespace-nowrap data-[pinned=right]:border-l data-[pinned=right]:bg-default data-[pinned=right]:z-10',
+            th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
+            td: 'border-b border-default',
             separator: 'h-0'
           }"
         />
@@ -512,46 +392,4 @@ watch(
       </UForm>
     </template>
   </UModal>
-
-  <UModal v-model:open="editAccountOpen" title="Edit account">
-    <template #body>
-      <UForm
-        :schema="accountSchema"
-        :state="accountState"
-        class="space-y-4"
-        :disabled="editAccountLoading"
-        @submit="submitAccount"
-      >
-        <UFormField name="name" label="Name" required>
-          <UInput v-model="accountState.name" class="w-full" />
-        </UFormField>
-        <UFormField name="email" label="Email" required>
-          <UInput v-model="accountState.email" type="email" class="w-full" />
-        </UFormField>
-        <UFormField name="password" label="New password">
-          <UInput v-model="accountState.password" type="password" class="w-full" />
-        </UFormField>
-        <UFormField name="password_confirmation" label="Confirm new password">
-          <UInput v-model="accountState.password_confirmation" type="password" class="w-full" />
-        </UFormField>
-        <div class="flex justify-end gap-2">
-          <UButton
-            label="Cancel"
-            color="neutral"
-            variant="subtle"
-            @click="editAccountOpen = false"
-          />
-          <UButton label="Save account" type="submit" :loading="editAccountLoading" />
-        </div>
-      </UForm>
-    </template>
-  </UModal>
-
-  <ConfirmDeleteModal
-    v-model:open="deleteAccountOpen"
-    :title="`Delete ${selectedUser?.name ?? 'user'} account`"
-    description="This removes the person from the tenant and all its projects. The account is deleted when no other tenant uses it."
-    :loading="deleteAccountLoading"
-    @confirm="confirmDeleteAccount"
-  />
 </template>

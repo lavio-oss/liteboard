@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 import asyncpg
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 
+from app.broker_metrics import BrokerMetrics
 from app.ingress.gateway import GatewayHandler
 from app.ingress.mqtt_subscriber import MqttSubscriber
 from app.ingress.sub_device_registry import SubDeviceRegistry
@@ -21,6 +23,19 @@ from app.storage.presence import PostgresPresenceWriter
 from app.storage.presence_monitor import PostgresDevicePresenceMonitor
 from app.storage.rule_evaluation import DEFAULT_POLL_SECONDS, PostgresRuleEvaluator
 from app.storage.telemetry_ingest import PostgresTelemetryIngestor
+
+
+LOGGER = logging.getLogger(__name__)
+
+
+async def _run_auth_probe(broker_metrics: BrokerMetrics, db_pool: asyncpg.Pool) -> None:
+    interval = float(os.getenv('AUTH_PROBE_SECONDS', '30'))
+    while True:
+        try:
+            await broker_metrics.probe(db_pool)
+        except Exception:
+            LOGGER.exception('auth_probe_failed')
+        await asyncio.sleep(interval)
 
 
 @asynccontextmanager
@@ -53,6 +68,8 @@ async def lifespan(application: FastAPI):
         poll_seconds=float(os.getenv('RULE_EVALUATION_POLL_SECONDS', str(DEFAULT_POLL_SECONDS))),
     )
 
+    broker_metrics = BrokerMetrics()
+    application.state.broker_metrics = broker_metrics
     telemetry_ingestor = PostgresTelemetryIngestor(db_pool)
     mqtt_subscriber = MqttSubscriber(
         heartbeat_pipeline=[decode_json, MarkPresence(PostgresPresenceWriter(db_pool), presence_hub)],
@@ -65,20 +82,23 @@ async def lifespan(application: FastAPI):
         ),
         realtime_hub=realtime_hub,
         presence_hub=presence_hub,
+        broker_metrics=broker_metrics,
     )
     application.state.mqtt_subscriber = mqtt_subscriber
 
     presence_monitor_task: asyncio.Task[None] | None = None
     rule_evaluator_task: asyncio.Task[None] | None = None
+    probe_task: asyncio.Task[None] | None = None
     try:
         await presence_monitor.refresh()
         presence_monitor_task = asyncio.create_task(presence_monitor.run())
         rule_evaluator_task = asyncio.create_task(rule_evaluator.run())
+        probe_task = asyncio.create_task(_run_auth_probe(broker_metrics, db_pool))
         await mqtt_subscriber.connect_and_subscribe()
         application.state.mqtt_client = mqtt_subscriber.client
         yield
     finally:
-        for task in (presence_monitor_task, rule_evaluator_task):
+        for task in (presence_monitor_task, rule_evaluator_task, probe_task):
             if task is not None:
                 task.cancel()
                 try:
@@ -92,6 +112,11 @@ async def lifespan(application: FastAPI):
 app = FastAPI(title='LiteBoard Telemetry Service', version='0.1.0', lifespan=lifespan)
 app.add_api_websocket_route('/ws/telemetry', telemetry_stream)
 app.add_api_websocket_route('/ws/device-presence', device_presence_stream)
+
+
+@app.get('/metrics')
+async def metrics(request: Request) -> PlainTextResponse:
+    return PlainTextResponse(request.app.state.broker_metrics.render())
 
 
 @app.get('/health')

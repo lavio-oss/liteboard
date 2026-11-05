@@ -129,14 +129,16 @@ export const projectUserSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   email: z.string().email(),
-  role_id: z.string().uuid()
+  role_id: z.string().uuid(),
+  created_at: z.string().nullable()
 })
 
 export const availableProjectUserSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
   email: z.string().email(),
-  tenant_role_id: z.string().uuid()
+  tenant_role_id: z.string().uuid(),
+  created_at: z.string().nullable()
 })
 
 export const projectsResponseSchema = z.object({

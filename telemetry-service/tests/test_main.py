@@ -10,7 +10,7 @@ from unittest.mock import ANY, AsyncMock, patch
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from app.main import app, health, lifespan, ready
+from app.main import app, health, lifespan, metrics, ready
 from app.pipeline.stages import decode_json
 
 
@@ -49,6 +49,15 @@ class EndpointCompatibilityTest(unittest.IsolatedAsyncioTestCase):
         body = json.loads(response.body)
         self.assertEqual('not_ready', body['status'])
         self.assertEqual({'postgres': False, 'mqtt': False}, body['dependencies'])
+
+    async def test_metrics_renders_the_broker_metrics_as_plain_text(self) -> None:
+        body = 'liteboard_ingest_alert{reason="x"} 0\n'
+        request = _request(broker_metrics=SimpleNamespace(render=lambda: body))
+
+        response = await metrics(request)
+
+        self.assertEqual(body.encode(), response.body)
+        self.assertTrue(response.media_type.startswith('text/plain'))
 
     def test_health_and_ready_remain_get_routes(self) -> None:
         routes = {
@@ -120,6 +129,7 @@ class LifespanCompatibilityTest(unittest.IsolatedAsyncioTestCase):
             patch('app.main.PostgresTelemetryIngestor') as ingestor_factory,
             patch('app.main.PostgresRuleEvaluator', return_value=FakeRuleEvaluator()) as rule_evaluator_factory,
             patch('app.main.MqttSubscriber', return_value=subscriber) as subscriber_factory,
+            patch('app.main.BrokerMetrics.probe', new=AsyncMock()),
         ):
             async with lifespan(application):
                 self.assertIs(application.state.db_pool, pool)
@@ -160,8 +170,9 @@ class LifespanCompatibilityTest(unittest.IsolatedAsyncioTestCase):
             gateway_handler=ANY,
             realtime_hub=ANY,
             presence_hub=ANY,
+            broker_metrics=ANY,
         )
 
 
-def _request(*, db_pool: object, mqtt_subscriber: object) -> SimpleNamespace:
-    return SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(db_pool=db_pool, mqtt_subscriber=mqtt_subscriber)))
+def _request(*, db_pool: object = None, mqtt_subscriber: object = None, broker_metrics: object = None) -> SimpleNamespace:
+    return SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(db_pool=db_pool, mqtt_subscriber=mqtt_subscriber, broker_metrics=broker_metrics)))

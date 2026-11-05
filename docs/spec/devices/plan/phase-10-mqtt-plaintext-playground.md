@@ -37,7 +37,7 @@ Plugin `mosquitto-go-auth` giữ trạng thái toàn cục, nên một broker kh
 
 1. Biên dịch `AccessToken.ino` ở cả hai chế độ (`LB_MQTT_TLS 1` và `0`).
 2. Kiểm tra trên `1883`: Device chưa duyệt, credential đã revoke, và subscribe `commands` qua bridge (downlink) chưa thử.
-3. Khi tắt cờ, kết nối đang mở không bị ngắt: broker chỉ từ chối đăng nhập mới và chặn publish/subscribe theo ACL sau tối đa 5 giây.
+3. Khi tắt cờ, kết nối đang mở không bị ngắt: broker chỉ từ chối đăng nhập mới và chặn publish/subscribe theo ACL sau tối đa 30 giây.
 4. `mosquitto-plain` chưa có healthcheck (image không có `nc`, và anonymous bị từ chối). Bridge mất kết nối thì thiết bị vẫn đăng nhập được nhưng message không tới broker chính.
 5. Đo tải PostgreSQL khi bị dồn đăng nhập sai; cân nhắc giới hạn tốc độ theo IP ở firewall (làm chung với [Phase 8](./phase-8-quotas-and-rate-limiting.md)).
 6. Production: mở firewall `1883` nếu muốn dùng playground; đặt `MQTT_BRIDGE_PASSWORD` riêng, không dùng mặc định.

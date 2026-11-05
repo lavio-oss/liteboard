@@ -11,6 +11,7 @@ from uuid import UUID
 from gmqtt import Client as MQTTClient
 from gmqtt.mqtt.constants import MQTTv50
 
+from app.broker_metrics import SYS_TOPICS, BrokerMetrics
 from app.ingress.gateway import GATEWAY_ACTIONS, GatewayHandler
 from app.mqtt_tls import build_mqtt_ssl_context
 from app.pipeline.context import MessageContext
@@ -57,6 +58,7 @@ class MqttSubscriber:
         gateway_handler: GatewayHandler,
         realtime_hub: RealtimeHub,
         presence_hub: PresenceHub,
+        broker_metrics: BrokerMetrics | None = None,
     ) -> None:
         session_expiry_interval = int(os.getenv('MQTT_SESSION_EXPIRY_SECONDS', '2147483647'))
         receive_maximum = int(os.getenv('MQTT_RECEIVE_MAXIMUM', '20'))
@@ -70,6 +72,7 @@ class MqttSubscriber:
         self._gateway_handler = gateway_handler
         self._realtime_hub = realtime_hub
         self._presence_hub = presence_hub
+        self._broker_metrics = broker_metrics
         self._broadcast_records: set[asyncio.Task[None]] = set()
         self._is_connected = False
         self._reconnect_task: asyncio.Task[None] | None = None
@@ -109,6 +112,10 @@ class MqttSubscriber:
             return
 
         self._is_connected = True
+        if self._broker_metrics is not None:
+            # $SYS is not part of the persistent session; QoS 0 keeps it out of the broker queue it reports on.
+            for sys_topic in SYS_TOPICS:
+                client.subscribe(sys_topic, qos=0)
         if not session_present:
             client.subscribe(TELEMETRY_TOPIC, qos=1, retain_as_published=True)
             client.subscribe(HEARTBEAT_TOPIC, qos=1, retain_as_published=True)
@@ -130,6 +137,11 @@ class MqttSubscriber:
         _qos: int,
         properties: Mapping[str, Any] | None,
     ) -> int:
+        if topic.startswith('$SYS/'):
+            if self._broker_metrics is not None:
+                self._broker_metrics.observe_sys(topic, payload)
+            return SUCCESSFUL_PUBACK
+
         received_wall = datetime.now(timezone.utc)
         parsed = parse_device_topic(topic)
         if parsed is None:

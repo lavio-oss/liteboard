@@ -1,6 +1,6 @@
 # Mosquitto Setup
 
-The broker uses the `mosquitto-go-auth` image. Devices connect over **MQTT TLS on port `8883`**. Port `1883` is a plaintext playground served by a second broker, `mosquitto-plain` (config: `mosquitto-plain.conf`), with the same Access Token auth and ACLs; the token travels unencrypted. It accepts logins only for devices whose `devices.allow_plaintext` is true (the device credentials modal toggles it), effective within the 5 second auth cache, and bridges accepted device traffic to this TLS broker through the `plaintext-bridge` account. Internal accounts cannot log in on `1883`. The auth plugin keeps global state, so one broker cannot give two listeners different auth; there is no WebSocket `9001`. The broker authenticates Access Tokens and enforces per-topic ACLs through the `v_mqtt_users` and `v_mqtt_acls` views in PostgreSQL, with Redis as a cache (5 second TTL). Configuration lives in [infrastructure/mosquitto/](../../infrastructure/mosquitto/) (`mosquitto.conf`, `acls`, `generate-dev-certs.ps1`, and the Git-ignored `certs/`). Passwords for the internal accounts are never stored in Git: they are bcrypt-hashed from `.env` into `/tmp/mosquitto-passwords` on every container start.
+The broker uses the `mosquitto-go-auth` image. Devices connect over **MQTT TLS on port `8883`**. Port `1883` is a plaintext playground served by a second broker, `mosquitto-plain` (config: `mosquitto-plain.conf`), with the same Access Token auth and ACLs; the token travels unencrypted. It accepts logins only for devices whose `devices.allow_plaintext` is true (the device credentials modal toggles it), effective within the 30 second auth cache, and bridges accepted device traffic to this TLS broker through the `plaintext-bridge` account. Internal accounts cannot log in on `1883`. The auth plugin keeps global state, so one broker cannot give two listeners different auth; there is no WebSocket `9001`. The broker authenticates Access Tokens and enforces per-topic ACLs through the `v_mqtt_users` and `v_mqtt_acls` views in PostgreSQL, with Redis as a cache (30 second TTL). Configuration lives in [infrastructure/mosquitto/](../../infrastructure/mosquitto/) (`mosquitto.conf`, `acls`, `generate-dev-certs.ps1`, and the Git-ignored `certs/`). Passwords for the internal accounts are never stored in Git: they are bcrypt-hashed from `.env` into `/tmp/mosquitto-passwords` on every container start.
 
 ## Authentication and authorization
 
@@ -9,9 +9,9 @@ The broker runs with `allow_anonymous false` and evaluates two backends in order
 1. **`files`** (internal services, see `acls`): `telemetry-service` gets `readwrite` and `subscribe` on `liteboard/#`; `healthcheck` may only write to the `healthcheck` topic.
 2. **`postgres`** (Devices): the Device connects with `username = password = <ACCESS_TOKEN>`. Mosquitto hashes the username with SHA-256 and queries two views:
    - `v_mqtt_users` requires the Device, Project, Tenant and credential to be active and `approved`, and checks the password against `mqtt_password_hash` (bcrypt).
-   - `v_mqtt_acls` isolates topics per Device. Publish: `liteboard/{project_id}/devices/{device_id}/telemetry`, `.../heartbeat`, `.../commands/ack`. Subscribe: `.../commands`.
+   - `v_mqtt_acls` isolates topics per Device. Publish: `liteboard/{project_id}/devices/{device_id}/telemetry`, `.../heartbeat`, `.../commands/ack`. Subscribe: `.../commands`. Queries compare `token_hash` (`char(64)`) with `encode(...)::char(64)`; without the cast PostgreSQL compares as `text` and cannot use the unique index. The view is a single join of `v_mqtt_users` with a constant suffix list and exposes `device_id` so the plain listener does not re-join `v_mqtt_users`.
 
-Results are cached in Redis for 5 seconds, so a revoked or rotated credential loses access within 5 seconds. Clients verify the server certificate and hostname; client certificates (mTLS) are not required.
+Results are cached in Redis for 30 seconds, so a revoked, rotated or disabled credential (and the plaintext toggle) can keep working for up to 30 seconds. Clients verify the server certificate and hostname; client certificates (mTLS) are not required.
 
 The broker needs:
 
@@ -139,3 +139,17 @@ docker compose exec -T mosquitto mosquitto_sub `
 | Cannot read the certificate or key | Run the certificate script, or point the `MQTT_TLS_*` variables at readable files. |
 | Hostname verification fails | Add the name or IP you connect with to the SAN and set `MQTT_TLS_HOSTNAME` to match. Never disable verification. |
 | `.env` changes have no effect | `docker compose up -d --force-recreate mosquitto`. |
+
+## Monitoring dropped messages
+
+`telemetry-service` subscribes to two `$SYS` topics (read-only ACL in `infrastructure/mosquitto/acls`) and serves Prometheus text on `GET :8100/metrics`:
+
+| Metric | Meaning |
+|---|---|
+| `liteboard_broker_publish_dropped_total` | Messages the broker dropped (`$SYS/broker/publish/messages/dropped`). Counts since broker start. |
+| `liteboard_broker_store_messages` | Messages held by the broker, including queues (`$SYS/broker/store/messages/count`). Proxy for queue depth: Mosquitto 2.0 has no per-session queue metric. Capped per client by `max_queued_messages 1000`. |
+| `liteboard_auth_probe_seconds{query=auth\|acl}` | Wall time of the go-auth lookups run against PostgreSQL every `AUTH_PROBE_SECONDS` (30), planned on every call. It measures the database, not go-auth itself. |
+| `liteboard_ingest_alert{reason=messages_dropped\|queue_depth_high}` | `1` when the drop counter rose in the last `BROKER_DROP_ALERT_SECONDS` (300) or the stored count exceeds `BROKER_QUEUE_ALERT_THRESHOLD` (500). The service also logs `broker_messages_dropped` / `broker_queue_depth_high` at ERROR. |
+
+`$SYS` is published every `sys_interval` seconds (10 by default). Nothing scrapes `/metrics` yet: wire it to your monitoring and alert on `liteboard_ingest_alert == 1`.
+

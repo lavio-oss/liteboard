@@ -34,9 +34,6 @@ const deleteLoading = ref(false)
 const deletingProject = ref<Project | null>(null)
 const managingProject = ref<Project | null>(null)
 const projectUsersOpen = ref(false)
-const canManageAccounts = computed(() => tenants.value.some(
-  tenant => tenant.id === managingProject.value?.tenant_id && tenant.permissions.includes('user.manage')
-))
 
 const { data: response, status, error, refresh } = await useAsyncData('admin-projects', () => {
   return Promise.all(tenants.value.map(tenant => loadProjects(tenant.id)))
@@ -364,8 +361,6 @@ const errorMessage = computed(() => {
         v-model:open="projectUsersOpen"
         :tenant-id="managingProject?.tenant_id ?? null"
         :project="managingProject"
-        :can-manage-account="canManageAccounts"
-        :can-delete-account="canManageAccounts"
       />
     </template>
   </UDashboardPanel>

@@ -109,22 +109,22 @@ Envelope cần đủ bốn trường:
 - values: object JSON. Từng field được kiểm theo schema: type, required, strict mode, min/max và allowed values. Type được hỗ trợ trong validator là integer, float, string và boolean; boolean không được coi là integer. Unit là metadata schema; ingress hiện không tự đổi đơn vị.
 - Payload quá 64 KiB, envelope thiếu/sai metadata, version không khớp, hoặc metric không qua schema sẽ không tạo sample.
 
-### 5.2 Device chưa gắn Profile Version
+### 5.2 Device chưa gắn Profile Version, hoặc gắn Profile Version không có field
 
-Không cần trường values. Hai dạng sau đều hợp lệ:
+Hai trường hợp được xử lý giống nhau: Device không có Profile Version, hoặc Profile Version có `fields` rỗng (profile mặc định tự tạo). Envelope ở mục 5.1 chỉ áp dụng khi Profile Version có ít nhất một field.
+
+Payload là object phẳng, không cần trường values:
 
     {"temperature":25.12,"humidity":60}
 
-    {"values":{"temperature":25.12,"humidity":60}}
-
-- Nếu có values, nó phải là object không rỗng và là nguồn metric duy nhất; không được trộn metric cấp ngoài với object này.
-- Nếu không có values, metric lấy từ key/value cấp ngoài sau khi loại message_id, occurred_at, schema_version.
-- Metric hỗ trợ number hữu hạn, string, boolean. Object, array và null làm value bị reject. Payload phải có ít nhất một metric.
-- message_id vắng mặt thì server cấp UUID; nếu firmware gửi thì vẫn cần chuỗi không rỗng, tối đa 128 ký tự.
-- occurred_at vắng mặt thì server dùng received_at; nếu được gửi thì cần ISO 8601 có timezone và không quá 5 phút trong tương lai.
-- schema_version là metadata dành riêng: có thể vắng mặt; nếu có phải là số nguyên dương, nhưng không chọn schema nào.
-- Metadata có mặt nhưng null hoặc sai kiểu bị reject. Việc nhận dạng flat/wrapped payload và chuẩn hóa về values chỉ diễn ra ở ingress boundary.
-- Thành công được ghi persisted, reason_codes=[], device_profile_version_id=null, và trace có schema_validation_skipped. Đây là bỏ qua profile schema, không phải bỏ qua lưu trữ hay mọi kiểm tra payload.
+- Metric là mọi khóa cấp ngoài sau khi loại message_id, occurred_at, schema_version. Payload phải có ít nhất một metric, nếu không bị reject `invalid_payload`.
+- Ingress không unwrap `values` và không kiểm kiểu: khóa `values` được lưu như một metric bình thường, và giá trị số, chuỗi, boolean, object, array hay null đều được lưu nguyên như nhận được. NaN/Infinity và JSON trùng khóa vẫn bị reject ở bước decode.
+- message_id: nếu firmware gửi chuỗi không rỗng, tối đa 128 ký tự thì dùng làm retry identity; ngược lại (vắng, null, sai kiểu, quá dài) server cấp UUID mới, không reject.
+- occurred_at luôn là received_at của server. Giá trị firmware gửi (kể cả năm 2030 hay sai kiểu) bị bỏ qua, không validate và không lưu.
+- schema_version bị bỏ qua, không validate và không chọn schema nào; sample không lưu giá trị này.
+- Ba khóa message_id, occurred_at, schema_version không bao giờ nằm trong values. Mọi khóa khác được lưu nguyên như nhận được. Việc nhận dạng flat/wrapped payload và chuẩn hóa về values chỉ diễn ra ở ingress boundary.
+- Hành vi này là chủ ý (xem `inspect_unprofiled_telemetry` và test `test_ignores_client_metadata_without_validating_it`). device_profile_version_id của sample là null nếu Device không có Profile Version, và là id của Profile Version rỗng nếu có. Hệ quả: Device có profile rỗng nhận payload `occurred_at` ở tương lai hoặc `schema_version` bất kỳ mà vẫn được lưu; muốn các kiểm tra ở mục 5.1 thì Profile Version phải có ít nhất một field.
+- Thành công được ghi persisted, reason_codes=[], và trace có schema_validation_skipped. Đây là bỏ qua profile schema, không phải bỏ qua lưu trữ hay mọi kiểm tra payload.
 
 ### 5.3 Deduplication hiện tại
 

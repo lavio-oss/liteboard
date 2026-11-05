@@ -1,6 +1,9 @@
 user telemetry-service
 topic readwrite liteboard/#
 topic subscribe liteboard/#
+# Broker drop counter and stored-message count, exported on telemetry-service /metrics.
+topic read $SYS/broker/publish/messages/dropped
+topic read $SYS/broker/store/messages/count
 
 user healthcheck
 topic write healthcheck

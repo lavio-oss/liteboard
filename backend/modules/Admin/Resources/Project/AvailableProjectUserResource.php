@@ -27,6 +27,7 @@ final class AvailableProjectUserResource extends JsonResource
             'name' => (string) $user->name,
             'email' => (string) $user->email,
             'tenant_role_id' => $pivot->getAttribute('role_id'),
+            'created_at' => $user->created_at?->toISOString(),
         ];
     }
 }
